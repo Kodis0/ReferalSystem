@@ -948,6 +948,23 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
         for c in history
     ]
 
+    lead_qs = ReferralLeadEvent.objects.filter(partner=partner)
+    total_leads_count = lead_qs.count()
+    recent_lead_events = lead_qs.order_by("-created_at")[:50]
+    recent_leads = [
+        {
+            "created_at": ev.created_at.isoformat(),
+            "customer_name": ev.customer_name,
+            "customer_email": ev.customer_email,
+            "customer_phone": ev.customer_phone,
+            "page_url": ev.page_url,
+            "form_id": ev.form_id,
+            "amount": str(ev.amount) if ev.amount is not None else None,
+            "currency": ev.currency,
+        }
+        for ev in recent_lead_events
+    ]
+
     return {
         "ref_code": partner.ref_code,
         "referral_link": referral_link,
@@ -960,6 +977,8 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
         "paid_orders_count": paid_orders,
         "commissions_total": str(commissions_total),
         "commission_history": commission_rows,
+        "total_leads_count": total_leads_count,
+        "recent_leads": recent_leads,
     }
 
 

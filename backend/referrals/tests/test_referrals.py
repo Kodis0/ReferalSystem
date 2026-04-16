@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -5,7 +6,15 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from referrals.models import Commission, CustomerAttribution, Order, PartnerProfile, ReferralVisit
+from referrals.models import (
+    Commission,
+    CustomerAttribution,
+    Order,
+    PartnerProfile,
+    ReferralLeadEvent,
+    ReferralVisit,
+    Site,
+)
 from referrals.services import (
     attach_attribution_to_order,
     ensure_partner_profile,
@@ -464,6 +473,111 @@ class MvpAssumePaidCommissionTests(TestCase):
         self.assertEqual(dash["paid_orders_count"], 1)
         self.assertEqual(Decimal(dash["commissions_total"]), Decimal("3.00"))
         self.assertEqual(len(dash["commission_history"]), 1)
+        self.assertEqual(dash["total_leads_count"], 0)
+        self.assertEqual(dash["recent_leads"], [])
+
+
+class PartnerDashboardLeadsTests(TestCase):
+    """Widget ReferralLeadEvent rows exposed on partner dashboard (no order merge)."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="siteowner",
+            email="owner-leads@example.com",
+            password="secret12",
+        )
+        self.partner_a_user = User.objects.create_user(
+            username="partner_a",
+            email="partner-a@example.com",
+            password="secret12",
+        )
+        self.partner_b_user = User.objects.create_user(
+            username="partner_b",
+            email="partner-b@example.com",
+            password="secret12",
+        )
+        self.partner_a, _ = ensure_partner_profile(self.partner_a_user)
+        self.partner_b, _ = ensure_partner_profile(self.partner_b_user)
+        self.site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_" + uuid.uuid4().hex,
+            allowed_origins=["https://landing.example"],
+        )
+
+    def test_partner_dashboard_payload_leads_empty(self):
+        dash = partner_dashboard_payload(
+            self.partner_a, app_public_base_url="https://app.example.com"
+        )
+        self.assertEqual(dash["total_leads_count"], 0)
+        self.assertEqual(dash["recent_leads"], [])
+
+    def test_partner_dashboard_payload_leads_scoped_to_partner(self):
+        ReferralLeadEvent.objects.create(
+            site=self.site,
+            partner=self.partner_a,
+            customer_name="Alice",
+            customer_email="alice@example.com",
+            customer_phone="+100",
+            page_url="https://landing.example/a",
+            form_id="form-a",
+            amount=Decimal("10.50"),
+            currency="USD",
+        )
+        ReferralLeadEvent.objects.create(
+            site=self.site,
+            partner=self.partner_b,
+            customer_name="Bob",
+            customer_email="bob@example.com",
+            customer_phone="+200",
+            page_url="https://landing.example/b",
+            form_id="form-b",
+            amount=Decimal("20.00"),
+            currency="EUR",
+        )
+        dash_a = partner_dashboard_payload(
+            self.partner_a, app_public_base_url="https://app.example.com"
+        )
+        dash_b = partner_dashboard_payload(
+            self.partner_b, app_public_base_url="https://app.example.com"
+        )
+        self.assertEqual(dash_a["total_leads_count"], 1)
+        self.assertEqual(len(dash_a["recent_leads"]), 1)
+        row_a = dash_a["recent_leads"][0]
+        self.assertEqual(row_a["customer_email"], "alice@example.com")
+        self.assertEqual(row_a["customer_name"], "Alice")
+        self.assertEqual(row_a["customer_phone"], "+100")
+        self.assertEqual(row_a["page_url"], "https://landing.example/a")
+        self.assertEqual(row_a["form_id"], "form-a")
+        self.assertEqual(row_a["amount"], "10.50")
+        self.assertEqual(row_a["currency"], "USD")
+        self.assertIn("created_at", row_a)
+
+        self.assertEqual(dash_b["total_leads_count"], 1)
+        self.assertEqual(dash_b["recent_leads"][0]["customer_email"], "bob@example.com")
+
+    def test_partner_dashboard_excludes_unattributed_leads(self):
+        ReferralLeadEvent.objects.create(
+            site=self.site,
+            partner=None,
+            customer_email="orphan@example.com",
+        )
+        dash = partner_dashboard_payload(
+            self.partner_a, app_public_base_url="https://app.example.com"
+        )
+        self.assertEqual(dash["total_leads_count"], 0)
+        self.assertEqual(dash["recent_leads"], [])
+
+    def test_partner_dashboard_lead_amount_null_serialized(self):
+        ReferralLeadEvent.objects.create(
+            site=self.site,
+            partner=self.partner_a,
+            customer_email="noamt@example.com",
+            amount=None,
+        )
+        dash = partner_dashboard_payload(
+            self.partner_a, app_public_base_url="https://app.example.com"
+        )
+        self.assertEqual(dash["recent_leads"][0]["amount"], None)
 
 
 class PartnerApiTests(TestCase):
@@ -480,9 +594,14 @@ class PartnerApiTests(TestCase):
         r = self.api.post("/referrals/partner/onboard/")
         self.assertIn(r.status_code, (200, 201))
         self.assertIn("ref_code", r.data)
+        self.assertIn("total_leads_count", r.data)
+        self.assertIn("recent_leads", r.data)
+        self.assertEqual(r.data["total_leads_count"], 0)
+        self.assertEqual(r.data["recent_leads"], [])
         r2 = self.api.get("/referrals/partner/me/")
         self.assertEqual(r2.status_code, 200)
         self.assertIn("referral_link", r2.data)
+        self.assertIn("recent_leads", r2.data)
 
 
 @override_settings(DEBUG=True, ORDER_WEBHOOK_SHARED_SECRET="")

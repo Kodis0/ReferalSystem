@@ -67,6 +67,7 @@ function PartnerDashboard() {
   };
 
   const history = Array.isArray(data?.commission_history) ? data.commission_history : [];
+  const recentLeads = Array.isArray(data?.recent_leads) ? data.recent_leads : [];
 
   return (
     <div className="lk-dashboard lk-partner">
@@ -112,6 +113,10 @@ function PartnerDashboard() {
               <div className="lk-partner__stat-value">{data.visit_count}</div>
             </div>
             <div className="lk-partner__stat">
+              <div className="lk-partner__stat-label">Лиды</div>
+              <div className="lk-partner__stat-value">{data.total_leads_count ?? 0}</div>
+            </div>
+            <div className="lk-partner__stat">
               <div className="lk-partner__stat-label">Заказы (все)</div>
               <div className="lk-partner__stat-value">{data.attributed_orders_count}</div>
             </div>
@@ -132,6 +137,42 @@ function PartnerDashboard() {
               <div className="lk-partner__stat-value">{data.commissions_total}</div>
             </div>
           </div>
+
+          <h2 className="lk-partner__section-title">Недавние лиды</h2>
+          {recentLeads.length === 0 ? (
+            <p className="lk-partner__muted">Пока нет лидов с виджета</p>
+          ) : (
+            <div className="lk-partner__table-wrap">
+              <table className="lk-partner__table">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Имя</th>
+                    <th>Email</th>
+                    <th>Телефон</th>
+                    <th>Страница</th>
+                    <th>Форма</th>
+                    <th>Сумма</th>
+                    <th>Валюта</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentLeads.map((row, idx) => (
+                    <tr key={`${row.created_at}-${row.customer_email}-${idx}`}>
+                      <td>{row.created_at?.replace("T", " ").slice(0, 19)}</td>
+                      <td>{row.customer_name || "—"}</td>
+                      <td>{row.customer_email || "—"}</td>
+                      <td>{row.customer_phone || "—"}</td>
+                      <td title={row.page_url || ""}>{row.page_url || "—"}</td>
+                      <td>{row.form_id || "—"}</td>
+                      <td>{row.amount != null && row.amount !== "" ? row.amount : "—"}</td>
+                      <td>{row.currency || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <h2 className="lk-partner__section-title">История комиссий</h2>
           {history.length === 0 ? (
