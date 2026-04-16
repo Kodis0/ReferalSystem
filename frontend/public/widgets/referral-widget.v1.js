@@ -9,7 +9,9 @@
  *     async></script>
  *
  * Behaviour: reads ?ref=, persists ref, adds hidden ref to forms, POSTs lead_submitted
- * on native form submit (does not block Tilda / default form handling).
+ * on native form submit (does not block Tilda / default form handling). If the platform
+ * submits via JS without dispatching submit, a conservative click fallback on
+ * submit-like controls still records one lead per user action (deduped with submit).
  * Forms injected after DOMContentLoaded (e.g. Tilda popups/blocks) are picked up via
  * MutationObserver rescans; each form element is wired at most once (WeakSet).
  * Platform detection is shallow so non-Tilda sites can reuse the same script later.
@@ -158,6 +160,50 @@
     }).catch(function () {});
   }
 
+  /** Short window so native submit + click fallback still produce a single POST. */
+  var LEAD_DEDUP_MS = 800;
+
+  function shouldSkipLeadDedup(form) {
+    var t = form._rsLeadSentAt;
+    if (t == null) return false;
+    return Date.now() - t < LEAD_DEDUP_MS;
+  }
+
+  function sendLeadOnce(ingestUrl, ref, form) {
+    if (shouldSkipLeadDedup(form)) return;
+    form._rsLeadSentAt = Date.now();
+    postLead(ingestUrl, ref, form);
+  }
+
+  function isSubmitLikeControl(el, form) {
+    if (!el || el.nodeType !== 1 || !form.contains(el)) return false;
+    if ("disabled" in el && el.disabled) return false;
+    var tag = el.tagName;
+    if (tag === "INPUT") {
+      var it = String(el.type || "").toLowerCase();
+      return it === "submit" || it === "image";
+    }
+    if (tag === "BUTTON") {
+      var bt = String(el.getAttribute("type") || "").toLowerCase();
+      if (bt === "button" || bt === "reset") return false;
+      return true;
+    }
+    if (el.classList && el.classList.contains("t-submit")) return true;
+    if (typeof el.className === "string" && /\bt-submit\b/.test(el.className)) return true;
+    return false;
+  }
+
+  function findSubmitLikeFromClickTarget(form, rawTarget) {
+    var el = rawTarget;
+    if (el && el.nodeType === 3 && el.parentElement) el = el.parentElement;
+    if (!el || el.nodeType !== 1) return null;
+    while (el && el !== form) {
+      if (isSubmitLikeControl(el, form)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   function wireForm(form, ref, ingestUrl) {
     if (wiredForms.has(form)) return;
     wiredForms.add(form);
@@ -165,10 +211,18 @@
     form.addEventListener(
       "submit",
       function () {
-        postLead(ingestUrl, ref, form);
+        sendLeadOnce(ingestUrl, ref, form);
       },
       true
     );
+    form.addEventListener("click", function (ev) {
+      var sub = findSubmitLikeFromClickTarget(form, ev.target);
+      if (!sub) return;
+      setTimeout(function () {
+        if (shouldSkipLeadDedup(form)) return;
+        sendLeadOnce(ingestUrl, ref, form);
+      }, 0);
+    });
   }
 
   function mutationMayAddForms(record) {
