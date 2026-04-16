@@ -58,7 +58,7 @@ function Home() {
           <HeroDotsBackground className="main-page__hero-dots" theme={theme} />
           <div className="main-page__hero-text-wrap">
             <h1 className="main-page__hero-title">
-              Прозрачный партнёрский рост
+              Прозрачный партнёрский рост!
               <ChevronMorphLiquid className="main-page__hero-title-caret" />
             </h1>
             <p className="main-page__hero-subtitle">

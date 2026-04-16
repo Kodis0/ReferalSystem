@@ -1,11 +1,8 @@
 # --- Cursor / AI (локально, не в репозиторий) ---
-# Содержимое .cursor игнорируем, но правила проекта для агента — в репозитории
 .cursor/*
-!.cursor/rules/
-!.cursor/rules/**
+.cursor/rules/
 **/.cursor/*
-!**/.cursor/rules/
-!**/.cursor/rules/**
+**/.cursor/rules/
 .cursor-context.md
 **/.cursor-context.md
 
