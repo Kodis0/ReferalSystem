@@ -516,6 +516,41 @@ def _interpret_tilda_is_paid(*, status_text: str, loose_flag_text: str) -> bool:
     return False
 
 
+def _tilda_extracted_blocks_mvp_assumed_paid(extracted: Mapping[str, Any]) -> bool:
+    """
+    True when primary payment-status text explicitly indicates not paid.
+    Used so MVP "assume paid from amount" never overrides e.g. paymentstatus=pending.
+    """
+    paid_raw = str(extracted.get("payment_status_raw") or "").strip()
+    if not paid_raw:
+        return False
+    st_norm = _normalize_token(paid_raw)
+    if not st_norm:
+        return False
+    if st_norm in _TILDA_UNPAID_STATUS or any(
+        st_norm.startswith(u) for u in ("pending", "awaiting", "cancel", "fail")
+    ):
+        return True
+    return False
+
+
+def effective_tilda_is_paid_for_upsert(extracted: Mapping[str, Any]) -> bool:
+    """
+    Paid flag for persistence and commission: real Tilda interpretation first, then optional
+    MVP fallback (amount > 0, no explicit unpaid primary status). Tilda-only entrypoint.
+    """
+    if bool(extracted.get("is_paid")):
+        return True
+    if not getattr(settings, "REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT", False):
+        return False
+    amt = extracted.get("amount")
+    if amt is None or amt <= 0:
+        return False
+    if _tilda_extracted_blocks_mvp_assumed_paid(extracted):
+        return False
+    return True
+
+
 def _primary_payment_status_unrecognized(raw_status: str) -> bool:
     """
     True when paymentstatus-like text is non-empty but not mapped to a known
@@ -654,6 +689,9 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
         ``paymentstatus``, ``PaymentStatus``, ``paid``, ``Paid``, ``is_paid``, ``st``.
         Unpaid tokens win over a loose ``payment`` / ``Payed`` flag (e.g. pending + payment=1
         stays pending). See ``_interpret_tilda_is_paid`` and ``_TILDA_*`` frozensets.
+        If ``settings.REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT`` is true, ``amount > 0`` can
+        mark the order paid for commission when the primary status is empty or non-blocking;
+        explicit unpaid primary status (e.g. ``pending``) still wins.
 
     **Return dict**
         Includes ``payment_status_raw`` and ``payment_flag_raw`` for logging only.
@@ -816,7 +854,7 @@ def upsert_order_from_tilda_payload(
     if user is None and email:
         user = _resolve_customer_user_from_email(email)
 
-    is_paid = extracted["is_paid"]
+    is_paid = effective_tilda_is_paid_for_upsert(extracted)
     status = Order.Status.PAID if is_paid else Order.Status.PENDING
     paid_at = timezone.now() if is_paid else None
 

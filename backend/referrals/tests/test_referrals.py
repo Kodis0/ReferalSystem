@@ -11,6 +11,7 @@ from referrals.services import (
     ensure_partner_profile,
     generate_ref_code,
     link_session_attributions_to_user,
+    partner_dashboard_payload,
     resolve_valid_attribution,
     upsert_order_from_tilda_payload,
 )
@@ -349,6 +350,120 @@ class OrderAttributionAndCommissionTests(TestCase):
                 }
             )
         self.assertIn("no_payment_status_fields", " ".join(cm.output))
+
+
+@override_settings(REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT=True)
+class MvpAssumePaidCommissionTests(TestCase):
+    """REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT: amount-only paid assumption for Tilda webhooks."""
+
+    def setUp(self):
+        self.partner_user = User.objects.create_user(
+            username="mvp_partner_u",
+            email="mvp_partner@example.com",
+            password="x",
+        )
+        self.customer = User.objects.create_user(
+            username="mvp_buyer_u",
+            email="mvp_buyer@example.com",
+            password="x",
+        )
+        self.partner, _ = ensure_partner_profile(self.partner_user)
+
+    def test_mvp_amount_positive_no_payment_fields_creates_commission(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "mvp-t-1",
+                "Email": self.customer.email,
+                "sum": "100.00",
+                "ref": self.partner.ref_code,
+            }
+        )
+        self.assertEqual(order.status, Order.Status.PAID)
+        c = Commission.objects.get(order=order)
+        self.assertEqual(c.commission_amount, Decimal("10.00"))
+        self.partner.refresh_from_db()
+        self.assertEqual(self.partner.balance_total, Decimal("10.00"))
+
+    def test_mvp_amount_zero_no_commission(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "mvp-t-zero",
+                "Email": self.customer.email,
+                "sum": "0",
+                "ref": self.partner.ref_code,
+            }
+        )
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertFalse(Commission.objects.filter(order=order).exists())
+
+    def test_mvp_explicit_pending_not_treated_as_paid(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "mvp-t-pending",
+                "Email": self.customer.email,
+                "sum": "50.00",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "pending",
+            }
+        )
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertFalse(Commission.objects.filter(order=order).exists())
+
+    def test_mvp_real_paid_paymentstatus_still_commissions(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "mvp-t-real-paid",
+                "Email": self.customer.email,
+                "sum": "200.00",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.status, Order.Status.PAID)
+        c = Commission.objects.get(order=order)
+        self.assertEqual(c.commission_amount, Decimal("20.00"))
+
+    def test_mvp_duplicate_webhook_no_double_commission(self):
+        body = {
+            "tranid": "mvp-t-dup",
+            "Email": self.customer.email,
+            "sum": "80.00",
+            "ref": self.partner.ref_code,
+        }
+        upsert_order_from_tilda_payload(body)
+        upsert_order_from_tilda_payload(body)
+        order = Order.objects.get(external_id="mvp-t-dup")
+        self.assertEqual(Commission.objects.filter(order=order).count(), 1)
+        self.partner.refresh_from_db()
+        self.assertEqual(self.partner.balance_total, Decimal("8.00"))
+
+    def test_mvp_self_referral_no_commission(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "mvp-t-self",
+                "Email": self.partner_user.email,
+                "sum": "120.00",
+                "ref": self.partner.ref_code,
+            }
+        )
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertFalse(Commission.objects.filter(order=order).exists())
+
+    def test_mvp_paid_orders_in_partner_dashboard_payload(self):
+        upsert_order_from_tilda_payload(
+            {
+                "tranid": "mvp-t-dash",
+                "Email": self.customer.email,
+                "sum": "30.00",
+                "ref": self.partner.ref_code,
+            }
+        )
+        dash = partner_dashboard_payload(
+            self.partner, app_public_base_url="https://app.example.com"
+        )
+        self.assertEqual(dash["paid_orders_count"], 1)
+        self.assertEqual(Decimal(dash["commissions_total"]), Decimal("3.00"))
+        self.assertEqual(len(dash["commission_history"]), 1)
 
 
 class PartnerApiTests(TestCase):

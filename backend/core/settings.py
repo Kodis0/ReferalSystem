@@ -51,6 +51,15 @@ if _cors_raw:
 else:
     CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
 
+# Third-party landing pages that POST /referrals/capture/ with credentials (also checked in
+# referrals.services.referral_capture_origin_allowed via CORS_ALLOWED_ORIGINS).
+REFERRAL_CAPTURE_PUBLIC_ORIGINS = [
+    "https://project17993236.tilda.ws",
+]
+for _o in REFERRAL_CAPTURE_PUBLIC_ORIGINS:
+    if _o not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS = list(CORS_ALLOWED_ORIGINS) + [_o]
+
 # Needed so the SPA can send `credentials: 'include'` for referral session capture.
 CORS_ALLOW_CREDENTIALS = True
 
@@ -62,6 +71,9 @@ if _csrf_raw:
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
+    # Cross-origin POST with credentials (e.g. Tilda -> api.*) requires SameSite=None; browsers
+    # require Secure=True for SameSite=None (set above).
+    SESSION_COOKIE_SAMESITE = "None"
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
@@ -204,6 +216,11 @@ SIMPLE_JWT = {
 # Referral program (MVP)
 REFERRAL_ATTRIBUTION_TTL_DAYS = int(os.getenv("REFERRAL_ATTRIBUTION_TTL_DAYS", "30"))
 REFERRAL_DEFAULT_COMMISSION_PERCENT = os.getenv("REFERRAL_DEFAULT_COMMISSION_PERCENT", "10.00")
+# Tilda webhook: if True, treat orders with amount > 0 as paid for commission when payment
+# fields are absent or non-definitive (never overrides explicit unpaid primary status).
+REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT = (
+    os.getenv("REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT", "False").lower() == "true"
+)
 
 # Tilda / payment POST webhook at /users/api/orders/
 # When non-empty: require X-Order-Webhook-Secret or Authorization: Bearer <same value>.
