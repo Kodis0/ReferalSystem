@@ -31,3 +31,4 @@ jobs:
             cd "${DEPLOY_PATH}"
             chmod +x deploy/deploy.sh
             bash deploy/deploy.sh
+
