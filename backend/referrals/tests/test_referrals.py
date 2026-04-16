@@ -526,6 +526,57 @@ class OrderWebhookProtectionTests(TestCase):
         )
         self.partner, _ = ensure_partner_profile(self.partner_user)
 
+    def test_get_webhook_probe_returns_200_without_secret(self):
+        c = Client()
+        with override_settings(DEBUG=False, ORDER_WEBHOOK_SHARED_SECRET="hooksecret"):
+            r = c.get("/users/api/orders/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            r.json(),
+            {"status": "ok", "endpoint": "orders_webhook"},
+        )
+
+    def test_head_webhook_probe_returns_200_without_secret(self):
+        c = Client()
+        with override_settings(DEBUG=False, ORDER_WEBHOOK_SHARED_SECRET="hooksecret"):
+            r = c.head("/users/api/orders/")
+        self.assertEqual(r.status_code, 200)
+
+    @override_settings(DEBUG=False, ORDER_WEBHOOK_SHARED_SECRET="hooksecret")
+    def test_prod_post_without_secret_still_rejected(self):
+        c = Client()
+        r = c.post(
+            "/users/api/orders/",
+            data={
+                "tranid": "wh-prod-no-secret",
+                "Email": self.customer.email,
+                "sum": "1.00",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 401)
+
+    @override_settings(DEBUG=False, ORDER_WEBHOOK_SHARED_SECRET="hooksecret")
+    def test_prod_post_with_valid_secret_accepts(self):
+        c = Client()
+        body = {
+            "tranid": "wh-prod-ok",
+            "Email": self.customer.email,
+            "sum": "9.00",
+            "ref": self.partner.ref_code,
+            "paymentstatus": "paid",
+        }
+        r = c.post(
+            "/users/api/orders/",
+            data=body,
+            content_type="application/json",
+            HTTP_X_ORDER_WEBHOOK_SECRET="hooksecret",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Order.objects.filter(external_id="wh-prod-ok").count(), 1)
+
     @override_settings(DEBUG=True, ORDER_WEBHOOK_SHARED_SECRET="hooksecret")
     def test_missing_or_wrong_secret_rejected(self):
         c = Client()

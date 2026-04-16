@@ -24,10 +24,23 @@ class OrderReceiveView(APIView):
     Production: set ``ORDER_WEBHOOK_SHARED_SECRET`` and send the same value in
     ``X-Order-Webhook-Secret`` or ``Authorization: Bearer …``. With ``DJANGO_DEBUG=False``,
     an unset secret returns 503 so the endpoint cannot be left accidentally open.
+
+    **GET / HEAD:** Tilda (and similar) may probe the URL before saving the webhook.
+    These methods return ``200`` without checking the shared secret; order ingestion
+    remains **POST-only** and still requires the secret when configured.
     """
 
     authentication_classes = []
     permission_classes = []
+
+    def get(self, request, *args, **kwargs):
+        return Response(
+            {"status": "ok", "endpoint": "orders_webhook"},
+            status=status.HTTP_200_OK,
+        )
+
+    def head(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         auth_err = order_webhook_auth_failure(request)
