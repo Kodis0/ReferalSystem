@@ -10,12 +10,15 @@
  *
  * Behaviour: reads ?ref=, persists ref, adds hidden ref to forms, POSTs lead_submitted
  * on native form submit (does not block Tilda / default form handling).
+ * Forms injected after DOMContentLoaded (e.g. Tilda popups/blocks) are picked up via
+ * MutationObserver rescans; each form element is wired at most once (WeakSet).
  * Platform detection is shallow so non-Tilda sites can reuse the same script later.
  */
 (function () {
   "use strict";
 
   var doc = document;
+  var wiredForms = new WeakSet();
   var script = doc.currentScript;
   if (!script || !script.dataset) return;
 
@@ -156,6 +159,8 @@
   }
 
   function wireForm(form, ref, ingestUrl) {
+    if (wiredForms.has(form)) return;
+    wiredForms.add(form);
     ensureHiddenRef(form, ref);
     form.addEventListener(
       "submit",
@@ -166,17 +171,51 @@
     );
   }
 
+  function mutationMayAddForms(record) {
+    var nodes = record.addedNodes;
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (node.nodeType !== 1) continue;
+      if (node.tagName === "FORM") return true;
+      if (typeof node.getElementsByTagName === "function") {
+        try {
+          if (node.getElementsByTagName("form").length) return true;
+        } catch (e) {}
+      }
+    }
+    return false;
+  }
+
+  function startLateFormObserver(scan) {
+    if (typeof MutationObserver === "undefined") return;
+    var root = doc.body || doc.documentElement;
+    if (!root) return;
+    var mo = new MutationObserver(function (records) {
+      for (var r = 0; r < records.length; r++) {
+        if (mutationMayAddForms(records[r])) {
+          scan();
+          return;
+        }
+      }
+    });
+    mo.observe(root, { childList: true, subtree: true });
+  }
+
   function wireAllForms(cfg) {
     var storageKey =
       (cfg && cfg.storage_key) || "rs_ref_v1_" + siteId;
     var ingestUrl =
       (cfg && cfg.lead_ingest_url) ||
       apiBase + "/public/v1/events/leads?site=" + encodeURIComponent(siteId);
-    var ref = resolveRef(storageKey);
-    var forms = doc.querySelectorAll("form");
-    for (var i = 0; i < forms.length; i++) {
-      wireForm(forms[i], ref, ingestUrl);
+    function scan() {
+      var ref = resolveRef(storageKey);
+      var forms = doc.querySelectorAll("form");
+      for (var i = 0; i < forms.length; i++) {
+        wireForm(forms[i], ref, ingestUrl);
+      }
     }
+    scan();
+    startLateFormObserver(scan);
   }
 
   var configUrl =
