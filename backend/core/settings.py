@@ -63,6 +63,12 @@ for _o in REFERRAL_CAPTURE_PUBLIC_ORIGINS:
 # Needed so the SPA can send `credentials: 'include'` for referral session capture.
 CORS_ALLOW_CREDENTIALS = True
 
+# Browser widgets call `/public/v1/...` from arbitrary landing origins listed on each `Site`.
+# Those endpoints set their own `Access-Control-*` headers from `Site.allowed_origins`.
+# Exclude them from django-cors-headers so OPTIONS preflight is answered by our views
+# (otherwise a new Tilda/custom domain must be duplicated in DJANGO_CORS_ALLOWED_ORIGINS).
+CORS_URLS_REGEX = r"^/(?!public/v1/).*$"
+
 _csrf_raw = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
 if _csrf_raw:
     CSRF_TRUSTED_ORIGINS = [

@@ -11,6 +11,7 @@ import secrets
 import string
 from decimal import Decimal
 from typing import Any, Mapping, Optional, Tuple
+from urllib.parse import urlparse
 
 from django.apps import apps
 from django.conf import settings
@@ -23,7 +24,9 @@ from .models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    ReferralLeadEvent,
     ReferralVisit,
+    Site,
 )
 
 logger = logging.getLogger(__name__)
@@ -958,3 +961,236 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
         "commissions_total": str(commissions_total),
         "commission_history": commission_rows,
     }
+
+
+# --- Public widget / multi-site integration (v1) ---
+
+
+def generate_publishable_key() -> str:
+    """Return a unique publishable_key for Site (browser-exposed site credential)."""
+    for _ in range(80):
+        key = secrets.token_urlsafe(32)
+        if not Site.objects.filter(publishable_key=key).exists():
+            return key
+    raise RuntimeError("Could not allocate a unique publishable_key")
+
+
+def request_browser_origin(request) -> str:
+    """Best-effort page origin for public embeds (Origin header, else Referer host)."""
+    origin = (request.headers.get("Origin") or "").strip()
+    if origin:
+        return origin.rstrip("/")
+    referer = (request.headers.get("Referer") or "").strip()
+    if not referer:
+        return ""
+    try:
+        p = urlparse(referer)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}".rstrip("/")
+    except Exception:
+        return ""
+    return ""
+
+
+def site_allowed_origins_list(site: Site) -> list[str]:
+    raw = site.allowed_origins
+    if not isinstance(raw, list):
+        return []
+    return [str(x).strip().rstrip("/") for x in raw if str(x).strip()]
+
+
+def site_origin_is_allowed(site: Site, origin_cmp: str) -> bool:
+    if not origin_cmp:
+        return False
+    origin_cmp = origin_cmp.strip().rstrip("/")
+    for entry in site_allowed_origins_list(site):
+        e = (entry or "").strip().rstrip("/")
+        if e and origin_cmp == e:
+            return True
+    return False
+
+
+def extract_publishable_key_from_request(request) -> str:
+    header = (request.headers.get("X-Publishable-Key") or "").strip()
+    if header:
+        return header
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return ""
+
+
+def validate_site_for_public_widget(
+    *,
+    site: Optional[Site],
+    publishable_key: str,
+    origin: str,
+    require_publishable_key: bool = True,
+) -> Optional[Tuple[int, dict]]:
+    """
+    Shared checks for public widget endpoints.
+
+    Returns None if OK, or (http_status, body_dict) on failure.
+    """
+    if site is None:
+        return (404, {"detail": "site_not_found"})
+    if not site.widget_enabled:
+        return (404, {"detail": "site_not_found"})
+    allowed = site_allowed_origins_list(site)
+    if not allowed:
+        return (403, {"detail": "allowed_origins_required"})
+    if not origin:
+        if settings.DEBUG:
+            return None
+        return (403, {"detail": "origin_required"})
+    if not site_origin_is_allowed(site, origin):
+        return (403, {"detail": "forbidden_origin"})
+    if require_publishable_key:
+        if not publishable_key:
+            return (401, {"detail": "publishable_key_required"})
+        if not _timing_safe_str_eq(site.publishable_key or "", publishable_key):
+            return (403, {"detail": "invalid_publishable_key"})
+    return None
+
+
+def normalize_lead_event_payload(data: Any) -> dict[str, Any]:
+    """
+    Normalize heterogeneous client bodies into one internal dict for lead_submitted.
+    """
+    if not isinstance(data, dict):
+        return {}
+
+    def scalar(key: str, *alts: str, max_len: int = 5000) -> str:
+        for k in (key,) + alts:
+            v = data.get(k)
+            if v is None:
+                continue
+            if isinstance(v, (list, dict)):
+                continue
+            out = str(v).strip()
+            if out:
+                return out[:max_len]
+        return ""
+
+    fields = data.get("fields")
+    if not isinstance(fields, dict):
+        fields = {}
+    flat_fields = {
+        str(k): str(v)[:2000]
+        for k, v in fields.items()
+        if not isinstance(v, (dict, list)) and v is not None
+    }
+    ev = str(data.get("event") or data.get("type") or "lead_submitted").strip() or "lead_submitted"
+    customer_email = scalar("email", "Email", "customer_email", max_len=254)
+    customer_phone = scalar("phone", "Phone", "tel", max_len=64)
+    customer_name = scalar("name", "Name", "customer_name", max_len=255)
+    if not customer_email and flat_fields:
+        _lk = {
+            str(k).lower().replace("-", "_"): str(v).strip()
+            for k, v in flat_fields.items()
+            if str(v).strip()
+        }
+        for key in (
+            "email",
+            "e_mail",
+            "customer_email",
+            "user_email",
+            "contact_email",
+        ):
+            if key in _lk:
+                customer_email = _lk[key][:254]
+                break
+    if not customer_phone and flat_fields:
+        _lk = {
+            str(k).lower().replace("-", "_"): str(v).strip()
+            for k, v in flat_fields.items()
+            if str(v).strip()
+        }
+        for key in ("phone", "tel", "mobile", "customer_phone", "telephone"):
+            if key in _lk:
+                customer_phone = _lk[key][:64]
+                break
+    if not customer_name and flat_fields:
+        _lk = {
+            str(k).lower().replace("-", "_"): str(v).strip()
+            for k, v in flat_fields.items()
+            if str(v).strip()
+        }
+        for key in ("name", "fullname", "full_name", "customer_name", "first_name"):
+            if key in _lk:
+                customer_name = _lk[key][:255]
+                break
+    return {
+        "event": ev[:64],
+        "ref_code": scalar("ref", "ref_code", "Ref", max_len=32),
+        "customer_email": customer_email,
+        "customer_phone": customer_phone,
+        "customer_name": customer_name,
+        "page_url": scalar("page_url", "landing_url", "url", max_len=2000),
+        "form_id": scalar("form_id", "formId", "form", max_len=255),
+        "fields": flat_fields,
+    }
+
+
+def public_widget_config_dict(*, request, site: Site) -> dict[str, Any]:
+    site_uuid = str(site.public_id)
+    ingest = request.build_absolute_uri(f"/public/v1/events/leads?site={site_uuid}")
+    cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    return {
+        "version": 1,
+        "site_public_id": site_uuid,
+        "platform_preset": site.platform_preset,
+        "lead_ingest_url": ingest,
+        "storage_key": f"rs_ref_v1_{site_uuid}",
+        "config": dict(cfg),
+    }
+
+
+def ingest_site_lead_submitted(
+    *,
+    site: Site,
+    request,
+    normalized: Mapping[str, Any],
+) -> ReferralLeadEvent:
+    ref_code = (normalized.get("ref_code") or "").strip()[:32]
+    email = (normalized.get("customer_email") or "").strip()[:254]
+    phone = (normalized.get("customer_phone") or "").strip()[:64]
+    name = (normalized.get("customer_name") or "").strip()[:255]
+    page_url = (normalized.get("page_url") or "").strip()[:2000]
+    form_id = (normalized.get("form_id") or "").strip()[:255]
+
+    raw = {str(k): normalized[k] for k in normalized}
+    raw.setdefault("site_public_id", str(site.public_id))
+
+    partner = None
+    ref_snap = ""
+    if ref_code:
+        p = get_active_partner_by_ref_code(ref_code)
+        if p and not would_be_self_referral(p, customer_email=email):
+            partner = p
+            ref_snap = p.ref_code
+        elif ref_code:
+            ref_snap = ref_code
+
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    if xff:
+        ip = (xff.split(",")[0]).strip()
+    else:
+        ip = request.META.get("REMOTE_ADDR") or None
+
+    ua = (request.META.get("HTTP_USER_AGENT") or "")[:2000]
+
+    return ReferralLeadEvent.objects.create(
+        site=site,
+        event_type=ReferralLeadEvent.EventType.LEAD_SUBMITTED,
+        partner=partner,
+        ref_code=ref_snap,
+        customer_email=email,
+        customer_phone=phone,
+        customer_name=name,
+        page_url=page_url,
+        form_id=form_id,
+        raw_payload=raw,
+        ip_address=ip,
+        user_agent=ua,
+    )

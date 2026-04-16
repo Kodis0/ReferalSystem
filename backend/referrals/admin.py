@@ -5,8 +5,48 @@ from .models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    ReferralLeadEvent,
     ReferralVisit,
+    Site,
 )
+from .services import generate_publishable_key
+
+
+@admin.register(Site)
+class SiteAdmin(admin.ModelAdmin):
+    readonly_fields = ("public_id", "created_at", "updated_at")
+    list_display = (
+        "id",
+        "owner",
+        "public_id",
+        "platform_preset",
+        "widget_enabled",
+        "webhook_enabled",
+        "created_at",
+    )
+    list_filter = ("platform_preset", "widget_enabled", "webhook_enabled")
+    search_fields = ("public_id", "owner__email", "publishable_key")
+
+    def save_model(self, request, obj, form, change):
+        if not (obj.publishable_key or "").strip():
+            obj.publishable_key = generate_publishable_key()
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(ReferralLeadEvent)
+class ReferralLeadEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "site",
+        "event_type",
+        "partner",
+        "ref_code",
+        "customer_email",
+        "created_at",
+    )
+    list_filter = ("event_type", "created_at")
+    search_fields = ("ref_code", "customer_email", "form_id")
+    raw_id_fields = ("site", "partner")
 
 
 @admin.register(PartnerProfile)
