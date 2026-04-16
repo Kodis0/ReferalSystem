@@ -1,0 +1,193 @@
+.main-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 96px;
+  padding: 24px clamp(24px, 6vw, 80px);
+  background: var(--header-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-sizing: border-box;
+  font-size: 16px;
+  border-radius: 0 0 14px 14px;
+  transition: background-color 0.25s ease;
+}
+
+.main-header__left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.main-header__logo {
+  display: block;
+  text-decoration: none;
+  line-height: 0;
+}
+
+.main-header__logo:hover {
+  opacity: 0.9;
+}
+
+.main-header__logo-img {
+  display: block;
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.main-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.main-header__nav-link {
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--header-text);
+  text-decoration: none;
+  transition: opacity 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.main-header__nav-link:hover {
+  color: var(--header-text-hover);
+  opacity: 0.9;
+}
+
+.main-header__right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 20px;
+}
+
+.main-header__top-row {
+  display: flex;
+  align-items: center;
+  gap: 70px;
+}
+
+.main-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.main-header__link {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--header-text);
+  text-decoration: none;
+  transition: opacity 0.2s, color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.main-header__link:hover {
+  color: var(--header-text-hover);
+  opacity: 0.9;
+}
+
+.main-header__link-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.main-header__icons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.main-header__icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.main-header__icon-btn:hover {
+  opacity: 0.9;
+}
+
+.main-header__icon-btn_active .main-header__icon {
+  filter: brightness(0) invert(1);
+  opacity: 1;
+}
+
+.main-header__icon-btn:not(.main-header__icon-btn_active) .main-header__icon {
+  opacity: 0.4;
+  filter: none;
+}
+
+/* Светлая тема: иконки и контакты — чёрные на белой шапке */
+[data-theme="light"] .main-header__icon-btn_active .main-header__icon {
+  filter: brightness(0);
+  opacity: 1;
+}
+
+[data-theme="light"] .main-header__icon-btn:not(.main-header__icon-btn_active) .main-header__icon {
+  filter: brightness(0);
+  opacity: 0.45;
+}
+
+[data-theme="light"] .main-header__link-icon {
+  filter: brightness(0);
+}
+
+.main-header__icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.main-header__btn {
+  font-size: 14px;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s, background-color 0.2s;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  box-sizing: border-box;
+}
+
+.main-header__btn_text {
+  color: var(--header-text);
+  background: transparent;
+}
+
+.main-header__btn_text:hover {
+  color: var(--header-text-hover);
+  opacity: 0.9;
+}
+
+.main-header__btn_primary {
+  color: #ffffff;
+  background: var(--btn-primary-bg);
+}
+
+.main-header__btn_primary:hover {
+  background: var(--btn-primary-hover);
+  opacity: 1;
+}

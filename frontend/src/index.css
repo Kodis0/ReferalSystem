@@ -1,0 +1,86 @@
+@font-face {
+  font-family: "Stem-Regular";
+  src: local("Stem-Regular"), local("Stem Regular");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* Тема по умолчанию: тёмная */
+:root {
+  --page-bg: #050c26;
+  --content-gradient-start: #050c26;
+  --content-gradient-end: #050050;
+  --header-bg: rgba(5, 12, 38, 0.85);
+  --header-text: rgba(255, 255, 255, 0.9);
+  --header-text-hover: #ffffff;
+  --header-dropdown-bg: #0d1642;
+  --header-dropdown-item-hover: rgba(255, 255, 255, 0.08);
+  --text-primary: rgba(255, 255, 255, 0.98);
+  --text-secondary: rgba(255, 255, 255, 0.85);
+  --block-2-bg: #050c26;
+  --scrollbar-track: #050c26;
+  --scrollbar-thumb: #3828cc;
+  --scrollbar-thumb-hover: #4a38e0;
+  --btn-primary-bg: #5c43f7;
+  --btn-primary-hover: #6d54f8;
+}
+
+[data-theme="light"] {
+  --page-bg: #ffffff;
+  --content-gradient-start: #ffffff;
+  --content-gradient-end: #f5f6fa;
+  --header-bg: rgba(255, 255, 255, 0.95);
+  --header-text: #050c26;
+  --header-text-hover: #000000;
+  --header-dropdown-bg: #ffffff;
+  --header-dropdown-item-hover: rgba(5, 12, 38, 0.06);
+  --text-primary: #000000;
+  --text-secondary: rgba(0, 0, 0, 0.7);
+  --block-2-bg: #ffffff;
+  --scrollbar-track: #f0f1f5;
+  --scrollbar-thumb: #5c43f7;
+  --scrollbar-thumb-hover: #6d54f8;
+  --btn-primary-bg: #5c43f7;
+  --btn-primary-hover: #6d54f8;
+}
+
+html {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+  transition: scrollbar-color 0.25s ease;
+}
+
+body {
+  font-family: "Inter", "Stem-Regular", Arial, sans-serif;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 100%;
+  background: var(--page-bg);
+  transition: background-color 0.25s ease;
+}
+
+#root {
+  min-height: 100%;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}

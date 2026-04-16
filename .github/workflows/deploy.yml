@@ -1,0 +1,33 @@
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH,REACT_APP_API_URL
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            test -n "${DEPLOY_PATH:-}"
+            cd "${DEPLOY_PATH}"
+            chmod +x deploy/deploy.sh
+            bash deploy/deploy.sh

@@ -1,0 +1,22 @@
+[Unit]
+Description=Lumoref Django (Gunicorn)
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/lumoref/app/backend
+EnvironmentFile=/var/www/lumoref/app/backend/.env
+ExecStart=/var/www/lumoref/venv/bin/gunicorn core.wsgi:application \
+  --bind 127.0.0.1:8001 \
+  --workers 3 \
+  --timeout 120 \
+  --access-logfile - \
+  --error-logfile -
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

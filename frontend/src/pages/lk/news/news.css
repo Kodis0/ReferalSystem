@@ -1,0 +1,12 @@
+.lk-simple-page {
+  width: 100%;
+}
+
+.lk-simple-page__title {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 28px;
+  font-weight: 700;
+  text-align: left;
+}
+

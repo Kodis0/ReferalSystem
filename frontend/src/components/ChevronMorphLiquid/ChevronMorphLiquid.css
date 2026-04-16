@@ -1,0 +1,143 @@
+.chevron-liquid {
+  --size: 0.52em;
+  --line-width: 0.58em;
+  --line-height: 0.07em;
+  --color: var(--text-primary, rgba(255, 255, 255, 0.98));
+  --glow-1: rgba(255, 255, 255, 0.16);
+  --glow-2: rgba(110, 130, 255, 0.12);
+
+  position: relative;
+  display: inline-block;
+  width: var(--size);
+  height: var(--size);
+  margin-left: 0.16em;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.chevron-liquid__line {
+  position: absolute;
+  top: 50%;
+  width: var(--line-width);
+  height: var(--line-height);
+  margin-top: calc(var(--line-height) / -2);
+  border-radius: 999px;
+  background: var(--color);
+  box-shadow:
+    0 0 4px var(--glow-1),
+    0 0 12px var(--glow-2);
+  will-change: transform, border-radius, opacity, filter;
+}
+
+/* состояние > */
+.chevron-liquid__line--top {
+  left: 50%;
+  transform-origin: left center;
+  animation: chevron-liquid-top 4.2s cubic-bezier(0.45, 0.05, 0.25, 1) infinite;
+}
+
+.chevron-liquid__line--bottom {
+  left: 50%;
+  transform-origin: left center;
+  animation: chevron-liquid-bottom 4.2s cubic-bezier(0.45, 0.05, 0.25, 1) infinite;
+}
+
+@keyframes chevron-liquid-top {
+  0%, 20% {
+    left: 50%;
+    transform-origin: left center;
+    transform: rotate(-40deg) scaleX(1) scaleY(1);
+    border-radius: 999px;
+    opacity: 1;
+    filter: blur(0px);
+  }
+
+  35% {
+    left: 50%;
+    transform-origin: center center;
+    transform: translateY(-12%) rotate(0deg) scaleX(0.92) scaleY(1.16);
+    border-radius: 14px;
+    opacity: 0.97;
+    filter: blur(0.1px);
+  }
+
+  50%, 70% {
+    left: 50%;
+    transform-origin: right center;
+    transform: rotate(40deg) scaleX(1) scaleY(1);
+    border-radius: 999px;
+    opacity: 1;
+    filter: blur(0px);
+  }
+
+  85% {
+    left: 50%;
+    transform-origin: center center;
+    transform: translateY(-12%) rotate(0deg) scaleX(0.92) scaleY(1.16);
+    border-radius: 14px;
+    opacity: 0.97;
+    filter: blur(0.1px);
+  }
+
+  100% {
+    left: 50%;
+    transform-origin: left center;
+    transform: rotate(-40deg) scaleX(1) scaleY(1);
+    border-radius: 999px;
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+@keyframes chevron-liquid-bottom {
+  0%, 20% {
+    left: 50%;
+    transform-origin: left center;
+    transform: rotate(40deg) scaleX(1) scaleY(1);
+    border-radius: 999px;
+    opacity: 1;
+    filter: blur(0px);
+  }
+
+  35% {
+    left: 50%;
+    transform-origin: center center;
+    transform: translateY(12%) rotate(0deg) scaleX(0.92) scaleY(1.16);
+    border-radius: 14px;
+    opacity: 0.97;
+    filter: blur(0.1px);
+  }
+
+  50%, 70% {
+    left: 50%;
+    transform-origin: right center;
+    transform: rotate(-40deg) scaleX(1) scaleY(1);
+    border-radius: 999px;
+    opacity: 1;
+    filter: blur(0px);
+  }
+
+  85% {
+    left: 50%;
+    transform-origin: center center;
+    transform: translateY(12%) rotate(0deg) scaleX(0.92) scaleY(1.16);
+    border-radius: 14px;
+    opacity: 0.97;
+    filter: blur(0.1px);
+  }
+
+  100% {
+    left: 50%;
+    transform-origin: left center;
+    transform: rotate(40deg) scaleX(1) scaleY(1);
+    border-radius: 999px;
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron-liquid__line {
+    animation: none;
+  }
+}

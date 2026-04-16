@@ -1,0 +1,10 @@
+.lk-settings {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.lk-settings__title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  text-align: left;
+}
