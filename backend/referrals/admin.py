@@ -42,10 +42,12 @@ class ReferralLeadEventAdmin(admin.ModelAdmin):
         "partner",
         "ref_code",
         "customer_email",
+        "amount",
+        "currency",
         "created_at",
     )
     list_filter = ("event_type", "created_at")
-    search_fields = ("ref_code", "customer_email", "form_id")
+    search_fields = ("ref_code", "customer_email", "form_id", "product_name")
     raw_id_fields = ("site", "partner")
 
 

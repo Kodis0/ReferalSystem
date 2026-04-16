@@ -21,6 +21,8 @@
 
   var doc = document;
   var wiredForms = new WeakSet();
+  /** Latest widget-config JSON; set synchronously when fetch resolves so POST uses current selectors. */
+  var lastResolvedWidgetConfig = null;
   var script = doc.currentScript;
   if (!script || !script.dataset) return;
 
@@ -38,8 +40,24 @@
   }
 
   function onReady(fn) {
-    if (doc.readyState !== "loading") fn();
-    else doc.addEventListener("DOMContentLoaded", fn);
+    if (doc.readyState !== "loading") {
+      fn();
+      return;
+    }
+    var done = false;
+    function runOnce() {
+      if (done) return;
+      done = true;
+      doc.removeEventListener("DOMContentLoaded", runOnce);
+      fn();
+    }
+    doc.addEventListener("DOMContentLoaded", runOnce);
+    /* Fallback when DOMContentLoaded already fired (late script) or missed in tests. */
+    if (typeof setTimeout !== "undefined") {
+      setTimeout(function () {
+        if (doc.readyState !== "loading") runOnce();
+      }, 0);
+    }
   }
 
   function storageSet(key, val) {
@@ -137,7 +155,37 @@
     form.appendChild(inp);
   }
 
+  /**
+   * Reads optional Site.config_json selector values (document-level, single match).
+   */
+  function siteLeadSelectors(cfg) {
+    var c = (cfg && cfg.config) || {};
+    return {
+      amountSelector: (cfg && cfg.amount_selector) || c.amount_selector || "",
+      currency: (cfg && cfg.currency) || c.currency || "",
+      productNameSelector:
+        (cfg && cfg.product_name_selector) || c.product_name_selector || "",
+    };
+  }
+
+  function readDomBySelector(selector) {
+    if (!selector || typeof selector !== "string") return "";
+    try {
+      var el = doc.querySelector(selector.trim());
+      if (!el) return "";
+      if ("value" in el) {
+        var vv = el.value;
+        if (vv != null && String(vv).trim()) return String(vv).trim();
+      }
+      var t = el.textContent != null ? String(el.textContent) : "";
+      return t.replace(/\s+/g, " ").trim();
+    } catch (e) {
+      return "";
+    }
+  }
+
   function postLead(ingestUrl, ref, form) {
+    var selCfg = siteLeadSelectors(lastResolvedWidgetConfig);
     var fields = collectFormFields(form);
     var payload = {
       event: "lead_submitted",
@@ -149,6 +197,12 @@
       phone: inferPhone(form, fields),
       fields: fields,
     };
+    var cur = (selCfg.currency && String(selCfg.currency).trim()) || "";
+    if (cur) payload.currency = cur;
+    var amt = readDomBySelector(selCfg.amountSelector);
+    if (amt) payload.amount = amt;
+    var pn = readDomBySelector(selCfg.productNameSelector);
+    if (pn) payload.product_name = pn;
     fetch(ingestUrl, {
       method: "POST",
       headers: {
@@ -244,6 +298,13 @@
     if (typeof MutationObserver === "undefined") return;
     var root = doc.body || doc.documentElement;
     if (!root) return;
+    var w = typeof window !== "undefined" ? window : null;
+    if (w && w.__rsLeadFormMo) {
+      try {
+        w.__rsLeadFormMo.disconnect();
+      } catch (e) {}
+      w.__rsLeadFormMo = null;
+    }
     var mo = new MutationObserver(function (records) {
       for (var r = 0; r < records.length; r++) {
         if (mutationMayAddForms(records[r])) {
@@ -252,6 +313,7 @@
         }
       }
     });
+    if (w) w.__rsLeadFormMo = mo;
     mo.observe(root, { childList: true, subtree: true });
   }
 
@@ -280,11 +342,14 @@
       return r.ok ? r.json() : Promise.reject(new Error("config"));
     })
     .then(function (cfg) {
+      lastResolvedWidgetConfig =
+        cfg && typeof cfg === "object" ? cfg : null;
       onReady(function () {
-        wireAllForms(cfg);
+        wireAllForms(lastResolvedWidgetConfig);
       });
     })
     .catch(function () {
+      lastResolvedWidgetConfig = null;
       onReady(function () {
         wireAllForms(null);
       });

@@ -85,7 +85,12 @@ class Site(models.Model):
         default=True,
         help_text="Reserved for future per-site webhook toggles; MVP order webhook is global.",
     )
-    config_json = models.JSONField(default=dict, blank=True)
+    config_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Optional widget keys: amount_selector, currency (literal), "
+        "product_name_selector (CSS selectors resolved in the browser).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -126,6 +131,15 @@ class ReferralLeadEvent(models.Model):
     customer_name = models.CharField(max_length=255, blank=True, default="")
     page_url = models.TextField(blank=True, default="")
     form_id = models.CharField(max_length=255, blank=True, default="")
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional monetary amount from widget (not an order).",
+    )
+    currency = models.CharField(max_length=8, blank=True, default="")
+    product_name = models.CharField(max_length=512, blank=True, default="")
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True, default="")
     raw_payload = models.JSONField(default=dict, blank=True)

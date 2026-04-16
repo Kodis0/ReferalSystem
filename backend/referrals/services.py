@@ -9,7 +9,7 @@ import json
 import logging
 import secrets
 import string
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -1120,6 +1120,9 @@ def normalize_lead_event_payload(data: Any) -> dict[str, Any]:
             if key in _lk:
                 customer_name = _lk[key][:255]
                 break
+    amount_raw = scalar("amount", "lead_amount", max_len=32)
+    currency = scalar("currency", max_len=8)
+    product_name = scalar("product_name", "product", max_len=512)
     return {
         "event": ev[:64],
         "ref_code": scalar("ref", "ref_code", "Ref", max_len=32),
@@ -1128,14 +1131,30 @@ def normalize_lead_event_payload(data: Any) -> dict[str, Any]:
         "customer_name": customer_name,
         "page_url": scalar("page_url", "landing_url", "url", max_len=2000),
         "form_id": scalar("form_id", "formId", "form", max_len=255),
+        "amount": amount_raw,
+        "currency": currency,
+        "product_name": product_name,
         "fields": flat_fields,
     }
+
+
+def _widget_lead_selector_keys(cfg: dict[str, Any]) -> dict[str, str]:
+    """Expose Site.config_json lead keys at the top level for embed scripts."""
+    out: dict[str, str] = {}
+    for key in ("amount_selector", "currency", "product_name_selector"):
+        raw = cfg.get(key)
+        if isinstance(raw, str):
+            s = raw.strip()
+            if s:
+                out[key] = s
+    return out
 
 
 def public_widget_config_dict(*, request, site: Site) -> dict[str, Any]:
     site_uuid = str(site.public_id)
     ingest = request.build_absolute_uri(f"/public/v1/events/leads?site={site_uuid}")
     cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    selector_keys = _widget_lead_selector_keys(cfg)
     return {
         "version": 1,
         "site_public_id": site_uuid,
@@ -1143,7 +1162,18 @@ def public_widget_config_dict(*, request, site: Site) -> dict[str, Any]:
         "lead_ingest_url": ingest,
         "storage_key": f"rs_ref_v1_{site_uuid}",
         "config": dict(cfg),
+        **selector_keys,
     }
+
+
+def _parse_optional_lead_amount(raw: str) -> Decimal | None:
+    if not (raw or "").strip():
+        return None
+    t = raw.strip().replace(",", ".")
+    try:
+        return Decimal(t)
+    except InvalidOperation:
+        return None
 
 
 def ingest_site_lead_submitted(
@@ -1158,6 +1188,9 @@ def ingest_site_lead_submitted(
     name = (normalized.get("customer_name") or "").strip()[:255]
     page_url = (normalized.get("page_url") or "").strip()[:2000]
     form_id = (normalized.get("form_id") or "").strip()[:255]
+    currency = (normalized.get("currency") or "").strip()[:8]
+    product_name = (normalized.get("product_name") or "").strip()[:512]
+    amount_val = _parse_optional_lead_amount(str(normalized.get("amount") or ""))
 
     raw = {str(k): normalized[k] for k in normalized}
     raw.setdefault("site_public_id", str(site.public_id))
@@ -1190,6 +1223,9 @@ def ingest_site_lead_submitted(
         customer_name=name,
         page_url=page_url,
         form_id=form_id,
+        amount=amount_val,
+        currency=currency,
+        product_name=product_name,
         raw_payload=raw,
         ip_address=ip,
         user_agent=ua,

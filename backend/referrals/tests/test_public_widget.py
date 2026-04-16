@@ -57,6 +57,27 @@ class PublicWidgetApiTests(TestCase):
         self.assertIn("/public/v1/events/leads?site=", data["lead_ingest_url"])
         self.assertEqual(data["config"]["accent"], "blue")
 
+    def test_widget_config_exposes_lead_selectors_from_config_json(self):
+        self.site.config_json = {
+            "accent": "blue",
+            "amount_selector": "#price",
+            "currency": "RUB",
+            "product_name_selector": ".product-title",
+        }
+        self.site.save(update_fields=["config_json"])
+        url = f"/public/v1/sites/{self.site.public_id}/widget-config"
+        r = self.client.get(
+            url,
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(data["amount_selector"], "#price")
+        self.assertEqual(data["currency"], "RUB")
+        self.assertEqual(data["product_name_selector"], ".product-title")
+        self.assertEqual(data["config"]["amount_selector"], "#price")
+
     def test_widget_config_rejects_wrong_origin(self):
         url = f"/public/v1/sites/{self.site.public_id}/widget-config"
         r = self.client.get(
@@ -90,6 +111,51 @@ class PublicWidgetApiTests(TestCase):
         self.assertEqual(ev.partner_id, self.partner.id)
         self.assertEqual(ev.ref_code, self.partner.ref_code)
         self.assertEqual(ev.customer_email, "buyer@example.com")
+
+    def test_lead_ingest_stores_amount_currency_product_name(self):
+        q = f"?site={self.site.public_id}"
+        url = "/public/v1/events/leads" + q
+        body = {
+            "event": "lead_submitted",
+            "ref": self.partner.ref_code,
+            "email": "buyer@example.com",
+            "amount": "199.50",
+            "currency": "EUR",
+            "product_name": "Pro plan",
+        }
+        r = self.client.post(
+            url,
+            data=body,
+            format="json",
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 201)
+        ev = ReferralLeadEvent.objects.get(site=self.site)
+        self.assertEqual(str(ev.amount), "199.50")
+        self.assertEqual(ev.currency, "EUR")
+        self.assertEqual(ev.product_name, "Pro plan")
+
+    def test_lead_ingest_invalid_amount_stored_as_null(self):
+        q = f"?site={self.site.public_id}"
+        url = "/public/v1/events/leads" + q
+        body = {
+            "event": "lead_submitted",
+            "email": "buyer@example.com",
+            "amount": "not-a-number",
+            "currency": "USD",
+        }
+        r = self.client.post(
+            url,
+            data=body,
+            format="json",
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 201)
+        ev = ReferralLeadEvent.objects.get(site=self.site)
+        self.assertIsNone(ev.amount)
+        self.assertEqual(ev.currency, "USD")
 
     def test_lead_self_referral_no_partner(self):
         q = f"?site={self.site.public_id}"
@@ -191,3 +257,18 @@ class PublicWidgetApiTests(TestCase):
             }
         )
         self.assertEqual(n["customer_email"], "x@y.co")
+
+    def test_normalize_lead_extracts_amount_currency_product_name(self):
+        from referrals.services import normalize_lead_event_payload
+
+        n = normalize_lead_event_payload(
+            {
+                "event": "lead_submitted",
+                "amount": "1 234,56",
+                "currency": "usd",
+                "product_name": "Widget",
+            }
+        )
+        self.assertEqual(n["amount"], "1 234,56")
+        self.assertEqual(n["currency"], "usd")
+        self.assertEqual(n["product_name"], "Widget")

@@ -111,7 +111,7 @@ describe("referral-widget.v1.js", () => {
 
     await flushMicrotasks();
 
-    first.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    second.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 
     await flushMicrotasks();
 
@@ -121,5 +121,102 @@ describe("referral-widget.v1.js", () => {
     expect(leadCalls.length).toBe(2);
     expect(leadCalls[0][1]).toMatchObject({ method: "POST" });
     expect(leadCalls[1][1]).toMatchObject({ method: "POST" });
+  });
+
+  it("includes amount and product_name from configured selectors in lead payload", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              amount_selector: "#amt",
+              currency: "RUB",
+              product_name_selector: "#title",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const price = document.createElement("div");
+    price.id = "amt";
+    price.textContent = "1500.00";
+    const title = document.createElement("div");
+    title.id = "title";
+    title.textContent = "Course A";
+    document.body.appendChild(price);
+    document.body.appendChild(title);
+
+    runWidgetWithCurrentScript(createMockScript());
+    await flushMicrotasks();
+
+    const form = document.createElement("form");
+    const in1 = document.createElement("input");
+    in1.name = "email";
+    in1.value = "a@b.co";
+    form.appendChild(in1);
+    document.body.appendChild(form);
+    await flushMicrotasks();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    const leadCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/public/v1/events/leads")
+    );
+    expect(leadCall).toBeTruthy();
+    const body = JSON.parse(leadCall[1].body);
+    expect(body.amount).toBe("1500.00");
+    expect(body.currency).toBe("RUB");
+    expect(body.product_name).toBe("Course A");
+  });
+
+  it("omits amount when selector matches nothing; submit still succeeds", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              amount_selector: "#missing-el",
+              currency: "USD",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    runWidgetWithCurrentScript(createMockScript());
+    await flushMicrotasks();
+
+    const form = document.createElement("form");
+    const in1 = document.createElement("input");
+    in1.name = "email";
+    in1.value = "z@y.co";
+    form.appendChild(in1);
+    document.body.appendChild(form);
+    await flushMicrotasks();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    const leadCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/public/v1/events/leads")
+    );
+    expect(leadCall).toBeTruthy();
+    const body = JSON.parse(leadCall[1].body);
+    expect(body).not.toHaveProperty("amount");
+    expect(body.currency).toBe("USD");
+    expect(body.email).toBe("z@y.co");
   });
 });
