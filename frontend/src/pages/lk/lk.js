@@ -13,6 +13,7 @@ import LkSidebar from "./LkSidebar";
 import NewsPage from "./news/news";
 import BugPage from "./bug/bug";
 import IdeaPage from "./idea/idea";
+import PartnerDashboard from "./partner/partner";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import "./lk.css";
@@ -415,6 +416,7 @@ function LK() {
             <Route path="news" element={<NewsPage />} />
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />
+            <Route path="partner" element={<PartnerDashboard />} />
           </Routes>
         </div>
       </div>

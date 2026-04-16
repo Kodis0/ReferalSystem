@@ -5,6 +5,9 @@ export const API_ENDPOINTS = {
   token: `${API_BASE}/users/token/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
+  referralCapture: `${API_BASE}/referrals/capture/`,
+  partnerOnboard: `${API_BASE}/referrals/partner/onboard/`,
+  partnerMe: `${API_BASE}/referrals/partner/me/`,
 };
 
 export { API_BASE };

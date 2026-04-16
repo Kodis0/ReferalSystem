@@ -4,10 +4,12 @@ import Registration from '../registration/registration';
 import Login from '../login/login';
 import LK from '../lk/lk';
 import ProtectedRoute from "../../components/protectedroute";
+import ReferralCaptureOnMount from "../../components/ReferralCaptureOnMount";
 
 function App() {
   return (
     <BrowserRouter>
+      <ReferralCaptureOnMount />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/registration" element={<Registration />} /> 

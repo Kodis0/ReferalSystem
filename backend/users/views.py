@@ -13,6 +13,8 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from referrals.services import link_session_attributions_to_user
+
 from .models import CustomUser
 from .serializers import CurrentUserSerializer, LoginSerializer, RegisterSerializer
 
@@ -41,8 +43,10 @@ class RegisterView(generics.CreateAPIView):
             )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        pre_auth_session_key = self.request.session.session_key
         self.perform_create(serializer)
         user = serializer.instance
+        link_session_attributions_to_user(session_key=pre_auth_session_key, user=user)
         refresh = RefreshToken.for_user(user)
         return Response(
             {
@@ -69,7 +73,9 @@ class LoginView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.validated_data["user"]
+        pre_auth_session_key = request.session.session_key
         login(request, user)
+        link_session_attributions_to_user(session_key=pre_auth_session_key, user=user)
         return Response(
             {
                 "message": "Успешный вход",
@@ -121,6 +127,13 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         if not user.check_password(password):
             raise serializers.ValidationError("Неверный email или пароль")
+
+        request = self.context.get("request")
+        if request is not None:
+            link_session_attributions_to_user(
+                session_key=request.session.session_key,
+                user=user,
+            )
 
         refresh = self.get_token(user)
         return {

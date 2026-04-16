@@ -51,6 +51,9 @@ if _cors_raw:
 else:
     CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
 
+# Needed so the SPA can send `credentials: 'include'` for referral session capture.
+CORS_ALLOW_CREDENTIALS = True
+
 _csrf_raw = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
 if _csrf_raw:
     CSRF_TRUSTED_ORIGINS = [
@@ -70,6 +73,7 @@ if not DEBUG:
 
 INSTALLED_APPS = [
     'users',
+    'referrals',
     'corsheaders',
     'rest_framework',
     'django.contrib.admin',
@@ -196,3 +200,16 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=1000),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
 }
+
+# Referral program (MVP)
+REFERRAL_ATTRIBUTION_TTL_DAYS = int(os.getenv("REFERRAL_ATTRIBUTION_TTL_DAYS", "30"))
+REFERRAL_DEFAULT_COMMISSION_PERCENT = os.getenv("REFERRAL_DEFAULT_COMMISSION_PERCENT", "10.00")
+
+# Tilda / payment POST webhook at /users/api/orders/
+# When non-empty: require X-Order-Webhook-Secret or Authorization: Bearer <same value>.
+# When empty: allowed only while DJANGO_DEBUG=True (local/tests); production must set this.
+ORDER_WEBHOOK_SHARED_SECRET = os.getenv("ORDER_WEBHOOK_SHARED_SECRET", "").strip()
+# Extra ingestion logs (payload key names only, no values). Off by default to avoid noise.
+ORDER_WEBHOOK_DEBUG_LOGGING = (
+    os.getenv("ORDER_WEBHOOK_DEBUG_LOGGING", "False").lower() == "true"
+)
