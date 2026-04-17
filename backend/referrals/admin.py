@@ -5,6 +5,7 @@ from .models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    PublicLeadIngestAudit,
     ReferralLeadEvent,
     ReferralVisit,
     Site,
@@ -33,20 +34,44 @@ class SiteAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+@admin.register(PublicLeadIngestAudit)
+class PublicLeadIngestAuditAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "created_at",
+        "site",
+        "event_name",
+        "public_code",
+        "internal_reason",
+        "http_status",
+        "lead_event",
+        "throttle_scope",
+    )
+    list_filter = ("public_code", "event_name", "http_status", "created_at")
+    search_fields = ("page_key", "form_id", "internal_reason", "public_code")
+    raw_id_fields = ("site", "lead_event")
+    readonly_fields = ("created_at",)
+    date_hierarchy = "created_at"
+
+
 @admin.register(ReferralLeadEvent)
 class ReferralLeadEventAdmin(admin.ModelAdmin):
+    date_hierarchy = "created_at"
     list_display = (
         "id",
         "site",
         "event_type",
+        "submission_stage",
+        "client_observed_outcome",
         "partner",
         "ref_code",
         "customer_email",
+        "normalized_email",
         "amount",
         "currency",
         "created_at",
     )
-    list_filter = ("event_type", "created_at")
+    list_filter = ("event_type", "submission_stage", "client_observed_outcome", "created_at")
     search_fields = ("ref_code", "customer_email", "form_id", "product_name")
     raw_id_fields = ("site", "partner")
 

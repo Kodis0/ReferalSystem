@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Link2 } from "lucide-react";
+import { Code2, LayoutDashboard, Link2 } from "lucide-react";
 import "./LkSidebar.css";
 
 export default function LkSidebar() {
@@ -24,6 +24,15 @@ export default function LkSidebar() {
               <Link2 size={18} />
             </span>
             <span className="lk-sidebar__text">Партнёрка</span>
+          </NavLink>
+          <NavLink
+            to="/lk/widget-install"
+            className={({ isActive }) => `lk-sidebar__item ${isActive ? "lk-sidebar__item_active" : ""}`}
+          >
+            <span className="lk-sidebar__icon" aria-hidden="true">
+              <Code2 size={18} />
+            </span>
+            <span className="lk-sidebar__text">Виджет</span>
           </NavLink>
         </nav>
       </div>

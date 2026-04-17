@@ -14,6 +14,7 @@ import NewsPage from "./news/news";
 import BugPage from "./bug/bug";
 import IdeaPage from "./idea/idea";
 import PartnerDashboard from "./partner/partner";
+import WidgetInstallScreen from "./widget-install/widget-install";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import "./lk.css";
@@ -417,6 +418,7 @@ function LK() {
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />
             <Route path="partner" element={<PartnerDashboard />} />
+            <Route path="widget-install" element={<WidgetInstallScreen />} />
           </Routes>
         </div>
       </div>

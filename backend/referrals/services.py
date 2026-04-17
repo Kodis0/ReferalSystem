@@ -7,16 +7,17 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import secrets
 import string
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Mapping, NamedTuple, Optional, Tuple
 from urllib.parse import urlparse
 
 from django.apps import apps
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from .models import (
@@ -913,10 +914,54 @@ def upsert_order_from_tilda_payload(
     return order, created
 
 
+def mask_email_for_partner_dashboard(raw: str) -> Optional[str]:
+    """
+    Return a heavily redacted email for partner-facing surfaces (not reversible).
+    If the value does not look like a normal email, returns None (do not echo arbitrary PII).
+    """
+    s = (raw or "").strip()
+    if not s or "@" not in s:
+        return None
+    local, _, domain = s.partition("@")
+    local = local.strip()
+    domain = domain.strip()
+    if not local or not domain:
+        return None
+    domain_lower = domain.lower()
+    if len(local) == 1:
+        masked_local = "*"
+    else:
+        masked_local = f"{local[0]}***"
+    return f"{masked_local}@{domain_lower}"
+
+
+def page_path_for_partner_dashboard(page_url: str, *, max_len: int = 96) -> str:
+    """
+    Page reference for partners: path only (no query string), never the full raw URL in the UI payload.
+    """
+    s = (page_url or "").strip()
+    if not s:
+        return ""
+    try:
+        parsed = urlparse(s)
+        if parsed.scheme or parsed.netloc:
+            path = parsed.path or "/"
+        else:
+            path = s.split("?", 1)[0].split("#", 1)[0]
+    except Exception:
+        path = s.split("?", 1)[0].split("#", 1)[0]
+    path = path.strip() or "/"
+    if len(path) > max_len:
+        return f"{path[: max_len - 1]}…"
+    return path
+
+
 def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: str) -> dict:
     """
     Aggregate partner dashboard fields for API responses.
     `app_public_base_url` should be the SPA origin without trailing slash, e.g. https://app.example.com
+
+    `recent_leads` is intentionally minimal for partners (no raw name/phone/email/URL/query).
     """
     base = (app_public_base_url or "").rstrip("/")
     referral_link = f"{base}/?ref={partner.ref_code}" if base else f"/?ref={partner.ref_code}"
@@ -954,13 +999,10 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
     recent_leads = [
         {
             "created_at": ev.created_at.isoformat(),
-            "customer_name": ev.customer_name,
-            "customer_email": ev.customer_email,
-            "customer_phone": ev.customer_phone,
-            "page_url": ev.page_url,
-            "form_id": ev.form_id,
             "amount": str(ev.amount) if ev.amount is not None else None,
             "currency": ev.currency,
+            "customer_email_masked": mask_email_for_partner_dashboard(ev.customer_email),
+            "page_path": page_path_for_partner_dashboard(ev.page_url),
         }
         for ev in recent_lead_events
     ]
@@ -1045,30 +1087,92 @@ def validate_site_for_public_widget(
     publishable_key: str,
     origin: str,
     require_publishable_key: bool = True,
-) -> Optional[Tuple[int, dict]]:
+) -> Optional[Tuple[int, dict, str]]:
     """
     Shared checks for public widget endpoints.
 
-    Returns None if OK, or (http_status, body_dict) on failure.
+    Returns None if OK, or (http_status, body_dict, internal_reason) on failure.
+    ``internal_reason`` is for logs/support; the public body may mask cases (e.g. disabled widget).
     """
+    from .public_ingest_contract import (
+        CODE_ALLOWED_ORIGINS_REQUIRED,
+        CODE_INVALID_KEY,
+        CODE_INVALID_ORIGIN,
+        CODE_ORIGIN_REQUIRED,
+        CODE_PUBLISHABLE_KEY_REQUIRED,
+        CODE_SITE_NOT_FOUND,
+        INTERNAL_WIDGET_DISABLED,
+        public_ingest_error_body,
+    )
+
     if site is None:
-        return (404, {"detail": "site_not_found"})
+        return (
+            404,
+            public_ingest_error_body(
+                code=CODE_SITE_NOT_FOUND,
+                message="Site not found.",
+            ),
+            "site_not_found",
+        )
     if not site.widget_enabled:
-        return (404, {"detail": "site_not_found"})
+        # Public response matches unknown site; internal_reason distinguishes for logs.
+        return (
+            404,
+            public_ingest_error_body(
+                code=CODE_SITE_NOT_FOUND,
+                message="Site not found.",
+            ),
+            INTERNAL_WIDGET_DISABLED,
+        )
     allowed = site_allowed_origins_list(site)
     if not allowed:
-        return (403, {"detail": "allowed_origins_required"})
+        return (
+            403,
+            public_ingest_error_body(
+                code=CODE_ALLOWED_ORIGINS_REQUIRED,
+                message="Allowed origins are not configured for this site.",
+            ),
+            CODE_ALLOWED_ORIGINS_REQUIRED,
+        )
     if not origin:
         if settings.DEBUG:
             return None
-        return (403, {"detail": "origin_required"})
+        return (
+            403,
+            public_ingest_error_body(
+                code=CODE_ORIGIN_REQUIRED,
+                message="Origin header is required.",
+            ),
+            CODE_ORIGIN_REQUIRED,
+        )
     if not site_origin_is_allowed(site, origin):
-        return (403, {"detail": "forbidden_origin"})
+        return (
+            403,
+            public_ingest_error_body(
+                code=CODE_INVALID_ORIGIN,
+                message="Origin is not allowed for this site.",
+            ),
+            CODE_INVALID_ORIGIN,
+        )
     if require_publishable_key:
         if not publishable_key:
-            return (401, {"detail": "publishable_key_required"})
+            return (
+                401,
+                public_ingest_error_body(
+                    code=CODE_PUBLISHABLE_KEY_REQUIRED,
+                    message="Publishable key is required.",
+                ),
+                CODE_PUBLISHABLE_KEY_REQUIRED,
+            )
         if not _timing_safe_str_eq(site.publishable_key or "", publishable_key):
-            return (403, {"detail": "invalid_publishable_key"})
+            return (
+                403,
+                public_ingest_error_body(
+                    code=CODE_INVALID_KEY,
+                    message="Invalid publishable key.",
+                ),
+                CODE_INVALID_KEY,
+            )
     return None
 
 
@@ -1142,6 +1246,12 @@ def normalize_lead_event_payload(data: Any) -> dict[str, Any]:
     amount_raw = scalar("amount", "lead_amount", max_len=32)
     currency = scalar("currency", max_len=8)
     product_name = scalar("product_name", "product", max_len=512)
+    client_observed_outcome = scalar(
+        "client_observed_outcome", "clientObservedOutcome", max_len=32
+    )
+    client_outcome_source = scalar("client_outcome_source", max_len=64)
+    client_outcome_reason = scalar("client_outcome_reason", max_len=255)
+    client_event_id = scalar("client_event_id", "clientEventId", max_len=64)
     return {
         "event": ev[:64],
         "ref_code": scalar("ref", "ref_code", "Ref", max_len=32),
@@ -1154,6 +1264,10 @@ def normalize_lead_event_payload(data: Any) -> dict[str, Any]:
         "currency": currency,
         "product_name": product_name,
         "fields": flat_fields,
+        "client_observed_outcome": client_observed_outcome,
+        "client_outcome_source": client_outcome_source,
+        "client_outcome_reason": client_outcome_reason,
+        "client_event_id": client_event_id,
     }
 
 
@@ -1174,12 +1288,21 @@ def public_widget_config_dict(*, request, site: Site) -> dict[str, Any]:
     ingest = request.build_absolute_uri(f"/public/v1/events/leads?site={site_uuid}")
     cfg = site.config_json if isinstance(site.config_json, dict) else {}
     selector_keys = _widget_lead_selector_keys(cfg)
+
+    def _truthy_config(key: str) -> bool:
+        v = cfg.get(key)
+        if v is True:
+            return True
+        s = str(v or "").strip().lower()
+        return s in ("1", "true", "yes", "on")
+
     return {
         "version": 1,
         "site_public_id": site_uuid,
         "platform_preset": site.platform_preset,
         "lead_ingest_url": ingest,
         "storage_key": f"rs_ref_v1_{site_uuid}",
+        "report_observed_outcome": _truthy_config("report_observed_outcome"),
         "config": dict(cfg),
         **selector_keys,
     }
@@ -1195,16 +1318,354 @@ def _parse_optional_lead_amount(raw: str) -> Decimal | None:
         return None
 
 
+class LeadIngestOutcome(NamedTuple):
+    """Result of idempotent public lead ingest (submit attempt, not a confirmed conversion)."""
+
+    result: str  # "created" | "duplicate_suppressed"
+    lead_event: ReferralLeadEvent
+
+
+# Client-reported DOM/heuristic outcomes (optional; not business confirmation).
+CLIENT_OBSERVED_OUTCOME_CODES = frozenset(
+    {
+        ReferralLeadEvent.ClientObservedOutcome.SUCCESS_OBSERVED,
+        ReferralLeadEvent.ClientObservedOutcome.FAILURE_OBSERVED,
+        ReferralLeadEvent.ClientObservedOutcome.NOT_OBSERVED,
+    }
+)
+
+
+class LeadClientOutcomeIngestOutcome(NamedTuple):
+    """Follow-up client outcome report on an existing ReferralLeadEvent row."""
+
+    result: str  # "outcome_updated" | "outcome_unchanged"
+    lead_event: ReferralLeadEvent
+
+
+def validate_lead_submitted_optional_client_outcome(
+    normalized: Mapping[str, Any],
+) -> Optional[str]:
+    """
+    If ``client_observed_outcome`` is absent/empty, extra client outcome keys are ignored.
+    If present, must be a known code.
+    Returns None if OK, else a short machine reason for logging/tests.
+    """
+    raw = (normalized.get("client_observed_outcome") or "").strip()
+    if not raw:
+        return None
+    if raw not in CLIENT_OBSERVED_OUTCOME_CODES:
+        return "invalid_client_observed_outcome"
+    return None
+
+
+def normalize_lead_client_outcome_event_payload(data: Any) -> dict[str, Any]:
+    """Normalize ``event: lead_client_outcome`` follow-up bodies."""
+    if not isinstance(data, dict):
+        return {"event": "lead_client_outcome", "lead_event_id": None}
+
+    def scalar(key: str, *alts: str, max_len: int = 5000) -> str:
+        for k in (key,) + alts:
+            v = data.get(k)
+            if v is None:
+                continue
+            if isinstance(v, (list, dict)):
+                continue
+            out = str(v).strip()
+            if out:
+                return out[:max_len]
+        return ""
+
+    raw_lead = data.get("lead_event_id")
+    if raw_lead is None:
+        raw_lead = data.get("leadEventId")
+    lead_event_id: int | None = None
+    if raw_lead is not None and raw_lead != "":
+        try:
+            lead_event_id = int(raw_lead)
+        except (TypeError, ValueError):
+            lead_event_id = None
+
+    return {
+        "event": "lead_client_outcome",
+        "lead_event_id": lead_event_id,
+        "client_observed_outcome": scalar("client_observed_outcome", max_len=32),
+        "client_outcome_source": scalar("client_outcome_source", max_len=64),
+        "client_outcome_reason": scalar("client_outcome_reason", max_len=255),
+        "client_event_id": scalar("client_event_id", "clientEventId", max_len=64),
+    }
+
+
+def apply_client_observed_outcome_to_row(
+    ev: ReferralLeadEvent,
+    *,
+    outcome_code: str,
+    source: str,
+    reason: str,
+    client_event_id: str,
+    now,
+) -> str:
+    """
+    Idempotent in-process update of client-observed fields.
+
+    Returns ``outcome_updated`` or ``outcome_unchanged`` (including duplicate delivery).
+    Does not alter submission_stage (remains submit_attempt ingest semantics).
+    """
+    ceid = (client_event_id or "").strip()[:64]
+    if ceid and (ev.client_outcome_event_id or "") == ceid:
+        return "outcome_unchanged"
+
+    current = (ev.client_observed_outcome or "").strip()
+    if current == outcome_code and outcome_code:
+        return "outcome_unchanged"
+
+    src = (source or "").strip()[:64]
+    rsn = (reason or "").strip()[:255]
+    upd: dict[str, Any] = {
+        "client_observed_outcome": outcome_code,
+        "client_outcome_source": src,
+        "client_outcome_reason": rsn,
+        "client_outcome_observed_at": now,
+    }
+    if ceid:
+        upd["client_outcome_event_id"] = ceid
+
+    ReferralLeadEvent.objects.filter(pk=ev.pk).update(**upd)
+    ev.client_observed_outcome = outcome_code
+    ev.client_outcome_source = src
+    ev.client_outcome_reason = rsn
+    ev.client_outcome_observed_at = now
+    if ceid:
+        ev.client_outcome_event_id = ceid
+    return "outcome_updated"
+
+
+def _apply_optional_client_outcome_from_normalized(
+    ev: ReferralLeadEvent,
+    normalized: Mapping[str, Any],
+    *,
+    now,
+) -> None:
+    """Apply optional client outcome from a ``lead_submitted`` payload (inline, rare)."""
+    raw = (normalized.get("client_observed_outcome") or "").strip()
+    if not raw or raw not in CLIENT_OBSERVED_OUTCOME_CODES:
+        return
+    apply_client_observed_outcome_to_row(
+        ev,
+        outcome_code=raw,
+        source=(normalized.get("client_outcome_source") or ""),
+        reason=(normalized.get("client_outcome_reason") or ""),
+        client_event_id=(normalized.get("client_event_id") or ""),
+        now=now,
+    )
+
+
+def ingest_site_lead_client_outcome(
+    *,
+    site: Site,
+    request,
+    normalized: Mapping[str, Any],
+) -> LeadClientOutcomeIngestOutcome:
+    """
+    Update client-observed outcome on an existing lead row for this site.
+
+    ``lead_event_id`` must belong to ``site``; otherwise behaves as not found (anti-enumeration).
+    """
+    lead_event_id = normalized.get("lead_event_id")
+    if lead_event_id is None:
+        raise ValueError("missing_lead_event_id")
+
+    raw_out = (normalized.get("client_observed_outcome") or "").strip()
+    if raw_out not in CLIENT_OBSERVED_OUTCOME_CODES:
+        raise ValueError("invalid_client_observed_outcome")
+
+    now = timezone.now()
+    with transaction.atomic():
+        Site.objects.select_for_update().get(pk=site.pk)
+        try:
+            ev = ReferralLeadEvent.objects.select_for_update().get(pk=lead_event_id)
+        except ReferralLeadEvent.DoesNotExist:
+            raise LookupError("lead_event_not_found")
+
+        if ev.site_id != site.pk:
+            raise LookupError("lead_event_not_found")
+
+        result = apply_client_observed_outcome_to_row(
+            ev,
+            outcome_code=raw_out,
+            source=(normalized.get("client_outcome_source") or ""),
+            reason=(normalized.get("client_outcome_reason") or ""),
+            client_event_id=(normalized.get("client_event_id") or ""),
+            now=now,
+        )
+        return LeadClientOutcomeIngestOutcome(result=result, lead_event=ev)
+
+
+def normalize_lead_email_for_dedup(raw: str) -> str:
+    return (raw or "").strip().lower()
+
+
+def normalize_lead_phone_for_dedup(raw: str) -> str:
+    """
+    Canonical phone for dedup: digits only; common RU 8→7 for 11-digit mobile-style inputs.
+    """
+    digits = "".join(ch for ch in (raw or "") if ch.isdigit())
+    if len(digits) == 11 and digits[0] == "8":
+        digits = "7" + digits[1:]
+    return digits
+
+
+def normalize_lead_name_for_storage(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    return re.sub(r"\s+", " ", s).strip()[:255]
+
+
+def normalize_lead_form_id_for_dedup(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    return re.sub(r"\s+", " ", s).strip()[:255]
+
+
+def normalize_lead_ref_code_for_dedup(raw: str) -> str:
+    return (raw or "").strip().lower()[:32]
+
+
+def page_key_from_page_url(page_url: str, *, max_len: int = 512) -> str:
+    """
+    Path-only key for dedup (no query string), aligned with partner dashboard path stripping.
+    """
+    s = (page_url or "").strip()
+    if not s:
+        return ""
+    try:
+        parsed = urlparse(s)
+        if parsed.scheme or parsed.netloc:
+            path = parsed.path or "/"
+        else:
+            path = s.split("?", 1)[0].split("#", 1)[0]
+    except Exception:
+        path = s.split("?", 1)[0].split("#", 1)[0]
+    path = (path or "").strip() or "/"
+    if len(path) > max_len:
+        return path[:max_len]
+    return path
+
+
+class NormalizedLeadIdentity(NamedTuple):
+    """Normalized scalar fields used for dedup comparison and persisted audit columns."""
+
+    normalized_email: str
+    normalized_phone: str
+    form_id_norm: str
+    page_key: str
+    ref_norm: str
+
+
+def normalize_lead_identity(
+    *,
+    customer_email: str,
+    customer_phone: str,
+    page_url: str,
+    form_id: str,
+    ref_snap: str,
+) -> NormalizedLeadIdentity:
+    """Trim/lowercase email, canonical phone digits, path key, normalized form id and ref."""
+    return NormalizedLeadIdentity(
+        normalized_email=normalize_lead_email_for_dedup(customer_email),
+        normalized_phone=normalize_lead_phone_for_dedup(customer_phone),
+        form_id_norm=normalize_lead_form_id_for_dedup(form_id),
+        page_key=page_key_from_page_url(page_url),
+        ref_norm=normalize_lead_ref_code_for_dedup(ref_snap),
+    )
+
+
+def _lead_identity_match(candidate: ReferralLeadEvent, identity: NormalizedLeadIdentity) -> bool:
+    if identity.normalized_email and candidate.normalized_email == identity.normalized_email:
+        return True
+    if identity.normalized_phone and candidate.normalized_phone == identity.normalized_phone:
+        return True
+    return False
+
+
+def _lead_structural_match(candidate: ReferralLeadEvent, identity: NormalizedLeadIdentity) -> bool:
+    """
+    Strong: same normalized form_id when the payload carries a form id.
+    Fallback: same page_key when path is available (covers missing/empty form id).
+    """
+    if identity.form_id_norm:
+        if normalize_lead_form_id_for_dedup(candidate.form_id) == identity.form_id_norm:
+            return True
+    if identity.page_key:
+        if (candidate.page_key or "") == identity.page_key:
+            return True
+    return False
+
+
+def find_recent_duplicate_lead(
+    *,
+    site: Site,
+    identity: NormalizedLeadIdentity,
+    now,
+    window_seconds: int,
+) -> Optional[ReferralLeadEvent]:
+    """
+    Return a recent event that counts as an obvious duplicate of this submit attempt.
+
+    Requires at least one of normalized email or phone. Requires a structural match
+    (same form id when present, else same page path key when present). Same site + ref.
+    """
+    if not identity.normalized_email and not identity.normalized_phone:
+        return None
+    if not identity.form_id_norm and not identity.page_key:
+        return None
+
+    cutoff = now - timezone.timedelta(seconds=max(1, int(window_seconds)))
+    q = Q()
+    if identity.normalized_email:
+        q |= Q(normalized_email=identity.normalized_email)
+    if identity.normalized_phone:
+        q |= Q(normalized_phone=identity.normalized_phone)
+
+    qs = (
+        ReferralLeadEvent.objects.filter(
+            site=site,
+            created_at__gte=cutoff,
+            submission_stage=ReferralLeadEvent.SubmissionStage.SUBMIT_ATTEMPT,
+        )
+        .filter(q)
+        .order_by("-created_at")[:80]
+    )
+
+    for cand in qs:
+        if normalize_lead_ref_code_for_dedup(cand.ref_code) != identity.ref_norm:
+            continue
+        if not _lead_identity_match(cand, identity):
+            continue
+        if not _lead_structural_match(cand, identity):
+            continue
+        return cand
+    return None
+
+
 def ingest_site_lead_submitted(
     *,
     site: Site,
     request,
     normalized: Mapping[str, Any],
-) -> ReferralLeadEvent:
+) -> LeadIngestOutcome:
+    """
+    Persist a **submit attempt** from the public widget (v1 wire event ``lead_submitted``).
+
+    Server-side dedup: obvious repeats inside ``settings.LEAD_INGEST_DEDUP_WINDOW_SECONDS``
+    return ``duplicate_suppressed`` and do not insert a second row. Serialization per site
+    uses ``select_for_update`` on ``Site`` to reduce races.
+    """
     ref_code = (normalized.get("ref_code") or "").strip()[:32]
     email = (normalized.get("customer_email") or "").strip()[:254]
     phone = (normalized.get("customer_phone") or "").strip()[:64]
-    name = (normalized.get("customer_name") or "").strip()[:255]
+    name = normalize_lead_name_for_storage(normalized.get("customer_name") or "")
     page_url = (normalized.get("page_url") or "").strip()[:2000]
     form_id = (normalized.get("form_id") or "").strip()[:255]
     currency = (normalized.get("currency") or "").strip()[:8]
@@ -1224,6 +1685,16 @@ def ingest_site_lead_submitted(
         elif ref_code:
             ref_snap = ref_code
 
+    identity = normalize_lead_identity(
+        customer_email=email,
+        customer_phone=phone,
+        page_url=page_url,
+        form_id=form_id,
+        ref_snap=ref_snap,
+    )
+    window_seconds = int(getattr(settings, "LEAD_INGEST_DEDUP_WINDOW_SECONDS", 120))
+    now = timezone.now()
+
     xff = request.META.get("HTTP_X_FORWARDED_FOR")
     if xff:
         ip = (xff.split(",")[0]).strip()
@@ -1232,20 +1703,56 @@ def ingest_site_lead_submitted(
 
     ua = (request.META.get("HTTP_USER_AGENT") or "")[:2000]
 
-    return ReferralLeadEvent.objects.create(
-        site=site,
-        event_type=ReferralLeadEvent.EventType.LEAD_SUBMITTED,
-        partner=partner,
-        ref_code=ref_snap,
-        customer_email=email,
-        customer_phone=phone,
-        customer_name=name,
-        page_url=page_url,
-        form_id=form_id,
-        amount=amount_val,
-        currency=currency,
-        product_name=product_name,
-        raw_payload=raw,
-        ip_address=ip,
-        user_agent=ua,
-    )
+    with transaction.atomic():
+        Site.objects.select_for_update().get(pk=site.pk)
+        dup = find_recent_duplicate_lead(
+            site=site,
+            identity=identity,
+            now=now,
+            window_seconds=window_seconds,
+        )
+        if dup is not None:
+            _apply_optional_client_outcome_from_normalized(dup, normalized, now=now)
+            dup.refresh_from_db(
+                fields=[
+                    "client_observed_outcome",
+                    "client_outcome_source",
+                    "client_outcome_reason",
+                    "client_outcome_observed_at",
+                    "client_outcome_event_id",
+                ]
+            )
+            return LeadIngestOutcome(result="duplicate_suppressed", lead_event=dup)
+
+        ev = ReferralLeadEvent.objects.create(
+            site=site,
+            event_type=ReferralLeadEvent.EventType.LEAD_SUBMITTED,
+            submission_stage=ReferralLeadEvent.SubmissionStage.SUBMIT_ATTEMPT,
+            partner=partner,
+            ref_code=ref_snap,
+            customer_email=email,
+            customer_phone=phone,
+            customer_name=name,
+            page_url=page_url,
+            form_id=form_id,
+            amount=amount_val,
+            currency=currency,
+            product_name=product_name,
+            raw_payload=raw,
+            ip_address=ip,
+            user_agent=ua,
+            normalized_email=identity.normalized_email,
+            normalized_phone=identity.normalized_phone,
+            page_key=identity.page_key,
+        )
+        _apply_optional_client_outcome_from_normalized(ev, normalized, now=now)
+        ev.refresh_from_db(
+            fields=[
+                "client_observed_outcome",
+                "client_outcome_source",
+                "client_outcome_reason",
+                "client_outcome_observed_at",
+                "client_outcome_event_id",
+            ]
+        )
+        return LeadIngestOutcome(result="created", lead_event=ev)

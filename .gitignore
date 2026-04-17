@@ -1,10 +1,11 @@
 # --- Cursor / AI (локально, не в репозиторий) ---
-.cursor/*
-.cursor/rules/
-**/.cursor/*
-**/.cursor/rules/
+.cursor/
+.cursorignore
+.cursorindexingignore
 .cursor-context.md
-**/.cursor-context.md
+AGENTS.md
+CONTEXT_AND_REQUIREMENTS.md
+docs/CONTEXT_AND_REQUIREMENTS.md
 
 # --- Node / frontend ---
 node_modules/

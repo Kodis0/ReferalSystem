@@ -147,26 +147,20 @@ function PartnerDashboard() {
                 <thead>
                   <tr>
                     <th>Дата</th>
-                    <th>Имя</th>
-                    <th>Email</th>
-                    <th>Телефон</th>
-                    <th>Страница</th>
-                    <th>Форма</th>
                     <th>Сумма</th>
                     <th>Валюта</th>
+                    <th>Email (маска)</th>
+                    <th>Страница</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentLeads.map((row, idx) => (
-                    <tr key={`${row.created_at}-${row.customer_email}-${idx}`}>
+                    <tr key={`${row.created_at}-${row.page_path || ""}-${idx}`}>
                       <td>{row.created_at?.replace("T", " ").slice(0, 19)}</td>
-                      <td>{row.customer_name || "—"}</td>
-                      <td>{row.customer_email || "—"}</td>
-                      <td>{row.customer_phone || "—"}</td>
-                      <td title={row.page_url || ""}>{row.page_url || "—"}</td>
-                      <td>{row.form_id || "—"}</td>
                       <td>{row.amount != null && row.amount !== "" ? row.amount : "—"}</td>
                       <td>{row.currency || "—"}</td>
+                      <td>{row.customer_email_masked || "—"}</td>
+                      <td title={row.page_path || ""}>{row.page_path || "—"}</td>
                     </tr>
                   ))}
                 </tbody>

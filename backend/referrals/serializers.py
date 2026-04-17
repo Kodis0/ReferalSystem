@@ -1,4 +1,7 @@
+from django.conf import settings
 from rest_framework import serializers
+
+from .models import Site
 
 
 class ReferralCaptureSerializer(serializers.Serializer):
@@ -7,3 +10,80 @@ class ReferralCaptureSerializer(serializers.Serializer):
     utm_source = serializers.CharField(required=False, allow_blank=True, default="")
     utm_medium = serializers.CharField(required=False, allow_blank=True, default="")
     utm_campaign = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+def build_widget_embed_snippet(
+    *,
+    widget_script_base: str,
+    public_api_base: str,
+    public_id: str,
+    publishable_key: str,
+) -> str:
+    """HTML snippet for the v1 embed script (same attributes as `referral-widget.v1.js` header)."""
+    script_url = f"{widget_script_base.rstrip('/')}/widgets/referral-widget.v1.js"
+    api = public_api_base.rstrip("/")
+    return (
+        f'<script src="{script_url}"\n'
+        f'  data-rs-api="{api}"\n'
+        f'  data-rs-site="{public_id}"\n'
+        f'  data-rs-key="{publishable_key}"\n'
+        f'  async></script>'
+    )
+
+
+class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
+    """Owner-facing read model for widget install (no Django admin)."""
+
+    widget_embed_snippet = serializers.SerializerMethodField()
+    public_api_base = serializers.SerializerMethodField()
+    widget_script_base = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Site
+        fields = (
+            "public_id",
+            "publishable_key",
+            "allowed_origins",
+            "platform_preset",
+            "widget_enabled",
+            "config_json",
+            "widget_embed_snippet",
+            "public_api_base",
+            "widget_script_base",
+        )
+        read_only_fields = fields
+
+    def get_widget_script_base(self, obj: Site) -> str:
+        return (getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
+
+    def get_public_api_base(self, obj: Site) -> str:
+        explicit = (getattr(settings, "PUBLIC_API_BASE", "") or "").strip().rstrip("/")
+        if explicit:
+            return explicit
+        request = self.context.get("request")
+        if request is not None:
+            return request.build_absolute_uri("/").rstrip("/")
+        return ""
+
+    def get_widget_embed_snippet(self, obj: Site) -> str:
+        script_base = self.get_widget_script_base(obj)
+        api_base = self.get_public_api_base(obj)
+        return build_widget_embed_snippet(
+            widget_script_base=script_base,
+            public_api_base=api_base,
+            public_id=str(obj.public_id),
+            publishable_key=obj.publishable_key,
+        )
+
+
+class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
+    allowed_origins = serializers.ListField(
+        child=serializers.CharField(max_length=512),
+        required=False,
+    )
+    platform_preset = serializers.ChoiceField(
+        choices=Site.PlatformPreset.choices,
+        required=False,
+    )
+    config_json = serializers.JSONField(required=False)
+    widget_enabled = serializers.BooleanField(required=False)

@@ -8,6 +8,8 @@ export const API_ENDPOINTS = {
   referralCapture: `${API_BASE}/referrals/capture/`,
   partnerOnboard: `${API_BASE}/referrals/partner/onboard/`,
   partnerMe: `${API_BASE}/referrals/partner/me/`,
+  siteIntegration: `${API_BASE}/referrals/site/integration/`,
+  siteIntegrationDiagnostics: `${API_BASE}/referrals/site/integration/diagnostics/`,
 };
 
 export { API_BASE };

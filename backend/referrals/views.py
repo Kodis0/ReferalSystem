@@ -8,8 +8,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import PartnerProfile
-from .serializers import ReferralCaptureSerializer
+from .models import PartnerProfile, Site
+from .owner_diagnostics import build_site_owner_diagnostics_payload
+from .serializers import (
+    ReferralCaptureSerializer,
+    SiteOwnerIntegrationSerializer,
+    SiteOwnerIntegrationUpdateSerializer,
+)
 from .services import (
     capture_referral_attribution,
     ensure_partner_profile,
@@ -71,3 +76,62 @@ class PartnerDashboardView(APIView):
             )
         base = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
         return Response(partner_dashboard_payload(profile, app_public_base_url=base))
+
+
+def _site_for_install_owner(user):
+    return Site.objects.filter(owner=user).order_by("-created_at", "-id").first()
+
+
+class SiteOwnerIntegrationView(APIView):
+    """
+    Authenticated site owner: read/update integration fields used by the embed widget.
+    Uses the newest Site row for this user when multiple exist (admin-created).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        site = _site_for_install_owner(request.user)
+        if site is None:
+            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
+        return Response(ser.data)
+
+    def patch(self, request):
+        site = _site_for_install_owner(request.user)
+        if site is None:
+            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        upd = SiteOwnerIntegrationUpdateSerializer(data=request.data, partial=True)
+        if not upd.is_valid():
+            return Response(upd.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = upd.validated_data
+        if not data:
+            ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
+            return Response(ser.data)
+        if "allowed_origins" in data:
+            site.allowed_origins = data["allowed_origins"]
+        if "platform_preset" in data:
+            site.platform_preset = data["platform_preset"]
+        if "config_json" in data:
+            site.config_json = data["config_json"]
+        if "widget_enabled" in data:
+            site.widget_enabled = data["widget_enabled"]
+        site.save(update_fields=["allowed_origins", "platform_preset", "config_json", "widget_enabled", "updated_at"])
+        ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
+        return Response(ser.data)
+
+
+class SiteOwnerIntegrationDiagnosticsView(APIView):
+    """
+    Authenticated site owner: diagnostics + recent leads for the same newest Site row
+    as ``SiteOwnerIntegrationView`` (read-only).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        site = _site_for_install_owner(request.user)
+        if site is None:
+            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        payload = build_site_owner_diagnostics_payload(site=site, recent_limit=50)
+        return Response(payload)

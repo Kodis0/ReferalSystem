@@ -44,6 +44,8 @@ ALLOWED_HOSTS = [
 
 _cors_raw = os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").strip()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# Browser widget `data-rs-api` base (public `/public/v1/`). If empty, install API falls back to request host.
+PUBLIC_API_BASE = os.getenv("PUBLIC_API_BASE", "").strip().rstrip("/")
 if _cors_raw:
     CORS_ALLOWED_ORIGINS = [
         x.strip() for x in _cors_raw.split(",") if x.strip()
@@ -226,6 +228,20 @@ REFERRAL_DEFAULT_COMMISSION_PERCENT = os.getenv("REFERRAL_DEFAULT_COMMISSION_PER
 # fields are absent or non-definitive (never overrides explicit unpaid primary status).
 REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT = (
     os.getenv("REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT", "False").lower() == "true"
+)
+
+# Public widget POST /public/v1/events/leads: suppress duplicate submit attempts within this window.
+LEAD_INGEST_DEDUP_WINDOW_SECONDS = int(os.getenv("LEAD_INGEST_DEDUP_WINDOW_SECONDS", "120"))
+# Anonymous rate limits for public lead ingest (DRF SimpleRateThrottle format, e.g. "120/minute").
+LEAD_INGEST_THROTTLE_IP = os.getenv("LEAD_INGEST_THROTTLE_IP", "120/minute")
+LEAD_INGEST_THROTTLE_SITE = os.getenv("LEAD_INGEST_THROTTLE_SITE", "600/minute")
+# Extra structured logs (payload key names only via debug branch). Off by default.
+LEAD_INGEST_DEBUG_LOGGING = (
+    os.getenv("LEAD_INGEST_DEBUG_LOGGING", "False").lower() == "true"
+)
+# Test-only: increment in-memory counters for ingest outcomes (never enable in production).
+LEAD_INGEST_EXPOSE_COUNTERS = (
+    os.getenv("LEAD_INGEST_EXPOSE_COUNTERS", "False").lower() == "true"
 )
 
 # Tilda / payment POST webhook at /users/api/orders/

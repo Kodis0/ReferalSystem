@@ -37,7 +37,7 @@ describe("PartnerDashboard", () => {
     };
   }
 
-  it("renders recent leads from onboard payload", async () => {
+  it("renders recent leads from onboard payload (privacy-minimal)", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       json: async () =>
@@ -46,11 +46,8 @@ describe("PartnerDashboard", () => {
           recent_leads: [
             {
               created_at: "2026-01-15T12:00:00+00:00",
-              customer_name: "Ann Tester",
-              customer_email: "ann@example.com",
-              customer_phone: "+79990001122",
-              page_url: "https://shop.example/p/1",
-              form_id: "lead-form-1",
+              customer_email_masked: "a***@example.com",
+              page_path: "/p/1",
               amount: "99.50",
               currency: "RUB",
             },
@@ -65,16 +62,44 @@ describe("PartnerDashboard", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Ann Tester")).toBeInTheDocument();
+      expect(screen.getByText("a***@example.com")).toBeInTheDocument();
     });
-    expect(screen.getByText("ann@example.com")).toBeInTheDocument();
-    expect(screen.getByText("+79990001122")).toBeInTheDocument();
-    expect(screen.getByText("https://shop.example/p/1")).toBeInTheDocument();
-    expect(screen.getByText("lead-form-1")).toBeInTheDocument();
+    expect(screen.getByText("/p/1")).toBeInTheDocument();
+    expect(screen.queryByText("ann@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("+79990001122")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ann Tester")).not.toBeInTheDocument();
     expect(screen.getByText("99.50")).toBeInTheDocument();
     expect(screen.getByText("RUB")).toBeInTheDocument();
     const leadsStat = screen.getByText("Лиды").closest(".lk-partner__stat");
     expect(within(leadsStat).getByText("1")).toBeInTheDocument();
+  });
+
+  it("shows em dash for masked email when lead has no email", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () =>
+        mockOnboardPayload({
+          total_leads_count: 1,
+          recent_leads: [
+            {
+              created_at: "2026-01-15T12:00:00+00:00",
+              customer_email_masked: null,
+              page_path: "/checkout",
+              amount: "10.00",
+              currency: "USD",
+            },
+          ],
+        }),
+    });
+
+    render(<PartnerDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("/checkout")).toBeInTheDocument();
+    });
+    const leadTable = screen.getByRole("table");
+    expect(within(leadTable).getByText("—")).toBeInTheDocument();
+    expect(leadTable.textContent).not.toMatch(/@/);
   });
 
   it("shows empty state when there are no leads", async () => {

@@ -1,3 +1,4 @@
+import json
 import uuid
 from decimal import Decimal
 
@@ -11,15 +12,19 @@ from referrals.models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    PublicLeadIngestAudit,
     ReferralLeadEvent,
     ReferralVisit,
     Site,
 )
+from referrals.public_ingest_contract import CODE_CREATED, CODE_RATE_LIMITED
 from referrals.services import (
     attach_attribution_to_order,
     ensure_partner_profile,
     generate_ref_code,
     link_session_attributions_to_user,
+    mask_email_for_partner_dashboard,
+    page_path_for_partner_dashboard,
     partner_dashboard_payload,
     resolve_valid_attribution,
     upsert_order_from_tilda_payload,
@@ -478,7 +483,7 @@ class MvpAssumePaidCommissionTests(TestCase):
 
 
 class PartnerDashboardLeadsTests(TestCase):
-    """Widget ReferralLeadEvent rows exposed on partner dashboard (no order merge)."""
+    """Partner dashboard recent_leads: minimal fields only (masked email, path, amount)."""
 
     def setUp(self):
         self.owner = User.objects.create_user(
@@ -518,7 +523,7 @@ class PartnerDashboardLeadsTests(TestCase):
             customer_name="Alice",
             customer_email="alice@example.com",
             customer_phone="+100",
-            page_url="https://landing.example/a",
+            page_url="https://landing.example/a?utm=1",
             form_id="form-a",
             amount=Decimal("10.50"),
             currency="USD",
@@ -543,17 +548,44 @@ class PartnerDashboardLeadsTests(TestCase):
         self.assertEqual(dash_a["total_leads_count"], 1)
         self.assertEqual(len(dash_a["recent_leads"]), 1)
         row_a = dash_a["recent_leads"][0]
-        self.assertEqual(row_a["customer_email"], "alice@example.com")
-        self.assertEqual(row_a["customer_name"], "Alice")
-        self.assertEqual(row_a["customer_phone"], "+100")
-        self.assertEqual(row_a["page_url"], "https://landing.example/a")
-        self.assertEqual(row_a["form_id"], "form-a")
+        self.assertEqual(row_a["customer_email_masked"], "a***@example.com")
+        self.assertEqual(row_a["page_path"], "/a")
         self.assertEqual(row_a["amount"], "10.50")
         self.assertEqual(row_a["currency"], "USD")
         self.assertIn("created_at", row_a)
+        for forbidden in (
+            "customer_name",
+            "customer_phone",
+            "customer_email",
+            "page_url",
+            "form_id",
+        ):
+            self.assertNotIn(forbidden, row_a)
+        leads_json = json.dumps(dash_a["recent_leads"], default=str)
+        self.assertNotIn("alice@example.com", leads_json)
+        self.assertNotIn("Alice", leads_json)
+        self.assertNotIn("+100", leads_json)
+        self.assertNotIn("utm=1", leads_json)
 
         self.assertEqual(dash_b["total_leads_count"], 1)
-        self.assertEqual(dash_b["recent_leads"][0]["customer_email"], "bob@example.com")
+        self.assertEqual(dash_b["recent_leads"][0]["customer_email_masked"], "b***@example.com")
+
+    def test_mask_email_for_partner_dashboard(self):
+        self.assertEqual(
+            mask_email_for_partner_dashboard("alice@Example.com"),
+            "a***@example.com",
+        )
+        self.assertIsNone(mask_email_for_partner_dashboard(""))
+        self.assertIsNone(mask_email_for_partner_dashboard("not-an-email"))
+        self.assertEqual(mask_email_for_partner_dashboard("a@b.co"), "*@b.co")
+
+    def test_page_path_for_partner_dashboard_strips_query(self):
+        self.assertEqual(
+            page_path_for_partner_dashboard(
+                "https://shop.example/p/x?token=secret&other=1"
+            ),
+            "/p/x",
+        )
 
     def test_partner_dashboard_excludes_unattributed_leads(self):
         ReferralLeadEvent.objects.create(
@@ -578,6 +610,27 @@ class PartnerDashboardLeadsTests(TestCase):
             self.partner_a, app_public_base_url="https://app.example.com"
         )
         self.assertEqual(dash["recent_leads"][0]["amount"], None)
+        self.assertEqual(dash["recent_leads"][0]["customer_email_masked"], "n***@example.com")
+
+    def test_partner_dashboard_lead_without_email(self):
+        ReferralLeadEvent.objects.create(
+            site=self.site,
+            partner=self.partner_a,
+            customer_name="Secret User",
+            customer_phone="+79990001122",
+            customer_email="",
+            page_url="https://x.com/checkout",
+            amount=Decimal("1.00"),
+            currency="USD",
+        )
+        dash = partner_dashboard_payload(
+            self.partner_a, app_public_base_url="https://app.example.com"
+        )
+        row = dash["recent_leads"][0]
+        self.assertIsNone(row["customer_email_masked"])
+        payload = json.dumps(dash["recent_leads"], default=str)
+        self.assertNotIn("Secret", payload)
+        self.assertNotIn("79990001122", payload)
 
 
 class PartnerApiTests(TestCase):
@@ -602,6 +655,226 @@ class PartnerApiTests(TestCase):
         self.assertEqual(r2.status_code, 200)
         self.assertIn("referral_link", r2.data)
         self.assertIn("recent_leads", r2.data)
+
+
+class SiteOwnerIntegrationApiTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="siteowner_api",
+            email="owner-api@example.com",
+            password="secret12",
+        )
+        self.stranger = User.objects.create_user(
+            username="nostranger",
+            email="stranger@example.com",
+            password="secret12",
+        )
+        self.api = APIClient()
+
+    @override_settings(
+        FRONTEND_URL="https://app.example.com",
+        PUBLIC_API_BASE="https://api.example.com",
+    )
+    def test_get_integration_includes_snippet(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_integration_test",
+            allowed_origins=["https://shop.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+            config_json={"amount_selector": ".price"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["publishable_key"], "pk_integration_test")
+        self.assertEqual(r.data["allowed_origins"], ["https://shop.example"])
+        self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.TILDA)
+        self.assertEqual(r.data["config_json"], {"amount_selector": ".price"})
+        self.assertTrue(r.data["widget_enabled"])
+        snippet = r.data["widget_embed_snippet"]
+        self.assertIn("https://app.example.com/widgets/referral-widget.v1.js", snippet)
+        self.assertIn('data-rs-api="https://api.example.com"', snippet)
+        self.assertIn(f'data-rs-site="{site.public_id}"', snippet)
+        self.assertIn('data-rs-key="pk_integration_test"', snippet)
+
+    def test_get_requires_auth(self):
+        r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_get_missing_site(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data["detail"], "site_missing")
+
+    def test_uses_newest_site_when_multiple(self):
+        older = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_older_" + uuid.uuid4().hex,
+        )
+        newer = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_newer_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["publishable_key"], newer.publishable_key)
+        self.assertNotEqual(r.data["public_id"], str(older.public_id))
+
+    def test_patch_updates_fields(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_patch_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            "/referrals/site/integration/",
+            data={
+                "allowed_origins": ["https://b.example", "https://c.example"],
+                "platform_preset": Site.PlatformPreset.GENERIC,
+                "widget_enabled": False,
+                "config_json": {"currency": "RUB"},
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["allowed_origins"], ["https://b.example", "https://c.example"])
+        self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.GENERIC)
+        self.assertFalse(r.data["widget_enabled"])
+        self.assertEqual(r.data["config_json"], {"currency": "RUB"})
+
+
+class SiteOwnerDiagnosticsApiTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="diag_owner",
+            email="diag-owner@example.com",
+            password="secret12",
+        )
+        self.stranger = User.objects.create_user(
+            username="diag_stranger",
+            email="diag-stranger@example.com",
+            password="secret12",
+        )
+        self.api = APIClient()
+
+    def test_diagnostics_requires_auth(self):
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_diagnostics_missing_site(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data["detail"], "site_missing")
+
+    def test_diagnostics_summary_and_leads(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_diag_" + uuid.uuid4().hex,
+            allowed_origins=["https://shop.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+            widget_enabled=True,
+            config_json={
+                "observe_success": True,
+                "report_observed_outcome": True,
+                "amount_selector": ".p",
+            },
+        )
+        ReferralLeadEvent.objects.create(
+            site=site,
+            event_type=ReferralLeadEvent.EventType.LEAD_SUBMITTED,
+            submission_stage=ReferralLeadEvent.SubmissionStage.SUBMIT_ATTEMPT,
+            client_observed_outcome=ReferralLeadEvent.ClientObservedOutcome.SUCCESS_OBSERVED,
+            ref_code="REF1",
+            customer_email="lead@example.com",
+            customer_phone="+79990001122",
+            page_url="https://shop.example/order",
+            form_id="f99",
+            amount=Decimal("10.00"),
+            currency="RUB",
+            product_name="Item",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["site_public_id"], str(site.public_id))
+        self.assertEqual(r.data["integration_status"], "healthy")
+        self.assertIn("integration_warnings", r.data)
+        self.assertTrue(r.data["has_recent_leads"])
+        self.assertEqual(r.data["windows"]["24h"]["submit_attempt_count"], 1)
+        self.assertEqual(r.data["windows"]["24h"]["success_observed_count"], 1)
+        self.assertEqual(r.data["ingest_quality"]["source"], "public_lead_ingest_audit")
+        self.assertIn("total_requests", r.data["ingest_quality"]["24h"])
+        row = r.data["recent_leads"][0]
+        self.assertEqual(row["submission_stage"], ReferralLeadEvent.SubmissionStage.SUBMIT_ATTEMPT)
+        self.assertIn("submission_stage_label", row)
+        self.assertEqual(row["client_observed_outcome"], "success_observed")
+        self.assertIn("client_outcome_label", row)
+        self.assertEqual(row["customer_email_masked"], "l***@example.com")
+        self.assertEqual(row["customer_phone_masked"], "***1122")
+
+    def test_diagnostics_not_leaking_other_site(self):
+        other = User.objects.create_user(
+            username="other_site_owner",
+            email="other-so@example.com",
+            password="secret12",
+        )
+        my_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_mine_" + uuid.uuid4().hex,
+            allowed_origins=["https://mine.example"],
+        )
+        other_site = Site.objects.create(
+            owner=other,
+            publishable_key="pk_other_" + uuid.uuid4().hex,
+            allowed_origins=["https://other.example"],
+        )
+        ReferralLeadEvent.objects.create(
+            site=other_site,
+            event_type=ReferralLeadEvent.EventType.LEAD_SUBMITTED,
+            submission_stage=ReferralLeadEvent.SubmissionStage.SUBMIT_ATTEMPT,
+            ref_code="X",
+            customer_email="secret@other.com",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["site_public_id"], str(my_site.public_id))
+        self.assertEqual(r.data["windows"]["7d"]["submit_attempt_count"], 0)
+        self.assertEqual(r.data["recent_leads"], [])
+
+    def test_diagnostics_ingest_quality_counts(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_iq_" + uuid.uuid4().hex,
+            allowed_origins=["https://metrics.example"],
+        )
+        PublicLeadIngestAudit.objects.create(
+            site=site,
+            event_name="lead_submitted",
+            public_code=CODE_CREATED,
+            http_status=201,
+        )
+        PublicLeadIngestAudit.objects.create(
+            site=site,
+            event_name="",
+            public_code=CODE_RATE_LIMITED,
+            http_status=429,
+            throttle_scope="ip",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 200)
+        iq = r.data["ingest_quality"]["7d"]
+        self.assertEqual(iq["created_count"], 1)
+        self.assertEqual(iq["rate_limited_count"], 1)
+        self.assertEqual(iq["total_requests"], 2)
+        self.assertEqual(iq["rejected_count"], 0)
 
 
 @override_settings(DEBUG=True, ORDER_WEBHOOK_SHARED_SECRET="")
