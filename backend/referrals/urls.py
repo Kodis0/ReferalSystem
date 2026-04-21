@@ -4,6 +4,7 @@ from .views import (
     PartnerDashboardView,
     PartnerOnboardView,
     ReferralCaptureView,
+    SiteOwnerBootstrapView,
     SiteOwnerIntegrationDiagnosticsView,
     SiteOwnerIntegrationView,
 )
@@ -12,6 +13,11 @@ urlpatterns = [
     path("capture/", ReferralCaptureView.as_view(), name="referral-capture"),
     path("partner/onboard/", PartnerOnboardView.as_view(), name="partner-onboard"),
     path("partner/me/", PartnerDashboardView.as_view(), name="partner-dashboard"),
+    path(
+        "site/bootstrap/",
+        SiteOwnerBootstrapView.as_view(),
+        name="site-owner-bootstrap",
+    ),
     path(
         "site/integration/",
         SiteOwnerIntegrationView.as_view(),

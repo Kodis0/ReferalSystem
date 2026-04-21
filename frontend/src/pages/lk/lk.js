@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, useNavigate, Navigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, UserRound } from "lucide-react";
 import LumoLogo from "../../static/images/LUMO2.svg";
@@ -412,6 +412,7 @@ function LK() {
         <LkSidebar />
         <div className="LK-content" style={{ flex: 1, padding: "22px 24px 24px 24px" }}>
           <Routes>
+            <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="settings" element={<Settings />} />
             <Route path="news" element={<NewsPage />} />

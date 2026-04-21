@@ -701,11 +701,71 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r = self.api.get("/referrals/site/integration/")
         self.assertEqual(r.status_code, 401)
 
+    def test_bootstrap_requires_auth(self):
+        r = self.api.post("/referrals/site/bootstrap/")
+        self.assertEqual(r.status_code, 401)
+
     def test_get_missing_site(self):
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/integration/")
         self.assertEqual(r.status_code, 404)
         self.assertEqual(r.data["detail"], "site_missing")
+
+    @override_settings(
+        FRONTEND_URL="https://app.example.com",
+        PUBLIC_API_BASE="https://api.example.com",
+    )
+    def test_bootstrap_creates_first_site(self):
+        self.api.force_authenticate(self.owner)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 0)
+        r = self.api.post("/referrals/site/bootstrap/")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        self.assertIn("publishable_key", r.data)
+        self.assertIn("widget_embed_snippet", r.data)
+        site = Site.objects.get(owner=self.owner)
+        self.assertEqual(r.data["publishable_key"], site.publishable_key)
+
+    def test_bootstrap_idempotent_no_second_site(self):
+        self.api.force_authenticate(self.owner)
+        r1 = self.api.post("/referrals/site/bootstrap/")
+        self.assertEqual(r1.status_code, 201)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        pk = r1.data["publishable_key"]
+        r2 = self.api.post("/referrals/site/bootstrap/")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(r2.data["publishable_key"], pk)
+
+    def test_bootstrap_does_not_touch_other_owner_sites(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_existing_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.stranger)
+        r = self.api.post("/referrals/site/bootstrap/")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Site.objects.filter(owner=self.stranger).count(), 1)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+
+    @override_settings(
+        FRONTEND_URL="https://app.example.com",
+        PUBLIC_API_BASE="https://api.example.com",
+    )
+    def test_integration_works_after_bootstrap(self):
+        self.api.force_authenticate(self.owner)
+        b = self.api.post("/referrals/site/bootstrap/")
+        self.assertEqual(b.status_code, 201)
+        r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["publishable_key"], b.data["publishable_key"])
+
+    def test_diagnostics_works_after_bootstrap(self):
+        self.api.force_authenticate(self.owner)
+        self.api.post("/referrals/site/bootstrap/")
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("site_public_id", r.data)
 
     def test_uses_newest_site_when_multiple(self):
         older = Site.objects.create(

@@ -3,8 +3,8 @@ import { useState } from "react";
 import { API_ENDPOINTS } from "../../config/api";
 
 const REGISTER_URL = API_ENDPOINTS.register;
-/** Если бэкенд не прислал redirect_url — открываем ЛК (после выдачи JWT при регистрации). */
-const DEFAULT_REDIRECT = "/lk";
+/** Если бэкенд не прислал redirect_url — открываем вкладку «Панель» (после выдачи JWT при регистрации). */
+const DEFAULT_REDIRECT = "/lk/dashboard";
 
 function formatErrors(data) {
   if (typeof data.detail === "string") return data.detail;

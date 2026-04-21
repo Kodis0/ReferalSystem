@@ -214,7 +214,7 @@ describe("WidgetInstallScreen", () => {
     expect(screen.getByText("10.00 RUB")).toBeInTheDocument();
   });
 
-  it("shows admin message when site_missing", async () => {
+  it("shows empty state and CTA when site_missing", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 404,
@@ -224,7 +224,90 @@ describe("WidgetInstallScreen", () => {
     render(<WidgetInstallScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText(/объект Site/i)).toBeInTheDocument();
+      expect(screen.getByText(/ещё не подключён сайт/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /Подключить сайт/i })).toBeInTheDocument();
+  });
+
+  it("create site POSTs bootstrap then reloads integration and diagnostics", async () => {
+    let afterBootstrap = false;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/bootstrap/")) {
+        afterBootstrap = true;
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          json: async () => mockIntegrationPayload(),
+        });
+      }
+      if (!afterBootstrap) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({ detail: "site_missing" }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    render(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Подключить сайт/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Подключить сайт/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/site/bootstrap/"),
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("pk_test_widget")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: /Состояние интеграции/i })).toBeInTheDocument();
+  });
+
+  it("shows create error when bootstrap fails", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/bootstrap/")) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: async () => ({ detail: "server_error" }),
+        });
+      }
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({ detail: "site_missing" }),
+      });
+    });
+
+    render(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Подключить сайт/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Подключить сайт/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("server_error")).toBeInTheDocument();
     });
   });
 

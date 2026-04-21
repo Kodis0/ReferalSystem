@@ -55,7 +55,7 @@ class RegisterView(generics.CreateAPIView):
                 "refresh": str(refresh),
                 "user": CurrentUserSerializer(user).data,
                 # Маршрут SPA (React), не Django template /users/login-page/
-                "redirect_url": "/lk",
+                "redirect_url": "/lk/dashboard",
             },
             status=status.HTTP_201_CREATED,
         )

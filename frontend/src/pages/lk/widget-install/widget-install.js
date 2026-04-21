@@ -48,6 +48,9 @@ function warningDescription(code) {
 
 function WidgetInstallScreen() {
   const [loading, setLoading] = useState(true);
+  const [siteMissing, setSiteMissing] = useState(false);
+  const [createSiteLoading, setCreateSiteLoading] = useState(false);
+  const [createSiteError, setCreateSiteError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saveHint, setSaveHint] = useState("");
@@ -62,6 +65,8 @@ function WidgetInstallScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setSiteMissing(false);
+    setCreateSiteError("");
     setError("");
     setSaveHint("");
     setCopyHint("");
@@ -83,7 +88,7 @@ function WidgetInstallScreen() {
       if (resInt.status === 404 && intPayload.detail === "site_missing") {
         setData(null);
         setDiag(null);
-        setError("site_missing");
+        setSiteMissing(true);
         return;
       }
       if (!resInt.ok) {
@@ -121,6 +126,33 @@ function WidgetInstallScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const onCreateSite = async () => {
+    setCreateSiteLoading(true);
+    setCreateSiteError("");
+    try {
+      const res = await fetch(API_ENDPOINTS.siteBootstrap, {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+        body: "{}",
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const d = payload.detail;
+        const detailMsg =
+          typeof d === "string" ? d : Array.isArray(d) ? d.join("\n") : d != null ? String(d) : "";
+        setCreateSiteError(detailMsg || `Не удалось создать сайт (${res.status})`);
+        return;
+      }
+      await load();
+    } catch (e) {
+      console.error(e);
+      setCreateSiteError("Сетевая ошибка, попробуйте позже");
+    } finally {
+      setCreateSiteLoading(false);
+    }
+  };
 
   const onCopySnippet = async () => {
     const text = data?.widget_embed_snippet;
@@ -216,16 +248,30 @@ function WidgetInstallScreen() {
     );
   }
 
-  if (error === "site_missing") {
+  if (siteMissing) {
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">Виджет на сайт</h1>
         <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
-        <div className="lk-partner__error">
-          Для вашего аккаунта ещё не создан объект Site (виджет). Создайте его в админке Django и
-          привяжите к вашему пользователю как владельцу — после этого страница покажет ключи и
-          сниппет.
+        <p className="lk-partner__muted" style={{ maxWidth: 560 }}>
+          Для вашего аккаунта ещё не подключён сайт для виджета. Создайте его здесь — после этого
+          появятся ключи, сниппет и диагностика.
+        </p>
+        <div className="lk-partner__link-row" style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            className="lk-widget-install__btn"
+            disabled={createSiteLoading}
+            onClick={onCreateSite}
+          >
+            {createSiteLoading ? "Создание…" : "Подключить сайт"}
+          </button>
         </div>
+        {createSiteError ? (
+          <div className="lk-partner__error" style={{ marginTop: 12 }}>
+            {createSiteError}
+          </div>
+        ) : null}
       </div>
     );
   }

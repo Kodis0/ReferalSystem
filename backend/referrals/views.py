@@ -18,6 +18,7 @@ from .serializers import (
 from .services import (
     capture_referral_attribution,
     ensure_partner_profile,
+    generate_publishable_key,
     partner_dashboard_payload,
     referral_capture_origin_allowed,
 )
@@ -80,6 +81,29 @@ class PartnerDashboardView(APIView):
 
 def _site_for_install_owner(user):
     return Site.objects.filter(owner=user).order_by("-created_at", "-id").first()
+
+
+class SiteOwnerBootstrapView(APIView):
+    """
+    Authenticated owner: create the first Site row for widget install (self-service).
+
+    Idempotent: if a Site already exists for this user, returns the same payload as
+    GET /referrals/site/integration/ (newest site) with 200 and does not create another row.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        existing = _site_for_install_owner(request.user)
+        if existing is not None:
+            ser = SiteOwnerIntegrationSerializer(existing, context={"request": request})
+            return Response(ser.data, status=status.HTTP_200_OK)
+        site = Site.objects.create(
+            owner=request.user,
+            publishable_key=generate_publishable_key(),
+        )
+        ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
+        return Response(ser.data, status=status.HTTP_201_CREATED)
 
 
 class SiteOwnerIntegrationView(APIView):

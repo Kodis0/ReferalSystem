@@ -51,8 +51,8 @@ function Login() {
       setEmail("");
       setPassword("");
 
-      // Перенаправляем в ЛК
-      navigate("/lk");
+      // Перенаправляем во вкладку «Панель»
+      navigate("/lk/dashboard");
 
     } catch (error) {
       console.error("Ошибка при логине:", error);
