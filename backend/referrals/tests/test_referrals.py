@@ -1857,6 +1857,42 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["programs"], [])
 
+    def test_program_detail_requires_auth(self):
+        site = self._site("detail_auth", config_json={"display_name": "Detail Shop"})
+        r = self.api.get(f"/users/me/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_program_detail_own_membership(self):
+        site = self._site("detail_own", config_json={"display_name": "Detail Own"})
+        m = SiteMembership.objects.create(site=site, user=self.user_a)
+        SiteMembership.objects.filter(pk=m.pk).update(
+            created_at=timezone.now() - timedelta(days=3)
+        )
+        m.refresh_from_db()
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/me/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 200)
+        prog = r.data["program"]
+        self.assertEqual(prog["site_public_id"], str(site.public_id))
+        self.assertEqual(prog["site_display_label"], "Detail Own")
+        self.assertEqual(prog["site_status"], Site.Status.VERIFIED)
+        self.assertEqual(prog["joined_at"], m.created_at.isoformat())
+
+    def test_program_detail_other_user_forbidden(self):
+        site = self._site("detail_other", config_json={"display_name": "Other Only"})
+        SiteMembership.objects.create(site=site, user=self.user_b)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/me/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_program_detail_unknown_site(self):
+        self.api.force_authenticate(user=self.user_a)
+        unknown = uuid.uuid4()
+        r = self.api.get(f"/users/me/programs/{unknown}/")
+        self.assertEqual(r.status_code, 404)
+
 
 @override_settings(DEBUG=True, ORDER_WEBHOOK_SHARED_SECRET="")
 class AuthAttributionPersistenceTests(TestCase):

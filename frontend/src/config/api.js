@@ -7,6 +7,7 @@ export const API_ENDPOINTS = {
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
   myPrograms: `${API_BASE}/users/me/programs/`,
+  myProgramDetail: (sitePublicId) => `${API_BASE}/users/me/programs/${encodeURIComponent(sitePublicId)}/`,
   referralCapture: `${API_BASE}/referrals/capture/`,
   partnerOnboard: `${API_BASE}/referrals/partner/onboard/`,
   partnerMe: `${API_BASE}/referrals/partner/me/`,

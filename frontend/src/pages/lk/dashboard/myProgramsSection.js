@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 
 function formatJoinedAt(iso) {
@@ -81,17 +82,23 @@ export function MyProgramsSection() {
         <ul className="lk-dashboard__programs-list">
           {programs.map((p) => (
             <li key={p.site_public_id} className="lk-dashboard__programs-item">
-              <div className="lk-dashboard__programs-item-main">
-                <span className="lk-dashboard__programs-label">
-                  {p.site_display_label || `Площадка · ${p.site_public_id}`}
-                </span>
-                {p.site_status ? (
-                  <span className="lk-dashboard__programs-status">{p.site_status}</span>
-                ) : null}
-              </div>
-              <div className="lk-dashboard__programs-joined">
-                Подключено: {formatJoinedAt(p.joined_at)}
-              </div>
+              <Link
+                to={`/lk/referral-program/${p.site_public_id}`}
+                className="lk-dashboard__programs-item-link"
+                data-testid="agent-program-list-link"
+              >
+                <div className="lk-dashboard__programs-item-main">
+                  <span className="lk-dashboard__programs-label">
+                    {p.site_display_label || `Площадка · ${p.site_public_id}`}
+                  </span>
+                  {p.site_status ? (
+                    <span className="lk-dashboard__programs-status">{p.site_status}</span>
+                  ) : null}
+                </div>
+                <div className="lk-dashboard__programs-joined">
+                  Подключено: {formatJoinedAt(p.joined_at)}
+                </div>
+              </Link>
             </li>
           ))}
         </ul>

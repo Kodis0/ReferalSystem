@@ -6,6 +6,7 @@
 
 import "@testing-library/jest-dom";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { MyProgramsSection } from "../pages/lk/dashboard/myProgramsSection";
 
 describe("Dashboard My Programs", () => {
@@ -29,7 +30,11 @@ describe("Dashboard My Programs", () => {
       return Promise.reject(new Error("unexpected fetch"));
     });
 
-    render(<MyProgramsSection />);
+    render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText("Мои программы")).toBeInTheDocument();
 
@@ -60,12 +65,18 @@ describe("Dashboard My Programs", () => {
       return Promise.reject(new Error("unexpected fetch"));
     });
 
-    render(<MyProgramsSection />);
+    render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Demo Shop")).toBeInTheDocument();
     });
     expect(screen.getByText(/Подключено:/)).toBeInTheDocument();
     expect(screen.getByText("verified")).toBeInTheDocument();
+    const link = screen.getByTestId("agent-program-list-link");
+    expect(link).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
   });
 });

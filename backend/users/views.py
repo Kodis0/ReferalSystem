@@ -14,6 +14,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from referrals.models import SiteMembership
 from referrals.services import (
     create_site_membership_from_signup,
     get_site_by_public_id,
@@ -229,6 +230,34 @@ class MyProgramsView(APIView):
                 }
             )
         return Response({"programs": programs}, status=status.HTTP_200_OK)
+
+
+class MyProgramDetailView(APIView):
+    """
+    Member-facing detail for one SiteMembership of the current user (by site public_id).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, site_public_id):
+        site = get_site_by_public_id(site_public_id)
+        if site is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        membership = (
+            SiteMembership.objects.filter(site=site, user=request.user)
+            .select_related("site")
+            .first()
+        )
+        if membership is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        site = membership.site
+        payload = {
+            "site_public_id": str(site.public_id),
+            "site_display_label": site_cta_display_label(site),
+            "joined_at": membership.created_at.isoformat() if membership.created_at else None,
+            "site_status": site.status,
+        }
+        return Response({"program": payload}, status=status.HTTP_200_OK)
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):

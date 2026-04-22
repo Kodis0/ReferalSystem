@@ -8,6 +8,7 @@ import BugIcon from "../../static/images/Bug.svg";
 import LampIcon from "../../static/images/Lamp.svg";
 import SupportIcon from "../../static/images/Support.svg";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
+import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
 import Settings from "./settings/settings"; // импорт компонента Settings
 import LkSidebar from "./LkSidebar";
 import NewsPage from "./news/news";
@@ -436,6 +437,7 @@ function LK() {
                 <Route path="settings" element={<ProjectSettingsPage />} />
               </Route>
             </Route>
+            <Route path="referral-program/:sitePublicId" element={<AgentProgramDetailPage />} />
             <Route path="referral-program" element={<PartnerDashboard />} />
             <Route path="widget-install" element={<WidgetInstallScreen />} />
           </Routes>

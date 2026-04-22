@@ -7,6 +7,7 @@ from .views import (
     MyTokenObtainPairView,
     CurrentUserView,
     MyProgramsView,
+    MyProgramDetailView,
     SiteCtaJoinView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -20,6 +21,7 @@ urlpatterns = [
     path('token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    path('me/programs/<uuid:site_public_id>/', MyProgramDetailView.as_view(), name='my_program_detail'),
     path('me/programs/', MyProgramsView.as_view(), name='my_programs'),
     path('me/', CurrentUserView.as_view(), name='current_user'),  # 🔹 текущий пользователь
     path('api/orders/', OrderReceiveView.as_view(), name='receive_order'),
