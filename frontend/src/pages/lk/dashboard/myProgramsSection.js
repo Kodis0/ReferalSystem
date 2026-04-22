@@ -56,6 +56,7 @@ export function MyProgramsSection() {
 
   return (
     <section
+      id="my-programs"
       className="lk-dashboard__programs"
       aria-labelledby="lk-dashboard-programs-heading"
     >
