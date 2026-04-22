@@ -4,7 +4,7 @@ import { API_ENDPOINTS } from "../../../config/api";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
-import { formatDomainLine, siteLifecycleLabelRu } from "./siteDisplay";
+import { formatDomainLine, formatSiteCardTitle, siteLifecycleLabelRu } from "./siteDisplay";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -30,6 +30,28 @@ function integrationStatusLabel(status) {
     incomplete: "Настройка не завершена",
   };
   return map[status] || status || "—";
+}
+
+/** Warning codes from diagnostics API → Russian hints (keep in sync with widget-install). */
+function warningDescription(code) {
+  const map = {
+    no_allowed_origins: "Не заданы разрешённые домены — браузер не сможет отправить события.",
+    widget_disabled: "Виджет выключен.",
+    publishable_key_missing: "Отсутствует ключ публикации.",
+    observe_success_off: "Страница успеха может не отслеживаться (observe_success выключен в настройках).",
+    report_observed_outcome_off: "Итог отправки формы может не попадать в систему (report_observed_outcome выключен).",
+    no_leads_last_7_days: "За 7 дней нет сохранённых лидов — проверьте установку виджета и трафик.",
+    high_not_observed_ratio_7d: "Много событий без итога — проверьте селекторы и страницу «спасибо».",
+    no_outcome_reported_last_24h: "За сутки есть попытки отправки, но итог не зафиксирован.",
+  };
+  return map[code] || code;
+}
+
+function formatPartnerDomainLine(allowedOrigins) {
+  if (!Array.isArray(allowedOrigins) || allowedOrigins.length === 0) {
+    return "Домен пока не указан";
+  }
+  return formatDomainLine(null, allowedOrigins);
 }
 
 export default function ProjectOverviewPage() {
@@ -85,42 +107,50 @@ export default function ProjectOverviewPage() {
   }, [load]);
 
   const origins = Array.isArray(integration?.allowed_origins) ? integration.allowed_origins : [];
-  const domainLine = formatDomainLine(null, origins);
+  const cfg = integration?.config_json && typeof integration.config_json === "object" ? integration.config_json : {};
+  const projectTitle = formatSiteCardTitle(integration?.public_id, origins[0], cfg.display_name);
+  const domainLine = formatPartnerDomainLine(origins);
   const w7 = diag?.windows?.["7d"];
+  const lifecycleRu = siteLifecycleLabelRu(integration?.status);
+  const connectionRu = diag?.integration_status ? integrationStatusLabel(diag.integration_status) : null;
+  const attention =
+    diag?.integration_status === "needs_attention" || diag?.integration_status === "incomplete";
+  const warnings = Array.isArray(diag?.integration_warnings) ? diag.integration_warnings : [];
+  const base = `/lk/partner/${sitePublicId}`;
 
   return (
     <div className="lk-dashboard lk-partner owner-programs__shell">
-      <h2 className="lk-partner__section-title">Обзор</h2>
       {loading && <p className="lk-partner__muted">Загрузка…</p>}
       {!loading && error && <div className="owner-programs__error">{error}</div>}
       {!loading && !error && integration && (
         <>
-          <p className="owner-programs__muted" style={{ maxWidth: 640 }}>
-            <strong>Домен / origin:</strong> {domainLine}
-          </p>
-          <p className="owner-programs__muted" style={{ marginTop: 8 }}>
-            <strong>Lifecycle:</strong> {siteLifecycleLabelRu(integration.status)}
-            {diag?.integration_status ? (
-              <>
-                {" "}
-                · <strong>Интеграция:</strong> {integrationStatusLabel(diag.integration_status)}
-              </>
+          <header className="owner-programs__overview-head">
+            <h2 className="owner-programs__overview-title">{projectTitle}</h2>
+            <p className="owner-programs__overview-domain">
+              <span className="owner-programs__overview-kicker">Сайт</span>
+              {domainLine}
+            </p>
+            <div className="owner-programs__overview-pills" aria-label="Статусы">
+              <span className="owner-programs__pill">{lifecycleRu}</span>
+              {connectionRu ? <span className="owner-programs__pill">{connectionRu}</span> : null}
+            </div>
+            {attention ? (
+              <p className="owner-programs__overview-hint">
+                Рекомендуем открыть настройку виджета и при необходимости раздел «Техническая диагностика» ниже.
+              </p>
             ) : null}
-          </p>
-          {diag?.integration_warnings?.length ? (
-            <ul className="lk-widget-install__warn-list" style={{ marginTop: 12 }}>
-              {diag.integration_warnings.map((w) => (
-                <li key={w}>{w}</li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="lk-partner__stats" style={{ marginTop: 20 }}>
+          </header>
+
+          <div className="lk-partner__stats owner-programs__overview-stats">
             <div className="lk-partner__stat">
-              <div className="lk-partner__stat-label">Участники (CTA)</div>
+              <div className="lk-partner__stat-label">Участники</div>
               <div className="lk-partner__stat-value">{diag?.site_membership?.count ?? "—"}</div>
+              <Link to={`${base}/members`} className="owner-programs__stat-cta">
+                Участники и доступ
+              </Link>
             </div>
             <div className="lk-partner__stat">
-              <div className="lk-partner__stat-label">Лиды, 7 дн.</div>
+              <div className="lk-partner__stat-label">Лиды за 7 дней</div>
               <div className="lk-partner__stat-value">{w7?.submit_attempt_count ?? "—"}</div>
             </div>
             <div className="lk-partner__stat">
@@ -128,9 +158,24 @@ export default function ProjectOverviewPage() {
               <div className="lk-partner__stat-value">{integration.platform_preset || "—"}</div>
             </div>
           </div>
+
+          {warnings.length > 0 ? (
+            <details className="owner-programs__tech-details">
+              <summary>Техническая диагностика</summary>
+              <ul className="owner-programs__tech-details-list">
+                {warnings.map((w) => (
+                  <li key={w}>{warningDescription(w)}</li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+
           <div className="owner-programs__actions">
-            <Link to={`/lk/partner/${sitePublicId}/widget`} className="owner-programs__btn" style={{ textDecoration: "none" }}>
-              К виджету и установке
+            <Link to={`${base}/widget`} className="owner-programs__btn" style={{ textDecoration: "none" }}>
+              Настроить виджет
+            </Link>
+            <Link to={`${base}/widget`} className="owner-programs__btn_secondary" style={{ textDecoration: "none" }}>
+              Проверить подключение
             </Link>
           </div>
         </>

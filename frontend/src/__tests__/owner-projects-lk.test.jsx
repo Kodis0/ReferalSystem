@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LkSidebar from "../pages/lk/LkSidebar";
 import CreateOwnerProjectPage from "../pages/lk/owner-programs/CreateOwnerProjectPage";
 import OwnerSitesListPage from "../pages/lk/owner-programs/OwnerSitesListPage";
+import ProjectOverviewPage from "../pages/lk/owner-programs/ProjectOverviewPage";
 
 describe("LkSidebar owner IA", () => {
   it('shows "Проекты" and omits referral-program entry', () => {
@@ -23,7 +24,7 @@ describe("LkSidebar owner IA", () => {
     expect(screen.queryByText("Партнёрские программы")).not.toBeInTheDocument();
     expect(screen.queryByText("Реферальная программа")).not.toBeInTheDocument();
     expect(screen.getByText("Агентские программы")).toBeInTheDocument();
-    expect(screen.getByText("Виджет")).toBeInTheDocument();
+    expect(screen.queryByText("Виджет")).not.toBeInTheDocument();
   });
 });
 
@@ -122,5 +123,64 @@ describe("CreateOwnerProjectPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("overview")).toBeInTheDocument();
     });
+  });
+});
+
+describe("ProjectOverviewPage", () => {
+  beforeEach(() => {
+    localStorage.setItem("access_token", "test-token");
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    jest.restoreAllMocks();
+  });
+
+  it("shows product summary, hides raw warning codes, maps diagnostics copy", async () => {
+    const siteId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://shop.example"],
+            platform_preset: "tilda",
+            status: "active",
+            config_json: { display_name: "Магазин" },
+          }),
+        });
+      }
+      if (u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            integration_status: "healthy",
+            integration_warnings: ["observe_success_off"],
+            site_membership: { count: 3 },
+            windows: { "7d": { submit_attempt_count: 5 } },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/overview`]}>
+        <Routes>
+          <Route path="/lk/partner/:sitePublicId/overview" element={<ProjectOverviewPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Магазин" })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("shop.example")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Настроить виджет/i })).toHaveAttribute("href", `/lk/partner/${siteId}/widget`);
+    expect(screen.queryByText("observe_success_off")).not.toBeInTheDocument();
+    expect(screen.getByText(/Страница успеха может не отслеживаться/i)).toBeInTheDocument();
   });
 });

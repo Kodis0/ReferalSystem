@@ -226,3 +226,131 @@
 [data-theme="light"] .owner-programs__field-error {
   color: #b91c1c;
 }
+
+/* Project overview (product-first) */
+
+.owner-programs__overview-head {
+  margin-bottom: 22px;
+}
+
+.owner-programs__overview-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.owner-programs__overview-domain {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  opacity: 0.88;
+  word-break: break-word;
+}
+
+.owner-programs__overview-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-bottom: 4px;
+}
+
+.owner-programs__overview-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.owner-programs__overview-hint {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.78;
+  max-width: 560px;
+}
+
+.owner-programs__overview-stats {
+  margin-top: 4px;
+}
+
+.owner-programs__stat-cta {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8eb0ff;
+  text-decoration: none;
+}
+
+.owner-programs__stat-cta:hover {
+  text-decoration: underline;
+}
+
+[data-theme="light"] .owner-programs__stat-cta {
+  color: #2563eb;
+}
+
+.owner-programs__btn_secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: inherit;
+}
+
+.owner-programs__btn_secondary:hover {
+  border-color: rgba(127, 168, 255, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] .owner-programs__btn_secondary {
+  border-color: rgba(15, 23, 42, 0.18);
+}
+
+[data-theme="light"] .owner-programs__btn_secondary:hover {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.owner-programs__tech-details {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  max-width: 640px;
+}
+
+[data-theme="light"] .owner-programs__tech-details {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.owner-programs__tech-details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+  user-select: none;
+}
+
+.owner-programs__tech-details-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.88;
+}
+
+.owner-programs__tech-details-list li {
+  margin-bottom: 6px;
+}
