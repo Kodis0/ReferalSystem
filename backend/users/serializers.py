@@ -8,10 +8,13 @@ User = get_user_model()
 class RegisterSerializer(serializers.ModelSerializer):
     # Сделаем username опциональным и уберем валидаторы уникальности на уровне сериализатора
     username = serializers.CharField(required=False, allow_blank=True, validators=[])
+    site_public_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
+    ref_code = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    ref = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ('id', 'username', 'email', 'password')
+        fields = ('id', 'username', 'email', 'password', 'site_public_id', 'ref_code', 'ref')
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
@@ -19,6 +22,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         Создание пользователя через стандартную механику Django.
         Это корректно обрабатывает хеширование пароля и будущие расширения модели.
         """
+        validated_data.pop("site_public_id", None)
+        validated_data.pop("ref_code", None)
+        validated_data.pop("ref", None)
         username = validated_data.pop("username", "") or ""
         email = validated_data.pop("email")
         password = validated_data.pop("password")
@@ -49,6 +55,13 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
+
+# ------------------- Logged-in CTA join (visitor → SiteMembership) -------------------
+class SiteCtaJoinSerializer(serializers.Serializer):
+    site_public_id = serializers.UUIDField()
+    ref_code = serializers.CharField(required=False, allow_blank=True)
+    ref = serializers.CharField(required=False, allow_blank=True)
+
 
 # ------------------- Текущий пользователь -------------------
 class CurrentUserSerializer(serializers.ModelSerializer):

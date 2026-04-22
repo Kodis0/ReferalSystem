@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
@@ -9,7 +11,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import PartnerProfile, Site
-from .owner_diagnostics import build_site_owner_diagnostics_payload
+from .owner_diagnostics import build_embed_readiness, build_site_owner_diagnostics_payload
 from .serializers import (
     ReferralCaptureSerializer,
     SiteOwnerIntegrationSerializer,
@@ -83,6 +85,64 @@ def _site_for_install_owner(user):
     return Site.objects.filter(owner=user).order_by("-created_at", "-id").first()
 
 
+def _owner_site_options(user):
+    return list(Site.objects.filter(owner=user).order_by("-created_at", "-id"))
+
+
+def _owner_site_option_payload(site: Site) -> dict:
+    return {
+        "public_id": str(site.public_id),
+        "status": site.status,
+        "created_at": site.created_at.isoformat(),
+        "updated_at": site.updated_at.isoformat(),
+        "widget_enabled": bool(site.widget_enabled),
+        "allowed_origins_count": len(site.allowed_origins or []),
+    }
+
+
+def _owner_site_selection_required_response(user):
+    return Response(
+        {
+            "detail": "site_selection_required",
+            "sites": [_owner_site_option_payload(site) for site in _owner_site_options(user)],
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
+def _requested_site_public_id(request):
+    if request.method in ("PATCH", "POST"):
+        body = request.data if isinstance(request.data, dict) else {}
+        if "site_public_id" in body:
+            return body.get("site_public_id")
+    return request.query_params.get("site_public_id")
+
+
+def _resolve_owner_site(request):
+    requested_public_id = _requested_site_public_id(request)
+    qs = Site.objects.filter(owner=request.user).order_by("-created_at", "-id")
+    if requested_public_id:
+        try:
+            site = qs.filter(public_id=requested_public_id).first()
+        except ValidationError:
+            site = None
+        if site is None:
+            return None, Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        return site, None
+
+    sites = list(qs[:2])
+    if not sites:
+        return None, Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+    if len(sites) == 1:
+        return sites[0], None
+    return None, _owner_site_selection_required_response(request.user)
+
+
+def _site_embed_ready(site: Site) -> bool:
+    readiness = build_embed_readiness(site)
+    return all(bool(v) for v in readiness.values())
+
+
 class SiteOwnerBootstrapView(APIView):
     """
     Authenticated owner: create the first Site row for widget install (self-service).
@@ -94,9 +154,11 @@ class SiteOwnerBootstrapView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        existing = _site_for_install_owner(request.user)
-        if existing is not None:
-            ser = SiteOwnerIntegrationSerializer(existing, context={"request": request})
+        sites = _owner_site_options(request.user)
+        if len(sites) > 1:
+            return _owner_site_selection_required_response(request.user)
+        if len(sites) == 1:
+            ser = SiteOwnerIntegrationSerializer(sites[0], context={"request": request})
             return Response(ser.data, status=status.HTTP_200_OK)
         site = Site.objects.create(
             owner=request.user,
@@ -115,16 +177,16 @@ class SiteOwnerIntegrationView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        site = _site_for_install_owner(request.user)
-        if site is None:
-            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data)
 
     def patch(self, request):
-        site = _site_for_install_owner(request.user)
-        if site is None:
-            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
         upd = SiteOwnerIntegrationUpdateSerializer(data=request.data, partial=True)
         if not upd.is_valid():
             return Response(upd.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -140,22 +202,90 @@ class SiteOwnerIntegrationView(APIView):
             site.config_json = data["config_json"]
         if "widget_enabled" in data:
             site.widget_enabled = data["widget_enabled"]
-        site.save(update_fields=["allowed_origins", "platform_preset", "config_json", "widget_enabled", "updated_at"])
+        update_fields = ["allowed_origins", "platform_preset", "config_json", "widget_enabled", "updated_at"]
+        if not _site_embed_ready(site) and site.status != Site.Status.DRAFT:
+            site.status = Site.Status.DRAFT
+            site.verified_at = None
+            site.activated_at = None
+            update_fields.extend(["status", "verified_at", "activated_at"])
+        site.save(update_fields=update_fields)
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data)
 
 
 class SiteOwnerIntegrationDiagnosticsView(APIView):
     """
-    Authenticated site owner: diagnostics + recent leads for the same newest Site row
-    as ``SiteOwnerIntegrationView`` (read-only).
+    Authenticated site owner: diagnostics + recent leads for the resolved Site
+    (same ``site_public_id`` rules as ``SiteOwnerIntegrationView``; read-only).
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        site = _site_for_install_owner(request.user)
-        if site is None:
-            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
         payload = build_site_owner_diagnostics_payload(site=site, recent_limit=50)
         return Response(payload)
+
+
+class SiteOwnerIntegrationVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        readiness = build_embed_readiness(site)
+        if not _site_embed_ready(site):
+            return Response(
+                {
+                    "detail": "site_not_ready_for_verify",
+                    "site_status": site.status,
+                    "embed_readiness": readiness,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if site.status == Site.Status.DRAFT:
+            site.status = Site.Status.VERIFIED
+            if site.verified_at is None:
+                site.verified_at = timezone.now()
+            site.save(update_fields=["status", "verified_at", "updated_at"])
+        ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
+        return Response(ser.data)
+
+
+class SiteOwnerIntegrationActivateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        readiness = build_embed_readiness(site)
+        if not _site_embed_ready(site):
+            return Response(
+                {
+                    "detail": "site_not_ready_for_activate",
+                    "site_status": site.status,
+                    "embed_readiness": readiness,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if site.status == Site.Status.DRAFT:
+            return Response(
+                {
+                    "detail": "site_not_verified",
+                    "site_status": site.status,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if site.status != Site.Status.ACTIVE:
+            site.status = Site.Status.ACTIVE
+            if site.verified_at is None:
+                site.verified_at = timezone.now()
+            if site.activated_at is None:
+                site.activated_at = timezone.now()
+            site.save(update_fields=["status", "verified_at", "activated_at", "updated_at"])
+        ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
+        return Response(ser.data)

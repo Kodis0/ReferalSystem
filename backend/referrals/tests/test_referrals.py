@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -16,17 +17,20 @@ from referrals.models import (
     ReferralLeadEvent,
     ReferralVisit,
     Site,
+    SiteMembership,
 )
 from referrals.public_ingest_contract import CODE_CREATED, CODE_RATE_LIMITED
 from referrals.services import (
     attach_attribution_to_order,
     ensure_partner_profile,
     generate_ref_code,
+    join_site_membership_cta_logged_in,
     link_session_attributions_to_user,
     mask_email_for_partner_dashboard,
     page_path_for_partner_dashboard,
     partner_dashboard_payload,
     resolve_valid_attribution,
+    site_cta_display_label,
     upsert_order_from_tilda_payload,
 )
 
@@ -766,21 +770,37 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r = self.api.get("/referrals/site/integration/diagnostics/")
         self.assertEqual(r.status_code, 200)
         self.assertIn("site_public_id", r.data)
+        self.assertEqual(r.data["site_status"], Site.Status.DRAFT)
 
-    def test_uses_newest_site_when_multiple(self):
-        older = Site.objects.create(
+    def test_selection_required_when_multiple_sites_and_no_site_public_id(self):
+        Site.objects.create(
             owner=self.owner,
             publishable_key="pk_older_" + uuid.uuid4().hex,
         )
-        newer = Site.objects.create(
+        Site.objects.create(
             owner=self.owner,
             publishable_key="pk_newer_" + uuid.uuid4().hex,
         )
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "site_selection_required")
+        self.assertEqual(len(r.data["sites"]), 2)
+
+    def test_can_select_site_by_site_public_id_when_multiple(self):
+        older = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_older_select_" + uuid.uuid4().hex,
+        )
+        newer = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_newer_select_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get(f"/referrals/site/integration/?site_public_id={older.public_id}")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data["publishable_key"], newer.publishable_key)
-        self.assertNotEqual(r.data["public_id"], str(older.public_id))
+        self.assertEqual(r.data["public_id"], str(older.public_id))
+        self.assertNotEqual(r.data["public_id"], str(newer.public_id))
 
     def test_patch_updates_fields(self):
         Site.objects.create(
@@ -806,6 +826,102 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.GENERIC)
         self.assertFalse(r.data["widget_enabled"])
         self.assertEqual(r.data["config_json"], {"currency": "RUB"})
+
+    def test_patch_demotes_verified_site_to_draft_when_embed_not_ready(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_patch_demote_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            widget_enabled=True,
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={"widget_enabled": False},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], Site.Status.DRAFT)
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.DRAFT)
+        self.assertIsNone(site.verified_at)
+        self.assertIsNone(site.activated_at)
+
+    def test_verify_promotes_ready_draft_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_verify_" + uuid.uuid4().hex,
+            allowed_origins=["https://verify.example"],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], Site.Status.VERIFIED)
+        self.assertIsNotNone(r.data["verified_at"])
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.VERIFIED)
+        self.assertIsNotNone(site.verified_at)
+
+    def test_verify_rejects_incomplete_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_verify_fail_" + uuid.uuid4().hex,
+            allowed_origins=[],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "site_not_ready_for_verify")
+        self.assertFalse(r.data["embed_readiness"]["origins_configured"])
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.DRAFT)
+
+    def test_activate_requires_verified_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_activate_draft_" + uuid.uuid4().hex,
+            allowed_origins=["https://activate.example"],
+            widget_enabled=True,
+            status=Site.Status.DRAFT,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "site_not_verified")
+
+    def test_activate_promotes_verified_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_activate_verified_" + uuid.uuid4().hex,
+            allowed_origins=["https://activate.example"],
+            widget_enabled=True,
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], Site.Status.ACTIVE)
+        self.assertIsNotNone(r.data["activated_at"])
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.ACTIVE)
+        self.assertIsNotNone(site.activated_at)
 
 
 class SiteOwnerDiagnosticsApiTests(TestCase):
@@ -877,6 +993,8 @@ class SiteOwnerDiagnosticsApiTests(TestCase):
         self.assertIn("client_outcome_label", row)
         self.assertEqual(row["customer_email_masked"], "l***@example.com")
         self.assertEqual(row["customer_phone_masked"], "***1122")
+        self.assertEqual(r.data["site_membership"]["count"], 0)
+        self.assertEqual(r.data["site_membership"]["recent_joins"], [])
 
     def test_diagnostics_not_leaking_other_site(self):
         other = User.objects.create_user(
@@ -901,12 +1019,92 @@ class SiteOwnerDiagnosticsApiTests(TestCase):
             ref_code="X",
             customer_email="secret@other.com",
         )
+        other_member = User.objects.create_user(
+            username="other_site_member",
+            email="member-on-other@example.com",
+            password="secret12",
+        )
+        SiteMembership.objects.create(site=other_site, user=other_member)
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/integration/diagnostics/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["site_public_id"], str(my_site.public_id))
         self.assertEqual(r.data["windows"]["7d"]["submit_attempt_count"], 0)
         self.assertEqual(r.data["recent_leads"], [])
+        self.assertEqual(r.data["site_membership"]["count"], 0)
+        self.assertEqual(r.data["site_membership"]["recent_joins"], [])
+
+    def test_diagnostics_membership_count_and_recent_joins(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_ms_" + uuid.uuid4().hex,
+            allowed_origins=["https://shop.example"],
+        )
+        u1 = User.objects.create_user(username="m1", email="alice-ms@example.com", password="secret12")
+        u2 = User.objects.create_user(username="m2", email="bob-ms@example.org", password="secret12")
+        SiteMembership.objects.create(site=site, user=u1)
+        SiteMembership.objects.create(site=site, user=u2)
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 200)
+        sm = r.data["site_membership"]
+        self.assertEqual(sm["count"], 2)
+        self.assertEqual(len(sm["recent_joins"]), 2)
+        emails = {row["identity_masked"] for row in sm["recent_joins"]}
+        self.assertEqual(emails, {"a***@example.com", "b***@example.org"})
+
+    def test_diagnostics_membership_scoped_to_selected_site(self):
+        site_a = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_ms_a_" + uuid.uuid4().hex,
+        )
+        site_b = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_ms_b_" + uuid.uuid4().hex,
+        )
+        ua = User.objects.create_user(username="ma", email="a-ms@example.com", password="secret12")
+        ub = User.objects.create_user(username="mb", email="b-ms@example.com", password="secret12")
+        uc = User.objects.create_user(username="mc", email="c-ms@example.com", password="secret12")
+        SiteMembership.objects.create(site=site_a, user=ua)
+        SiteMembership.objects.create(site=site_a, user=ub)
+        SiteMembership.objects.create(site=site_b, user=uc)
+        self.api.force_authenticate(self.owner)
+        r_a = self.api.get(f"/referrals/site/integration/diagnostics/?site_public_id={site_a.public_id}")
+        self.assertEqual(r_a.status_code, 200)
+        self.assertEqual(r_a.data["site_membership"]["count"], 2)
+        r_b = self.api.get(f"/referrals/site/integration/diagnostics/?site_public_id={site_b.public_id}")
+        self.assertEqual(r_b.status_code, 200)
+        self.assertEqual(r_b.data["site_membership"]["count"], 1)
+
+    def test_diagnostics_stranger_cannot_read_foreign_site_summary(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_foreign_" + uuid.uuid4().hex,
+        )
+        member = User.objects.create_user(
+            username="foreign_m",
+            email="foreign-m@example.com",
+            password="secret12",
+        )
+        SiteMembership.objects.create(site=site, user=member)
+        self.api.force_authenticate(self.stranger)
+        r = self.api.get(f"/referrals/site/integration/diagnostics/?site_public_id={site.public_id}")
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data["detail"], "site_missing")
+
+    def test_diagnostics_requires_site_selection_when_multiple_sites(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_diag_multi_1_" + uuid.uuid4().hex,
+        )
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_diag_multi_2_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/diagnostics/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "site_selection_required")
 
     def test_diagnostics_ingest_quality_counts(self):
         site = Site.objects.create(
@@ -935,6 +1133,456 @@ class SiteOwnerDiagnosticsApiTests(TestCase):
         self.assertEqual(iq["rate_limited_count"], 1)
         self.assertEqual(iq["total_requests"], 2)
         self.assertEqual(iq["rejected_count"], 0)
+
+
+class SiteCtaDisplayLabelTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="cta_label_owner",
+            email="cta-label-owner@example.com",
+            password="secret12",
+        )
+
+    def test_prefers_config_json_display_name(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_cta_lbl_1_" + uuid.uuid4().hex,
+            config_json={"display_name": "  My Shop  "},
+        )
+        self.assertEqual(site_cta_display_label(site), "My Shop")
+
+    def test_falls_back_to_site_title_key(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_cta_lbl_title_" + uuid.uuid4().hex,
+            config_json={"site_title": "Title case"},
+        )
+        self.assertEqual(site_cta_display_label(site), "Title case")
+
+    def test_falls_back_to_allowed_origins_hostname(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_cta_lbl_origin_" + uuid.uuid4().hex,
+            allowed_origins=["https://www.shop.example/path"],
+        )
+        self.assertEqual(site_cta_display_label(site), "shop.example")
+
+    def test_returns_empty_when_no_hints(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_cta_lbl_empty_" + uuid.uuid4().hex,
+        )
+        self.assertEqual(site_cta_display_label(site), "")
+
+
+class SiteSignupJoinTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="site_join_owner",
+            email="site-join-owner@example.com",
+            password="secret12",
+        )
+        self.partner_user = User.objects.create_user(
+            username="site_join_partner",
+            email="site-join-partner@example.com",
+            password="secret12",
+        )
+        self.partner, _ = ensure_partner_profile(self.partner_user)
+        self.site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_site_join_" + uuid.uuid4().hex,
+        )
+        self.site.status = Site.Status.VERIFIED
+        self.site.verified_at = timezone.now()
+        self.site.save(update_fields=["status", "verified_at", "updated_at"])
+
+    def test_site_defaults_to_draft_lifecycle(self):
+        fresh = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_fresh_draft_" + uuid.uuid4().hex,
+        )
+        self.assertEqual(fresh.status, Site.Status.DRAFT)
+        self.assertIsNone(fresh.verified_at)
+        self.assertIsNone(fresh.activated_at)
+
+    def test_register_rejects_site_not_verified(self):
+        draft_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_draft_" + uuid.uuid4().hex,
+        )
+        self.assertEqual(draft_site.status, Site.Status.DRAFT)
+        email = "draft-blocked@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(draft_site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("detail"), "site_not_joinable")
+        self.assertEqual(r.data.get("site_status"), Site.Status.DRAFT)
+        self.assertFalse(User.objects.filter(email=email).exists())
+        self.assertEqual(SiteMembership.objects.filter(site=draft_site).count(), 0)
+
+    def test_register_with_site_public_id_creates_site_membership(self):
+        email = "site-member@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(self.site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=self.site, user=user)
+        self.assertEqual(membership.joined_via, SiteMembership.JoinedVia.CTA_SIGNUP)
+        self.assertEqual(membership.ref_code, "")
+        self.assertIsNone(membership.partner_id)
+        self.assertEqual(r.data.get("cta_join", {}).get("status"), "joined")
+        self.assertEqual(
+            r.data.get("cta_join", {}).get("site_public_id"),
+            str(self.site.public_id),
+        )
+        self.assertEqual(r.data.get("cta_join", {}).get("site_display_label"), "")
+
+    def test_register_cta_join_includes_site_display_label_from_config(self):
+        self.site.config_json = {"display_name": "Магазин Омега"}
+        self.site.save(update_fields=["config_json", "updated_at"])
+        email = "site-member-labelled@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(self.site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(
+            r.data.get("cta_join", {}).get("site_display_label"),
+            "Магазин Омега",
+        )
+
+    def test_register_with_session_attribution_snapshots_partner_to_membership(self):
+        capture = self.client.post(
+            "/referrals/capture/",
+            data={"ref": self.partner.ref_code},
+            content_type="application/json",
+        )
+        self.assertEqual(capture.status_code, 200)
+        email = "site-attributed@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(self.site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=self.site, user=user)
+        self.assertEqual(membership.partner_id, self.partner.id)
+        self.assertEqual(membership.ref_code, self.partner.ref_code)
+        attr = CustomerAttribution.objects.get(partner=self.partner)
+        self.assertEqual(attr.customer_user_id, user.id)
+
+    def test_register_with_explicit_ref_code_snapshots_partner_to_membership(self):
+        email = "site-explicit-ref@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(self.site.public_id),
+                "ref_code": self.partner.ref_code,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=self.site, user=user)
+        self.assertEqual(membership.partner_id, self.partner.id)
+        self.assertEqual(membership.ref_code, self.partner.ref_code)
+
+    def test_register_explicit_ref_overrides_session_attribution(self):
+        other_user = User.objects.create_user(
+            username="site_join_partner2",
+            email="site-join-partner2@example.com",
+            password="secret12",
+        )
+        other_partner, _ = ensure_partner_profile(other_user)
+        self.assertNotEqual(other_partner.id, self.partner.id)
+
+        cap = self.client.post(
+            "/referrals/capture/",
+            data={"ref": self.partner.ref_code},
+            content_type="application/json",
+        )
+        self.assertEqual(cap.status_code, 200)
+
+        email = "explicit-pref@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(self.site.public_id),
+                "ref": other_partner.ref_code,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=self.site, user=user)
+        self.assertEqual(membership.partner_id, other_partner.id)
+        self.assertEqual(membership.ref_code, other_partner.ref_code)
+
+    def test_register_with_ref_alias_snapshots_partner_like_ref_code(self):
+        email = "site-ref-alias@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(self.site.public_id),
+                "ref": self.partner.ref_code,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=self.site, user=user)
+        self.assertEqual(membership.partner_id, self.partner.id)
+        self.assertEqual(membership.ref_code, self.partner.ref_code)
+
+    def test_register_with_active_site_creates_membership(self):
+        active_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_site_active_" + uuid.uuid4().hex,
+        )
+        active_site.status = Site.Status.ACTIVE
+        active_site.activated_at = timezone.now()
+        active_site.save(update_fields=["status", "activated_at", "updated_at"])
+
+        email = "active-site-member@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(active_site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        SiteMembership.objects.get(site=active_site, user=user)
+
+    def test_register_rejects_unknown_site_public_id(self):
+        email = "missing-site@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(uuid.uuid4()),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("site_public_id", r.data)
+        self.assertFalse(User.objects.filter(email=email).exists())
+        self.assertEqual(SiteMembership.objects.count(), 0)
+
+
+class LoggedInSiteCtaJoinTests(TestCase):
+    """POST /users/site/join/ — authenticated CTA join (no registration)."""
+
+    def setUp(self):
+        self.api = APIClient()
+        self.owner = User.objects.create_user(
+            username="join_api_owner",
+            email="join-api-owner@example.com",
+            password="secret12",
+        )
+        self.member_user = User.objects.create_user(
+            username="join_api_member",
+            email="join-api-member@example.com",
+            password="secret12",
+        )
+        self.partner_user = User.objects.create_user(
+            username="join_api_partner",
+            email="join-api-partner@example.com",
+            password="secret12",
+        )
+        self.partner, _ = ensure_partner_profile(self.partner_user)
+        self.site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_api_" + uuid.uuid4().hex,
+        )
+        self.site.status = Site.Status.VERIFIED
+        self.site.verified_at = timezone.now()
+        self.site.save(update_fields=["status", "verified_at", "updated_at"])
+
+    def _post_join(self, user, **body):
+        self.api.force_authenticate(user=user)
+        return self.api.post("/users/site/join/", data=body, format="json")
+
+    def test_join_creates_membership(self):
+        r = self._post_join(
+            self.member_user, site_public_id=str(self.site.public_id)
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "joined")
+        self.assertEqual(r.data["site_public_id"], str(self.site.public_id))
+        self.assertEqual(r.data.get("site_display_label"), "")
+        m = SiteMembership.objects.get(site=self.site, user=self.member_user)
+        self.assertEqual(m.joined_via, SiteMembership.JoinedVia.CTA_SIGNUP)
+
+    def test_duplicate_join_is_idempotent(self):
+        self._post_join(self.member_user, site_public_id=str(self.site.public_id))
+        r2 = self._post_join(
+            self.member_user, site_public_id=str(self.site.public_id)
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data["status"], "already_joined")
+        self.assertEqual(SiteMembership.objects.filter(site=self.site).count(), 1)
+
+    def test_join_rejects_draft_site(self):
+        draft = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_draft_api_" + uuid.uuid4().hex,
+        )
+        r = self._post_join(self.member_user, site_public_id=str(draft.public_id))
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("detail"), "site_not_joinable")
+        self.assertEqual(r.data.get("site_status"), Site.Status.DRAFT)
+
+    def test_join_rejects_unknown_site(self):
+        r = self._post_join(
+            self.member_user, site_public_id=str(uuid.uuid4())
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("site_public_id", r.data)
+
+    def test_explicit_ref_snapshots_partner(self):
+        r = self._post_join(
+            self.member_user,
+            site_public_id=str(self.site.public_id),
+            ref_code=self.partner.ref_code,
+        )
+        self.assertEqual(r.status_code, 200)
+        m = SiteMembership.objects.get(site=self.site, user=self.member_user)
+        self.assertEqual(m.partner_id, self.partner.id)
+        self.assertEqual(m.ref_code, self.partner.ref_code)
+
+    def test_requires_auth(self):
+        self.api.force_authenticate(user=None)
+        r = self.api.post(
+            "/users/site/join/",
+            data={"site_public_id": str(self.site.public_id)},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 401)
+
+    def test_service_duplicate_alignment(self):
+        m1, o1 = join_site_membership_cta_logged_in(
+            site_public_id=self.site.public_id,
+            user=self.member_user,
+            session_key=None,
+            ref_code="",
+        )
+        m2, o2 = join_site_membership_cta_logged_in(
+            site_public_id=self.site.public_id,
+            user=self.member_user,
+            session_key=None,
+            ref_code="",
+        )
+        self.assertEqual(o1, "joined")
+        self.assertEqual(o2, "already_joined")
+        self.assertEqual(m1.pk, m2.pk)
+
+
+class MyProgramsApiTests(TestCase):
+    """GET /users/me/programs/ — member list of SiteMembership (referral programs)."""
+
+    def setUp(self):
+        self.api = APIClient()
+        self.owner = User.objects.create_user(
+            username="programs_owner",
+            email="programs-owner@example.com",
+            password="secret12",
+        )
+        self.user_a = User.objects.create_user(
+            username="programs_a",
+            email="programs-a@example.com",
+            password="secret12",
+        )
+        self.user_b = User.objects.create_user(
+            username="programs_b",
+            email="programs-b@example.com",
+            password="secret12",
+        )
+
+    def _site(self, key_suffix, **extra):
+        s = Site.objects.create(
+            owner=self.owner,
+            publishable_key=f"pk_prog_{key_suffix}_" + uuid.uuid4().hex,
+            **extra,
+        )
+        s.status = Site.Status.VERIFIED
+        s.verified_at = timezone.now()
+        s.save(update_fields=["status", "verified_at", "updated_at"])
+        return s
+
+    def test_requires_auth(self):
+        r = self.api.get("/users/me/programs/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_returns_only_current_user_memberships_newest_first(self):
+        site_a = self._site("a", config_json={"display_name": "Shop Alpha"})
+        site_b = self._site("b", config_json={"display_name": "Shop Beta"})
+        m_a = SiteMembership.objects.create(site=site_a, user=self.user_a)
+        m_b = SiteMembership.objects.create(site=site_b, user=self.user_a)
+        SiteMembership.objects.filter(pk=m_a.pk).update(
+            created_at=timezone.now() - timedelta(days=10)
+        )
+        SiteMembership.objects.filter(pk=m_b.pk).update(
+            created_at=timezone.now() - timedelta(days=1)
+        )
+
+        other_site = self._site("other")
+        SiteMembership.objects.create(site=other_site, user=self.user_b)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/me/programs/")
+        self.assertEqual(r.status_code, 200)
+        programs = r.data["programs"]
+        self.assertEqual(len(programs), 2)
+        self.assertEqual(programs[0]["site_public_id"], str(site_b.public_id))
+        self.assertEqual(programs[0]["site_display_label"], "Shop Beta")
+        self.assertEqual(programs[0]["site_status"], Site.Status.VERIFIED)
+        self.assertEqual(programs[1]["site_public_id"], str(site_a.public_id))
+        self.assertEqual(programs[1]["site_display_label"], "Shop Alpha")
+        self.assertNotIn(str(other_site.public_id), [x["site_public_id"] for x in programs])
+
+    def test_other_user_memberships_not_leaked(self):
+        site = self._site("leak")
+        SiteMembership.objects.create(site=site, user=self.user_b)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/me/programs/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["programs"], [])
 
 
 @override_settings(DEBUG=True, ORDER_WEBHOOK_SHARED_SECRET="")

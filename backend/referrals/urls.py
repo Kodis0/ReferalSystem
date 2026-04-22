@@ -4,9 +4,11 @@ from .views import (
     PartnerDashboardView,
     PartnerOnboardView,
     ReferralCaptureView,
+    SiteOwnerIntegrationActivateView,
     SiteOwnerBootstrapView,
     SiteOwnerIntegrationDiagnosticsView,
     SiteOwnerIntegrationView,
+    SiteOwnerIntegrationVerifyView,
 )
 
 urlpatterns = [
@@ -27,5 +29,15 @@ urlpatterns = [
         "site/integration/diagnostics/",
         SiteOwnerIntegrationDiagnosticsView.as_view(),
         name="site-owner-integration-diagnostics",
+    ),
+    path(
+        "site/integration/verify/",
+        SiteOwnerIntegrationVerifyView.as_view(),
+        name="site-owner-integration-verify",
+    ),
+    path(
+        "site/integration/activate/",
+        SiteOwnerIntegrationActivateView.as_view(),
+        name="site-owner-integration-activate",
     ),
 ]

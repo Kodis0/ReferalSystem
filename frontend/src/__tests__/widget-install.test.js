@@ -5,7 +5,7 @@
  */
 
 import "@testing-library/jest-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import WidgetInstallScreen from "../pages/lk/widget-install/widget-install";
 
@@ -25,6 +25,9 @@ describe("WidgetInstallScreen", () => {
       publishable_key: "pk_test_widget",
       allowed_origins: ["https://shop.example"],
       platform_preset: "tilda",
+      status: "draft",
+      verified_at: null,
+      activated_at: null,
       widget_enabled: true,
       config_json: { amount_selector: ".js-price" },
       widget_embed_snippet:
@@ -42,6 +45,9 @@ describe("WidgetInstallScreen", () => {
   function mockDiagnosticsPayload(overrides = {}) {
     return {
       site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      site_status: "draft",
+      verified_at: null,
+      activated_at: null,
       integration_status: "healthy",
       integration_warnings: [],
       embed_readiness: {
@@ -108,6 +114,10 @@ describe("WidgetInstallScreen", () => {
         },
       },
       recent_leads: [],
+      site_membership: {
+        count: 0,
+        recent_joins: [],
+      },
       ...overrides,
     };
   }
@@ -162,8 +172,49 @@ describe("WidgetInstallScreen", () => {
       expect(screen.getByRole("heading", { name: /Состояние интеграции/i })).toBeInTheDocument();
     });
     expect(screen.getByText("В норме")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Участники по CTA/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Наблюдаемые итоги/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Качество публичного ingest/i })).toBeInTheDocument();
+  });
+
+  it("shows membership count and recent joins from diagnostics", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockDiagnosticsPayload({
+              site_membership: {
+                count: 2,
+                recent_joins: [
+                  {
+                    joined_at: "2026-02-01T10:00:00+00:00",
+                    identity_masked: "a***@example.com",
+                  },
+                  {
+                    joined_at: "2026-01-31T09:00:00+00:00",
+                    identity_masked: "b***@example.org",
+                  },
+                ],
+              },
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    render(<WidgetInstallScreen />);
+
+    const ctaHeading = await screen.findByRole("heading", { name: /Участники по CTA/i });
+    const ctaSection = ctaHeading.closest("section");
+    await waitFor(() => {
+      expect(within(ctaSection).getByText("2")).toBeInTheDocument();
+    });
+    expect(within(ctaSection).getByText(/a\*\*\*@example\.com/i)).toBeInTheDocument();
+    expect(within(ctaSection).getByText(/2026-02-01 10:00:00 ·/)).toBeInTheDocument();
   });
 
   it("shows recent lead row with outcome badge", async () => {
@@ -327,6 +378,95 @@ describe("WidgetInstallScreen", () => {
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining("data-rs-key="));
+    });
+  });
+
+  it("shows site chooser when backend requires explicit site selection", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        detail: "site_selection_required",
+        sites: [
+          {
+            public_id: "site-one",
+            status: "draft",
+          },
+          {
+            public_id: "site-two",
+            status: "active",
+          },
+        ],
+      }),
+    });
+
+    render(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Выберите сайт/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /site-one · Черновик/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /site-two · Активен/i })).toBeInTheDocument();
+  });
+
+  it("verify and activate buttons call lifecycle endpoints", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/verify/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockIntegrationPayload({ status: "verified", verified_at: "2026-01-15T12:00:00+00:00" }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/activate/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              status: "active",
+              verified_at: "2026-01-15T12:00:00+00:00",
+              activated_at: "2026-01-15T12:05:00+00:00",
+            }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      if (options.method === "GET" || !options.method) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockIntegrationPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    render(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Подтвердить проверку/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Подтвердить проверку/i }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/site/integration/verify/"),
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Активировать сайт/i }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/site/integration/activate/"),
+        expect.objectContaining({ method: "POST" })
+      );
     });
   });
 });

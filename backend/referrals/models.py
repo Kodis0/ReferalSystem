@@ -57,6 +57,11 @@ class Site(models.Model):
         TILDA = "tilda", "Tilda"
         GENERIC = "generic", "Generic"
 
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        VERIFIED = "verified", "Verified"
+        ACTIVE = "active", "Active"
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -80,6 +85,12 @@ class Site(models.Model):
         default=PlatformPreset.TILDA,
         db_index=True,
     )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
     widget_enabled = models.BooleanField(default=True, db_index=True)
     webhook_enabled = models.BooleanField(
         default=True,
@@ -91,6 +102,8 @@ class Site(models.Model):
         help_text="Optional widget keys: amount_selector, currency (literal), "
         "product_name_selector (CSS selectors resolved in the browser).",
     )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    activated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -99,6 +112,50 @@ class Site(models.Model):
 
     def __str__(self) -> str:
         return f"Site {self.public_id} (owner={self.owner_id})"
+
+
+class SiteMembership(models.Model):
+    class JoinedVia(models.TextChoices):
+        CTA_SIGNUP = "cta_signup", "CTA signup"
+
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="site_memberships",
+    )
+    partner = models.ForeignKey(
+        PartnerProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="site_memberships",
+    )
+    ref_code = models.CharField(max_length=32, blank=True, default="", db_index=True)
+    joined_via = models.CharField(
+        max_length=32,
+        choices=JoinedVia.choices,
+        default=JoinedVia.CTA_SIGNUP,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["site", "user"], name="uniq_site_membership"),
+        ]
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["site", "-created_at"]),
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"SiteMembership site={self.site_id} user={self.user_id}"
 
 
 class ReferralLeadEvent(models.Model):

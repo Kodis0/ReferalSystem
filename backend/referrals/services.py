@@ -28,6 +28,7 @@ from .models import (
     ReferralLeadEvent,
     ReferralVisit,
     Site,
+    SiteMembership,
 )
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,79 @@ def link_session_attributions_to_user(
     ).update(customer_user=user)
 
 
+def get_site_by_public_id(public_id) -> Optional[Site]:
+    if not public_id:
+        return None
+    return Site.objects.filter(public_id=public_id).first()
+
+
+def site_allows_cta_signup_membership(site: Site) -> bool:
+    """
+    Visitor signup with ``site_public_id`` may create SiteMembership only in these states.
+
+    Semantics: ``verified`` means embed readiness was satisfied and the owner ran verify
+    (config/ops milestone), not a third-party browser or Tilda attestation.
+    """
+    return site.status in (Site.Status.VERIFIED, Site.Status.ACTIVE)
+
+
+_CTA_SITE_LABEL_CONFIG_KEYS = (
+    "display_name",
+    "site_title",
+    "title",
+    "brand_name",
+)
+
+
+def _sanitize_cta_site_display_label(raw: str) -> str:
+    if not raw or not isinstance(raw, str):
+        return ""
+    s = raw.strip()
+    if not s:
+        return ""
+    s = "".join(ch for ch in s if ch == "\t" or ord(ch) >= 32)
+    s = " ".join(s.split())
+    return s[:120]
+
+
+def site_cta_display_label(site: Site) -> str:
+    """
+    Human-readable line for CTA / post-join UX (no new DB field).
+
+    Prefer optional string keys in ``config_json``, else the hostname of the first parsable
+    ``allowed_origins`` URL (owner already sets origins for the embed).
+    """
+    cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    for key in _CTA_SITE_LABEL_CONFIG_KEYS:
+        val = cfg.get(key)
+        if isinstance(val, str):
+            label = _sanitize_cta_site_display_label(val)
+            if label:
+                return label
+    origins = site.allowed_origins or []
+    if not isinstance(origins, list):
+        return ""
+    for origin in origins:
+        if not isinstance(origin, str):
+            continue
+        o = origin.strip()
+        if not o:
+            continue
+        if "://" not in o:
+            o = f"https://{o}"
+        try:
+            host = (urlparse(o).hostname or "").strip().lower()
+        except ValueError:
+            continue
+        if not host:
+            continue
+        if host.startswith("www."):
+            host = host[4:]
+        if host:
+            return host[:120]
+    return ""
+
+
 def resolve_valid_attribution(
     *,
     session_key: Optional[str] = None,
@@ -253,6 +327,118 @@ def resolve_valid_attribution(
 
     # Tie-break on pk so ordering is stable when attributed_at matches.
     return candidates.order_by("-attributed_at", "-pk").first()
+
+
+def _cta_membership_partner_ref_snapshot(
+    *,
+    user,
+    session_key: Optional[str],
+    ref_code: str,
+) -> Tuple[Optional[PartnerProfile], str]:
+    """Partner + canonical ref_code for SiteMembership snapshot (signup / CTA join)."""
+    partner = None
+    ref_snap = ""
+    if ref_code:
+        explicit_partner = get_active_partner_by_ref_code(ref_code)
+        if explicit_partner and not would_be_self_referral(
+            explicit_partner,
+            customer_user=user,
+            customer_email=getattr(user, "email", "") or "",
+        ):
+            partner = explicit_partner
+            ref_snap = explicit_partner.ref_code
+
+    if partner is None:
+        attr = resolve_valid_attribution(session_key=session_key, user=user)
+        if attr and not would_be_self_referral(
+            attr.partner,
+            customer_user=user,
+            customer_email=getattr(user, "email", "") or "",
+        ):
+            partner = attr.partner
+            ref_snap = attr.ref_code
+
+    return partner, ref_snap
+
+
+def create_site_membership_from_signup(
+    *,
+    site_public_id,
+    user,
+    session_key: Optional[str] = None,
+    ref_code: str = "",
+) -> Tuple[SiteMembership, bool]:
+    if user is None or not getattr(user, "is_authenticated", False):
+        raise ValueError("authenticated_user_required")
+
+    site = get_site_by_public_id(site_public_id)
+    if site is None:
+        raise ValueError("invalid_site_public_id")
+    if not site_allows_cta_signup_membership(site):
+        raise ValueError("site_not_joinable")
+
+    partner, ref_snap = _cta_membership_partner_ref_snapshot(
+        user=user, session_key=session_key, ref_code=ref_code
+    )
+
+    membership, created = SiteMembership.objects.update_or_create(
+        site=site,
+        user=user,
+        defaults={
+            "partner": partner,
+            "ref_code": ref_snap,
+            "joined_via": SiteMembership.JoinedVia.CTA_SIGNUP,
+        },
+    )
+    return membership, created
+
+
+def join_site_membership_cta_logged_in(
+    *,
+    site_public_id,
+    user,
+    session_key: Optional[str] = None,
+    ref_code: str = "",
+) -> Tuple[SiteMembership, str]:
+    """
+    Idempotent CTA join for an already-authenticated user.
+
+    Returns (membership, outcome) where outcome is ``joined`` or ``already_joined``.
+    Does not overwrite partner/ref on an existing row (duplicate POSTs are no-ops).
+    """
+    if user is None or not getattr(user, "is_authenticated", False):
+        raise ValueError("authenticated_user_required")
+
+    site = get_site_by_public_id(site_public_id)
+    if site is None:
+        raise ValueError("invalid_site_public_id")
+    if not site_allows_cta_signup_membership(site):
+        raise ValueError("site_not_joinable")
+
+    existing = (
+        SiteMembership.objects.filter(site=site, user=user).select_related("site").first()
+    )
+    if existing is not None:
+        return existing, "already_joined"
+
+    partner, ref_snap = _cta_membership_partner_ref_snapshot(
+        user=user, session_key=session_key, ref_code=ref_code
+    )
+    try:
+        with transaction.atomic():
+            membership = SiteMembership.objects.create(
+                site=site,
+                user=user,
+                partner=partner,
+                ref_code=ref_snap,
+                joined_via=SiteMembership.JoinedVia.CTA_SIGNUP,
+            )
+    except IntegrityError:
+        existing2 = SiteMembership.objects.filter(site=site, user=user).first()
+        if existing2 is not None:
+            return existing2, "already_joined"
+        raise
+    return membership, "joined"
 
 
 def would_be_self_referral(

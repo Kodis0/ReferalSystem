@@ -1,32 +1,88 @@
 import './registration.css';
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
+import {
+  buildSiteCtaJoinRequestBody,
+  ctaContextFromURLSearchParams,
+} from "./ctaQuery";
+import { buildPostJoinDashboardPath } from "./postJoinNavigation";
+import { formatRegistrationErrors } from "./registrationErrors";
+
+/**
+ * CTA / Tilda block → app registration query contract (MVP):
+ *   ?site=<uuid> or ?site_public_id=<uuid>  — target Site.public_id
+ *   ?ref=<code> or ?ref_code=<code>        — optional partner ref (same as signup body)
+ * Widget builders can deep-link the SPA registration route with these params.
+ */
 
 const REGISTER_URL = API_ENDPOINTS.register;
 /** Если бэкенд не прислал redirect_url — открываем вкладку «Панель» (после выдачи JWT при регистрации). */
 const DEFAULT_REDIRECT = "/lk/dashboard";
 
-function formatErrors(data) {
-  if (typeof data.detail === "string") return data.detail;
-  if (Array.isArray(data.detail)) return data.detail.join("\n");
-  if (typeof data === "object" && data !== null) {
-    return Object.entries(data)
-      .map(([field, messages]) =>
-        Array.isArray(messages)
-          ? `${field}: ${messages.join(" ")}`
-          : `${field}: ${messages}`
-      )
-      .join("\n");
-  }
-  return "Ошибка регистрации";
-}
-
 function Registration() {
+  const [searchParams] = useSearchParams();
+  const ctaContext = useMemo(
+    () => ctaContextFromURLSearchParams(searchParams),
+    [searchParams]
+  );
+
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  /** Logged-in user + CTA site: automatic join instead of signup form. */
+  const [ctaJoinPhase, setCtaJoinPhase] = useState("idle");
+
+  useEffect(() => {
+    const body = buildSiteCtaJoinRequestBody(ctaContext);
+    if (!body) return;
+    const token = (localStorage.getItem("access_token") || "").trim();
+    if (!token) return;
+
+    let cancelled = false;
+    (async () => {
+      setCtaJoinPhase("loading");
+      try {
+        const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.status === 401) {
+          setCtaJoinPhase("idle");
+          return;
+        }
+        if (res.ok) {
+          setCtaJoinPhase("done");
+          const siteId = data.site_public_id;
+          const outcome =
+            data.status === "already_joined" ? "already_joined" : "joined";
+          const path = buildPostJoinDashboardPath(siteId, outcome, data.site_display_label);
+          window.location.href = `${window.location.origin}${path}`;
+          return;
+        }
+        setCtaJoinPhase("error");
+        setMessage(formatRegistrationErrors(data));
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Site CTA join error:", err);
+          setCtaJoinPhase("error");
+          setMessage("Ошибка сети или сервера. Попробуйте позже.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ctaContext.site_public_id, ctaContext.ref]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,11 +91,17 @@ function Registration() {
 
     const payload = { email, password };
     if (username.trim()) payload.username = username.trim();
+    if (ctaContext.site_public_id) payload.site_public_id = ctaContext.site_public_id;
+    if (ctaContext.ref) {
+      payload.ref = ctaContext.ref;
+      payload.ref_code = ctaContext.ref;
+    }
 
     try {
       const res = await fetch(REGISTER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
 
@@ -53,20 +115,41 @@ function Registration() {
             localStorage.setItem("user", JSON.stringify(data.user));
           }
         }
-        const redirectUrl = data.redirect_url || DEFAULT_REDIRECT;
-        window.location.href = redirectUrl.startsWith("http")
+        let redirectUrl = data.redirect_url || DEFAULT_REDIRECT;
+        const cj = data.cta_join;
+        const siteFromResponse = cj && cj.site_public_id;
+        const siteForJoin = siteFromResponse || ctaContext.site_public_id;
+        if (siteForJoin) {
+          const outcome =
+            cj && cj.status === "already_joined"
+              ? "already_joined"
+              : "joined";
+          const path = buildPostJoinDashboardPath(
+            siteForJoin,
+            outcome,
+            cj && cj.site_display_label
+          );
+          redirectUrl = path;
+        }
+        const target = redirectUrl.startsWith("http")
           ? redirectUrl
           : `${window.location.origin}${redirectUrl.startsWith("/") ? redirectUrl : "/" + redirectUrl}`;
+        window.location.href = target;
         return;
       }
 
-      if (res.status === 400) {
-        setMessage(formatErrors(data));
+      if (res.status === 400 || res.status === 403) {
+        setMessage(formatRegistrationErrors(data));
         setLoading(false);
         return;
       }
 
-      setMessage(data.detail || "Не удалось зарегистрироваться");
+      const fallback = formatRegistrationErrors(data);
+      setMessage(
+        fallback !== "Ошибка регистрации"
+          ? fallback
+          : "Не удалось зарегистрироваться"
+      );
     } catch (err) {
       console.error("Registration error:", err);
       setMessage("Ошибка сети или сервера. Попробуйте позже.");
@@ -92,9 +175,29 @@ function Registration() {
 
         <div className="circle"></div>
         <h1>Регистрация</h1>
-        <h2>Создайте аккаунт</h2>
+        <h2>
+          {ctaJoinPhase === "loading" || ctaJoinPhase === "done"
+            ? "Присоединение к программе"
+            : "Создайте аккаунт"}
+        </h2>
 
-        <form onSubmit={handleSubmit}>
+        {(ctaJoinPhase === "loading" || ctaJoinPhase === "done") && (
+          <p className="registration-cta-hint" style={{ textAlign: "center" }}>
+            {ctaJoinPhase === "loading"
+              ? "Проверяем вход и подключаем к площадке…"
+              : null}
+          </p>
+        )}
+
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            display:
+              ctaJoinPhase === "loading" || ctaJoinPhase === "done"
+                ? "none"
+                : undefined,
+          }}
+        >
           <div className="form-group">
             <input
               type="text"

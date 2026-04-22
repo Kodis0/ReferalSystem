@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from django.utils import timezone
 
-from .models import ReferralLeadEvent, Site
+from .models import ReferralLeadEvent, Site, SiteMembership
 from .public_ingest_audit import build_ingest_quality_window
 from .services import (
     mask_email_for_partner_dashboard,
@@ -45,6 +45,19 @@ def widget_runtime_flags_from_config(cfg: dict[str, Any]) -> dict[str, Any]:
     if isinstance(cur, str) and cur.strip():
         out["currency"] = cur.strip()[:16]
     return out
+
+
+def _member_identity_masked(user) -> Optional[str]:
+    """Single redacted label for a member row (email preferred, else username hint)."""
+    em = mask_email_for_partner_dashboard(getattr(user, "email", None) or "")
+    if em:
+        return em
+    un = (getattr(user, "username", None) or "").strip()
+    if not un:
+        return None
+    if len(un) <= 2:
+        return "***"
+    return f"{un[0]}***"
 
 
 def mask_phone_for_owner_preview(raw: str) -> Optional[str]:
@@ -206,6 +219,30 @@ def list_recent_site_leads_for_owner(site: Site, *, limit: int = 50) -> list[Ref
     )
 
 
+def build_site_membership_owner_summary(
+    site: Site, *, recent_limit: int = 5
+) -> dict[str, Any]:
+    """
+    Owner-visible membership stats for one Site (explicit site in caller — no implicit newest).
+    """
+    lim = max(0, min(int(recent_limit), 20))
+    qs = SiteMembership.objects.filter(site=site).select_related("user")
+    count = qs.count()
+    recent_qs = qs.order_by("-created_at")[:lim] if lim else []
+    recent_joins: list[dict[str, Any]] = []
+    for m in recent_qs:
+        recent_joins.append(
+            {
+                "joined_at": m.created_at.isoformat(),
+                "identity_masked": _member_identity_masked(m.user),
+            }
+        )
+    return {
+        "count": count,
+        "recent_joins": recent_joins,
+    }
+
+
 def serialize_owner_lead_row(ev: ReferralLeadEvent) -> dict[str, Any]:
     stage = _stage_ui(ev.submission_stage)
     oc = _outcome_ui(ev.client_observed_outcome)
@@ -263,6 +300,9 @@ def build_site_owner_diagnostics_payload(*, site: Site, recent_limit: int = 50) 
 
     return {
         "site_public_id": str(site.public_id),
+        "site_status": site.status,
+        "verified_at": site.verified_at.isoformat() if site.verified_at else None,
+        "activated_at": site.activated_at.isoformat() if site.activated_at else None,
         "integration_status": integration_status,
         "integration_warnings": warnings,
         "embed_readiness": build_embed_readiness(site),
@@ -282,4 +322,5 @@ def build_site_owner_diagnostics_payload(*, site: Site, recent_limit: int = 50) 
             "7d": ingest_7d,
         },
         "recent_leads": [serialize_owner_lead_row(ev) for ev in recent],
+        "site_membership": build_site_membership_owner_summary(site, recent_limit=5),
     }

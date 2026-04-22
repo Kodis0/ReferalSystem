@@ -46,12 +46,53 @@ function warningDescription(code) {
   return map[code] || code;
 }
 
+function lifecycleLabel(status) {
+  const map = {
+    draft: "Черновик",
+    verified: "Проверен",
+    active: "Активен",
+  };
+  return map[status] || status || "—";
+}
+
+function readSelectedSiteFromUrl() {
+  try {
+    return new URL(window.location.href).searchParams.get("site_public_id") || "";
+  } catch {
+    return "";
+  }
+}
+
+function withSelectedSite(url, sitePublicId) {
+  if (!sitePublicId) return url;
+  const u = new URL(url, window.location.origin);
+  u.searchParams.set("site_public_id", sitePublicId);
+  return u.toString();
+}
+
+function syncSelectedSiteInUrl(sitePublicId) {
+  try {
+    const u = new URL(window.location.href);
+    if (sitePublicId) {
+      u.searchParams.set("site_public_id", sitePublicId);
+    } else {
+      u.searchParams.delete("site_public_id");
+    }
+    window.history.replaceState({}, "", u.toString());
+  } catch {}
+}
+
 function WidgetInstallScreen() {
   const [loading, setLoading] = useState(true);
   const [siteMissing, setSiteMissing] = useState(false);
+  const [siteSelectionRequired, setSiteSelectionRequired] = useState(false);
+  const [siteOptions, setSiteOptions] = useState([]);
+  const [selectedSitePublicId, setSelectedSitePublicId] = useState(() => readSelectedSiteFromUrl());
   const [createSiteLoading, setCreateSiteLoading] = useState(false);
   const [createSiteError, setCreateSiteError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [activateLoading, setActivateLoading] = useState(false);
   const [error, setError] = useState("");
   const [saveHint, setSaveHint] = useState("");
   const [copyHint, setCopyHint] = useState("");
@@ -63,32 +104,35 @@ function WidgetInstallScreen() {
   const [platformPreset, setPlatformPreset] = useState("tilda");
   const [widgetEnabled, setWidgetEnabled] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (sitePublicIdOverride) => {
+    const effectiveSitePublicId = sitePublicIdOverride ?? selectedSitePublicId;
     setLoading(true);
     setSiteMissing(false);
+    setSiteSelectionRequired(false);
     setCreateSiteError("");
     setError("");
     setSaveHint("");
     setCopyHint("");
     setDiagError("");
     try {
-      const [resInt, resDiag] = await Promise.all([
-        fetch(API_ENDPOINTS.siteIntegration, {
-          method: "GET",
-          headers: authHeaders(),
-          credentials: "include",
-        }),
-        fetch(API_ENDPOINTS.siteIntegrationDiagnostics, {
-          method: "GET",
-          headers: authHeaders(),
-          credentials: "include",
-        }),
-      ]);
+      const resInt = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, effectiveSitePublicId), {
+        method: "GET",
+        headers: authHeaders(),
+        credentials: "include",
+      });
       const intPayload = await resInt.json().catch(() => ({}));
       if (resInt.status === 404 && intPayload.detail === "site_missing") {
         setData(null);
         setDiag(null);
+        setSiteOptions([]);
         setSiteMissing(true);
+        return;
+      }
+      if (resInt.status === 409 && intPayload.detail === "site_selection_required") {
+        setData(null);
+        setDiag(null);
+        setSiteOptions(Array.isArray(intPayload.sites) ? intPayload.sites : []);
+        setSiteSelectionRequired(true);
         return;
       }
       if (!resInt.ok) {
@@ -105,7 +149,18 @@ function WidgetInstallScreen() {
       setConfigText(prettyJson(intPayload.config_json));
       setPlatformPreset(intPayload.platform_preset || "tilda");
       setWidgetEnabled(Boolean(intPayload.widget_enabled));
-
+      if (intPayload.public_id) {
+        setSelectedSitePublicId(intPayload.public_id);
+        syncSelectedSiteInUrl(intPayload.public_id);
+      }
+      const resDiag = await fetch(
+        withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, intPayload.public_id || effectiveSitePublicId),
+        {
+          method: "GET",
+          headers: authHeaders(),
+          credentials: "include",
+        }
+      );
       if (resDiag.ok) {
         const d = await resDiag.json().catch(() => null);
         setDiag(d);
@@ -121,7 +176,7 @@ function WidgetInstallScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedSitePublicId]);
 
   useEffect(() => {
     load();
@@ -145,7 +200,11 @@ function WidgetInstallScreen() {
         setCreateSiteError(detailMsg || `Не удалось создать сайт (${res.status})`);
         return;
       }
-      await load();
+      if (payload.public_id) {
+        setSelectedSitePublicId(payload.public_id);
+        syncSelectedSiteInUrl(payload.public_id);
+      }
+      await load(payload.public_id || "");
     } catch (e) {
       console.error(e);
       setCreateSiteError("Сетевая ошибка, попробуйте позже");
@@ -193,11 +252,12 @@ function WidgetInstallScreen() {
       return;
     }
     try {
-      const res = await fetch(API_ENDPOINTS.siteIntegration, {
+      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, selectedSitePublicId), {
         method: "PATCH",
         headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({
+          site_public_id: selectedSitePublicId || undefined,
           allowed_origins,
           config_json,
           platform_preset: platformPreset,
@@ -212,7 +272,7 @@ function WidgetInstallScreen() {
       setData(payload);
       setSaveHint("Сохранено");
       setTimeout(() => setSaveHint(""), 2500);
-      const resDiag = await fetch(API_ENDPOINTS.siteIntegrationDiagnostics, {
+      const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId), {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
@@ -226,6 +286,62 @@ function WidgetInstallScreen() {
       setSaveHint("Сетевая ошибка при сохранении");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onPickSite = async (sitePublicId) => {
+    setSelectedSitePublicId(sitePublicId);
+    syncSelectedSiteInUrl(sitePublicId);
+    await load(sitePublicId);
+  };
+
+  const onVerify = async () => {
+    setVerifyLoading(true);
+    setSaveHint("");
+    try {
+      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationVerify, selectedSitePublicId), {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ site_public_id: selectedSitePublicId || undefined }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveHint(payload.detail ? String(payload.detail) : `Проверка: ${res.status}`);
+        return;
+      }
+      setData(payload);
+      await load();
+    } catch (e) {
+      console.error(e);
+      setSaveHint("Сетевая ошибка при проверке");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const onActivate = async () => {
+    setActivateLoading(true);
+    setSaveHint("");
+    try {
+      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationActivate, selectedSitePublicId), {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ site_public_id: selectedSitePublicId || undefined }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveHint(payload.detail ? String(payload.detail) : `Активация: ${res.status}`);
+        return;
+      }
+      setData(payload);
+      await load();
+    } catch (e) {
+      console.error(e);
+      setSaveHint("Сетевая ошибка при активации");
+    } finally {
+      setActivateLoading(false);
     }
   };
 
@@ -276,6 +392,35 @@ function WidgetInstallScreen() {
     );
   }
 
+  if (siteSelectionRequired) {
+    return (
+      <div className="lk-dashboard lk-partner">
+        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
+        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <p className="lk-partner__muted" style={{ maxWidth: 640 }}>
+          Для этого аккаунта найдено несколько сайтов. Выберите нужный `Site`, чтобы открыть его
+          настройки и lifecycle.
+        </p>
+        <div className="lk-widget-install__card" style={{ marginTop: 16 }}>
+          <h2 className="lk-partner__section-title">Выберите сайт</h2>
+          <div className="lk-widget-install__warn-list">
+            {siteOptions.map((site) => (
+              <button
+                key={site.public_id}
+                type="button"
+                className="lk-widget-install__btn lk-widget-install__btn_secondary"
+                style={{ marginRight: 8, marginBottom: 8 }}
+                onClick={() => onPickSite(site.public_id)}
+              >
+                {site.public_id} · {lifecycleLabel(site.status)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="lk-dashboard lk-partner">
@@ -318,6 +463,27 @@ function WidgetInstallScreen() {
                 {diag.site_public_id}
               </span>
             </p>
+            <p className="lk-partner__muted" style={{ marginTop: 8 }}>
+              Lifecycle: <strong>{lifecycleLabel(diag.site_status || data?.status)}</strong>
+            </p>
+            <div className="lk-partner__link-row" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="lk-widget-install__btn"
+                disabled={verifyLoading}
+                onClick={onVerify}
+              >
+                {verifyLoading ? "Проверка…" : "Подтвердить проверку"}
+              </button>
+              <button
+                type="button"
+                className="lk-widget-install__btn lk-widget-install__btn_secondary"
+                disabled={activateLoading}
+                onClick={onActivate}
+              >
+                {activateLoading ? "Активация…" : "Активировать сайт"}
+              </button>
+            </div>
             <ul className="lk-widget-install__warn-list">
               {(diag.integration_warnings || []).map((w) => (
                 <li key={w}>{warningDescription(w)}</li>
@@ -350,6 +516,31 @@ function WidgetInstallScreen() {
                 </span>
               </div>
             </div>
+          </section>
+
+          <section className="lk-widget-install__card">
+            <h2 className="lk-partner__section-title">Участники по CTA</h2>
+            <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
+              Аккаунты, присоединившиеся к этому сайту через виджет (регистрация или вход).
+            </p>
+            <p className="lk-widget-install__status-line" style={{ marginTop: 0 }}>
+              <span className="lk-widget-install__readiness-k">Всего</span>{" "}
+              <strong>{diag.site_membership?.count ?? "—"}</strong>
+            </p>
+            {(diag.site_membership?.recent_joins || []).length ? (
+              <ul className="lk-widget-install__kv" style={{ marginTop: 8 }}>
+                {diag.site_membership.recent_joins.map((row, i) => (
+                  <li key={`${row.joined_at ?? ""}-${i}`}>
+                    {(row.joined_at || "").replace("T", " ").slice(0, 19) || "—"} ·{" "}
+                    {row.identity_masked || "—"}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="lk-partner__muted" style={{ marginTop: 8 }}>
+                Пока нет присоединений через CTA для выбранного сайта.
+              </p>
+            )}
           </section>
 
           <section className="lk-widget-install__card">
@@ -550,6 +741,8 @@ function WidgetInstallScreen() {
       <div className="lk-widget-install__grid" style={{ marginTop: 20 }}>
         <section>
           <h2 className="lk-partner__section-title">Идентификаторы</h2>
+          <div className="lk-widget-install__field-label">status</div>
+          <div className="lk-widget-install__mono">{data.status}</div>
           <div className="lk-widget-install__field-label">public_id</div>
           <div className="lk-widget-install__mono">{data.public_id}</div>
           <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>

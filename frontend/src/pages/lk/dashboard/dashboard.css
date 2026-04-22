@@ -2,6 +2,51 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
+.lk-dashboard__post-join {
+  margin: 0 0 24px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(13, 148, 136, 0.25);
+}
+
+.lk-dashboard__post-join-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.lk-dashboard__post-join-site {
+  margin: 0 0 10px;
+  font-size: 15px;
+  opacity: 0.95;
+  font-weight: 500;
+}
+
+.lk-dashboard__post-join-next {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  opacity: 0.92;
+}
+
+.lk-dashboard__post-join-dismiss {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lk-dashboard__post-join-dismiss:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
 .lk-dashboard__title {
   margin: 0 0 10px;
   font-size: 28px;
@@ -13,4 +58,69 @@
   color: rgba(255, 255, 255, 0.75);
   font-size: 16px;
   line-height: 1.5;
+}
+
+.lk-dashboard__programs {
+  margin-top: 32px;
+  max-width: 560px;
+}
+
+.lk-dashboard__programs-title {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.lk-dashboard__programs-muted {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.lk-dashboard__programs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lk-dashboard__programs-item {
+  margin: 0 0 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lk-dashboard__programs-item:last-child {
+  margin-bottom: 0;
+}
+
+.lk-dashboard__programs-item-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin-bottom: 6px;
+}
+
+.lk-dashboard__programs-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  word-break: break-word;
+}
+
+.lk-dashboard__programs-status {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: lowercase;
+  color: rgba(20, 184, 166, 0.95);
+  letter-spacing: 0.02em;
+}
+
+.lk-dashboard__programs-joined {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
 }
