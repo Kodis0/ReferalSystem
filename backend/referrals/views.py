@@ -90,6 +90,12 @@ def _owner_site_options(user):
 
 
 def _owner_site_option_payload(site: Site) -> dict:
+    origins = site.allowed_origins or []
+    primary_origin = ""
+    if isinstance(origins, list) and origins:
+        first = origins[0]
+        if isinstance(first, str):
+            primary_origin = first.strip()
     return {
         "public_id": str(site.public_id),
         "status": site.status,
@@ -97,6 +103,7 @@ def _owner_site_option_payload(site: Site) -> dict:
         "updated_at": site.updated_at.isoformat(),
         "widget_enabled": bool(site.widget_enabled),
         "allowed_origins_count": len(site.allowed_origins or []),
+        "primary_origin": primary_origin,
     }
 
 

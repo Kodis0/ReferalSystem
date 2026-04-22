@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, Link, useNavigate, Navigate, Outlet } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, UserRound } from "lucide-react";
 import LumoLogo from "../../static/images/LUMO2.svg";
@@ -15,6 +15,11 @@ import BugPage from "./bug/bug";
 import IdeaPage from "./idea/idea";
 import PartnerDashboard from "./partner/partner";
 import WidgetInstallScreen from "./widget-install/widget-install";
+import ProjectWidgetInstallScreen from "./widget-install/ProjectWidgetInstallScreen";
+import OwnerSitesListPage from "./owner-programs/OwnerSitesListPage";
+import SiteProjectLayout from "./owner-programs/SiteProjectLayout";
+import ProjectOverviewPage from "./owner-programs/ProjectOverviewPage";
+import ProjectPlaceholderPage from "./owner-programs/ProjectPlaceholderPage";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import "./lk.css";
@@ -418,7 +423,23 @@ function LK() {
             <Route path="news" element={<NewsPage />} />
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />
-            <Route path="partner" element={<PartnerDashboard />} />
+            <Route path="partner" element={<Outlet />}>
+              <Route index element={<OwnerSitesListPage />} />
+              <Route path=":sitePublicId" element={<SiteProjectLayout />}>
+                <Route index element={<Navigate to="overview" replace relative="path" />} />
+                <Route path="overview" element={<ProjectOverviewPage />} />
+                <Route path="widget" element={<ProjectWidgetInstallScreen />} />
+                <Route
+                  path="members"
+                  element={<ProjectPlaceholderPage title="Участники" body="Список участников и управление доступом появятся здесь позже." />}
+                />
+                <Route
+                  path="settings"
+                  element={<ProjectPlaceholderPage title="Настройки" body="Расширенные настройки проекта появятся здесь позже." />}
+                />
+              </Route>
+            </Route>
+            <Route path="referral-program" element={<PartnerDashboard />} />
             <Route path="widget-install" element={<WidgetInstallScreen />} />
           </Routes>
         </div>

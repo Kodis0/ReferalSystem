@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_ENDPOINTS } from "../../../config/api";
+import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./widget-install.css";
@@ -82,7 +83,14 @@ function syncSelectedSiteInUrl(sitePublicId) {
   } catch {}
 }
 
-function WidgetInstallScreen() {
+/**
+ * @param {{ routeSitePublicId?: string }} [props]
+ * When set (UUID), loads integration for that Site — used from `/lk/partner/:sitePublicId/widget`.
+ */
+function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } = {}) {
+  const routeSitePublicIdRaw = (routeSitePublicIdProp || "").trim();
+  const routeSitePublicId = isUuidString(routeSitePublicIdRaw) ? routeSitePublicIdRaw : "";
+
   const [loading, setLoading] = useState(true);
   const [siteMissing, setSiteMissing] = useState(false);
   const [siteSelectionRequired, setSiteSelectionRequired] = useState(false);
@@ -105,7 +113,8 @@ function WidgetInstallScreen() {
   const [widgetEnabled, setWidgetEnabled] = useState(true);
 
   const load = useCallback(async (sitePublicIdOverride) => {
-    const effectiveSitePublicId = sitePublicIdOverride ?? selectedSitePublicId;
+    const effectiveSitePublicId =
+      sitePublicIdOverride ?? (routeSitePublicId || selectedSitePublicId);
     setLoading(true);
     setSiteMissing(false);
     setSiteSelectionRequired(false);
@@ -176,7 +185,13 @@ function WidgetInstallScreen() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSitePublicId]);
+  }, [selectedSitePublicId, routeSitePublicId]);
+
+  useEffect(() => {
+    if (routeSitePublicId) {
+      setSelectedSitePublicId(routeSitePublicId);
+    }
+  }, [routeSitePublicId]);
 
   useEffect(() => {
     load();
@@ -365,6 +380,23 @@ function WidgetInstallScreen() {
   }
 
   if (siteMissing) {
+    if (routeSitePublicId) {
+      return (
+        <div className="lk-dashboard lk-partner">
+          <h1 className="lk-dashboard__title">Виджет на сайт</h1>
+          <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+          <p className="lk-partner__muted" style={{ maxWidth: 560 }}>
+            Проект с этим идентификатором не найден или недоступен для текущего аккаунта. Вернитесь к
+            списку программ и выберите проект снова.
+          </p>
+          <div className="lk-partner__link-row" style={{ marginTop: 16 }}>
+            <a className="lk-widget-install__btn" href="/lk/partner">
+              К списку программ
+            </a>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">Виджет на сайт</h1>
@@ -388,6 +420,24 @@ function WidgetInstallScreen() {
             {createSiteError}
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  if (siteSelectionRequired && routeSitePublicId) {
+    return (
+      <div className="lk-dashboard lk-partner">
+        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
+        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <div className="lk-partner__error" style={{ maxWidth: 640 }}>
+          Не удалось открыть виджет для выбранного проекта. Вернитесь к списку программ и выберите
+          сайт заново.
+        </div>
+        <div className="lk-partner__link-row" style={{ marginTop: 16 }}>
+          <a className="lk-widget-install__btn" href="/lk/partner">
+            К списку программ
+          </a>
+        </div>
       </div>
     );
   }

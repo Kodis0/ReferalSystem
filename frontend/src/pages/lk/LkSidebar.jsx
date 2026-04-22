@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Code2, LayoutDashboard, Link2, ListChecks } from "lucide-react";
+import { Code2, LayoutDashboard, Link2, ListChecks, Share2 } from "lucide-react";
 import "./LkSidebar.css";
 
 function itemClass(active) {
@@ -26,14 +26,17 @@ export default function LkSidebar() {
             </span>
             <span className="lk-sidebar__text">Панель</span>
           </Link>
-          <NavLink
-            to="/lk/partner"
-            className={({ isActive }) => itemClass(isActive)}
-          >
+          <NavLink to="/lk/partner" className={({ isActive }) => itemClass(isActive)}>
             <span className="lk-sidebar__icon" aria-hidden="true">
               <Link2 size={18} />
             </span>
             <span className="lk-sidebar__text">Партнёрские программы</span>
+          </NavLink>
+          <NavLink to="/lk/referral-program" className={({ isActive }) => itemClass(isActive)}>
+            <span className="lk-sidebar__icon" aria-hidden="true">
+              <Share2 size={18} />
+            </span>
+            <span className="lk-sidebar__text">Реферальная программа</span>
           </NavLink>
           <Link
             to="/lk/dashboard#my-programs"
