@@ -4,7 +4,6 @@ import { API_ENDPOINTS } from "../../../config/api";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
-import { formatDomainLine, formatSiteCardTitle, siteLifecycleLabelRu } from "./siteDisplay";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -45,13 +44,6 @@ function warningDescription(code) {
     no_outcome_reported_last_24h: "За сутки есть попытки отправки, но итог не зафиксирован.",
   };
   return map[code] || code;
-}
-
-function formatPartnerDomainLine(allowedOrigins) {
-  if (!Array.isArray(allowedOrigins) || allowedOrigins.length === 0) {
-    return "Домен пока не указан";
-  }
-  return formatDomainLine(null, allowedOrigins);
 }
 
 export default function ProjectOverviewPage() {
@@ -106,12 +98,7 @@ export default function ProjectOverviewPage() {
     load();
   }, [load]);
 
-  const origins = Array.isArray(integration?.allowed_origins) ? integration.allowed_origins : [];
-  const cfg = integration?.config_json && typeof integration.config_json === "object" ? integration.config_json : {};
-  const projectTitle = formatSiteCardTitle(integration?.public_id, origins[0], cfg.display_name);
-  const domainLine = formatPartnerDomainLine(origins);
   const w7 = diag?.windows?.["7d"];
-  const lifecycleRu = siteLifecycleLabelRu(integration?.status);
   const connectionRu = diag?.integration_status ? integrationStatusLabel(diag.integration_status) : null;
   const attention =
     diag?.integration_status === "needs_attention" || diag?.integration_status === "incomplete";
@@ -119,24 +106,24 @@ export default function ProjectOverviewPage() {
   const base = `/lk/partner/${sitePublicId}`;
 
   return (
-    <div className="lk-dashboard lk-partner owner-programs__shell">
+    <div className="owner-programs__page">
       {loading && <p className="lk-partner__muted">Загрузка…</p>}
       {!loading && error && <div className="owner-programs__error">{error}</div>}
       {!loading && !error && integration && (
         <>
           <header className="owner-programs__overview-head">
-            <h2 className="owner-programs__overview-title">{projectTitle}</h2>
-            <p className="owner-programs__overview-domain">
-              <span className="owner-programs__overview-kicker">Сайт</span>
-              {domainLine}
+            <h2 className="owner-programs__overview-title">Обзор</h2>
+            <p className="owner-programs__muted" style={{ margin: "6px 0 0", maxWidth: 560 }}>
+              Участники, лиды и состояние виджета. Название, домен и статус публикации — в шапке проекта.
             </p>
-            <div className="owner-programs__overview-pills" aria-label="Статусы">
-              <span className="owner-programs__pill">{lifecycleRu}</span>
-              {connectionRu ? <span className="owner-programs__pill">{connectionRu}</span> : null}
-            </div>
+            {connectionRu ? (
+              <div className="owner-programs__overview-pills" style={{ marginTop: 12 }} aria-label="Состояние виджета">
+                <span className="owner-programs__pill">Виджет: {connectionRu}</span>
+              </div>
+            ) : null}
             {attention ? (
               <p className="owner-programs__overview-hint">
-                Рекомендуем открыть настройку виджета и при необходимости раздел «Техническая диагностика» ниже.
+                Откройте вкладку «Виджет»; при необходимости раскройте «Техническая диагностика» на этой странице.
               </p>
             ) : null}
           </header>
@@ -146,7 +133,7 @@ export default function ProjectOverviewPage() {
               <div className="lk-partner__stat-label">Участники</div>
               <div className="lk-partner__stat-value">{diag?.site_membership?.count ?? "—"}</div>
               <Link to={`${base}/members`} className="owner-programs__stat-cta">
-                Участники и доступ
+                Список участников
               </Link>
             </div>
             <div className="lk-partner__stat">
@@ -172,7 +159,7 @@ export default function ProjectOverviewPage() {
 
           <div className="owner-programs__actions">
             <Link to={`${base}/widget`} className="owner-programs__btn" style={{ textDecoration: "none" }}>
-              Настроить виджет
+              Настройки виджета
             </Link>
             <Link to={`${base}/widget`} className="owner-programs__btn_secondary" style={{ textDecoration: "none" }}>
               Проверить подключение

@@ -10,6 +10,7 @@ from .views import (
     SiteOwnerIntegrationDiagnosticsView,
     SiteOwnerIntegrationView,
     SiteOwnerIntegrationVerifyView,
+    SiteOwnerSiteMembersListView,
 )
 
 urlpatterns = [
@@ -35,6 +36,11 @@ urlpatterns = [
         "site/integration/diagnostics/",
         SiteOwnerIntegrationDiagnosticsView.as_view(),
         name="site-owner-integration-diagnostics",
+    ),
+    path(
+        "site/integration/members/",
+        SiteOwnerSiteMembersListView.as_view(),
+        name="site-owner-site-members",
     ),
     path(
         "site/integration/verify/",

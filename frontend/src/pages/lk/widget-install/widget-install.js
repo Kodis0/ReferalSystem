@@ -90,6 +90,11 @@ function syncSelectedSiteInUrl(sitePublicId) {
 function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } = {}) {
   const routeSitePublicIdRaw = (routeSitePublicIdProp || "").trim();
   const routeSitePublicId = isUuidString(routeSitePublicIdRaw) ? routeSitePublicIdRaw : "";
+  const inProjectShell = Boolean(routeSitePublicId);
+  const shellTitle = inProjectShell ? "Виджет" : "Виджет на сайт";
+  const shellSubtitle = inProjectShell
+    ? "Код установки, ключи и диагностика подключения"
+    : "Код установки и параметры интеграции";
 
   const [loading, setLoading] = useState(true);
   const [siteMissing, setSiteMissing] = useState(false);
@@ -372,8 +377,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   if (loading) {
     return (
       <div className="lk-dashboard lk-partner">
-        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
-        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
         <p className="lk-partner__muted">Загрузка…</p>
       </div>
     );
@@ -383,15 +388,14 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     if (routeSitePublicId) {
       return (
         <div className="lk-dashboard lk-partner">
-          <h1 className="lk-dashboard__title">Виджет на сайт</h1>
-          <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+          <h1 className="lk-dashboard__title">{shellTitle}</h1>
+          <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
           <p className="lk-partner__muted" style={{ maxWidth: 560 }}>
-            Проект с этим идентификатором не найден или недоступен для текущего аккаунта. Вернитесь к
-            списку программ и выберите проект снова.
+            Проект не найден или недоступен для этого аккаунта. Вернитесь к списку проектов и откройте нужный.
           </p>
           <div className="lk-partner__link-row" style={{ marginTop: 16 }}>
             <a className="lk-widget-install__btn" href="/lk/partner">
-              К списку программ
+              К проектам
             </a>
           </div>
         </div>
@@ -399,8 +403,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     }
     return (
       <div className="lk-dashboard lk-partner">
-        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
-        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
         <p className="lk-partner__muted" style={{ maxWidth: 560 }}>
           Для вашего аккаунта ещё не подключён сайт для виджета. Создайте его здесь — после этого
           появятся ключи, сниппет и диагностика.
@@ -427,15 +431,14 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   if (siteSelectionRequired && routeSitePublicId) {
     return (
       <div className="lk-dashboard lk-partner">
-        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
-        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
         <div className="lk-partner__error" style={{ maxWidth: 640 }}>
-          Не удалось открыть виджет для выбранного проекта. Вернитесь к списку программ и выберите
-          сайт заново.
+          Не удалось открыть настройки виджета для этого проекта. Вернитесь к списку проектов и выберите проект снова.
         </div>
         <div className="lk-partner__link-row" style={{ marginTop: 16 }}>
           <a className="lk-widget-install__btn" href="/lk/partner">
-            К списку программ
+            К проектам
           </a>
         </div>
       </div>
@@ -445,14 +448,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   if (siteSelectionRequired) {
     return (
       <div className="lk-dashboard lk-partner">
-        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
-        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
         <p className="lk-partner__muted" style={{ maxWidth: 640 }}>
-          Для этого аккаунта найдено несколько сайтов. Выберите нужный `Site`, чтобы открыть его
-          настройки и lifecycle.
+          Для этого аккаунта несколько проектов. Выберите нужный, чтобы открыть настройки и статус публикации.
         </p>
         <div className="lk-widget-install__card" style={{ marginTop: 16 }}>
-          <h2 className="lk-partner__section-title">Выберите сайт</h2>
+          <h2 className="lk-partner__section-title">Выберите проект</h2>
           <div className="lk-widget-install__warn-list">
             {siteOptions.map((site) => (
               <button
@@ -474,8 +476,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   if (error) {
     return (
       <div className="lk-dashboard lk-partner">
-        <h1 className="lk-dashboard__title">Виджет на сайт</h1>
-        <p className="lk-dashboard__subtitle">Код установки и параметры интеграции</p>
+        <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
         <div className="lk-partner__error">
           {error === "network" ? "Сетевая ошибка, попробуйте позже" : error}
         </div>
@@ -492,11 +494,20 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
 
   return (
     <div className="lk-dashboard lk-partner lk-widget-install">
-      <h1 className="lk-dashboard__title">Виджет на сайт</h1>
+      <h1 className="lk-dashboard__title">{shellTitle}</h1>
       <p className="lk-dashboard__subtitle">
-        Публичные идентификаторы, allowlist origin для браузера и готовый фрагмент{" "}
-        <code className="lk-partner__muted">&lt;script&gt;</code>. Ниже — диагностика интеграции и
-        последние лиды (операционный обзор).
+        {inProjectShell ? (
+          <>
+            Ключ публикации, разрешённые домены, фрагмент <code className="lk-partner__muted">&lt;script&gt;</code> и
+            диагностика подключения.
+          </>
+        ) : (
+          <>
+            Публичные идентификаторы, allowlist origin для браузера и готовый фрагмент{" "}
+            <code className="lk-partner__muted">&lt;script&gt;</code>. Ниже — диагностика интеграции и
+            последние лиды (операционный обзор).
+          </>
+        )}
       </p>
 
       {diagError ? <div className="lk-widget-install__diag-soft">{diagError}</div> : null}
@@ -514,7 +525,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
               </span>
             </p>
             <p className="lk-partner__muted" style={{ marginTop: 8 }}>
-              Lifecycle: <strong>{lifecycleLabel(diag.site_status || data?.status)}</strong>
+              {inProjectShell ? "Статус публикации" : "Lifecycle"}:{" "}
+              <strong>{lifecycleLabel(diag.site_status || data?.status)}</strong>
             </p>
             <div className="lk-partner__link-row" style={{ marginTop: 12 }}>
               <button
@@ -531,7 +543,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
                 disabled={activateLoading}
                 onClick={onActivate}
               >
-                {activateLoading ? "Активация…" : "Активировать сайт"}
+                {activateLoading ? "Активация…" : inProjectShell ? "Активировать проект" : "Активировать сайт"}
               </button>
             </div>
             <ul className="lk-widget-install__warn-list">
@@ -571,7 +583,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
           <section className="lk-widget-install__card">
             <h2 className="lk-partner__section-title">Участники по CTA</h2>
             <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
-              Аккаунты, присоединившиеся к этому сайту через виджет (регистрация или вход).
+              {inProjectShell
+                ? "Аккаунты, присоединившиеся к проекту через виджет (регистрация или вход)."
+                : "Аккаунты, присоединившиеся к этому сайту через виджет (регистрация или вход)."}
             </p>
             <p className="lk-widget-install__status-line" style={{ marginTop: 0 }}>
               <span className="lk-widget-install__readiness-k">Всего</span>{" "}
@@ -588,7 +602,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
               </ul>
             ) : (
               <p className="lk-partner__muted" style={{ marginTop: 8 }}>
-                Пока нет присоединений через CTA для выбранного сайта.
+                {inProjectShell
+                  ? "Пока нет присоединений через CTA для этого проекта."
+                  : "Пока нет присоединений через CTA для выбранного сайта."}
               </p>
             )}
           </section>

@@ -243,6 +243,34 @@ def build_site_membership_owner_summary(
     }
 
 
+def build_site_membership_owner_list_payload(
+    site: Site, *, list_limit: int = 200
+) -> dict[str, Any]:
+    """
+    Full owner-visible membership list for one Site (newest first), compact + masked.
+    ``list_limit`` caps rows returned; ``count`` is always the full membership total.
+    """
+    lim = max(1, min(int(list_limit), 500))
+    base_qs = SiteMembership.objects.filter(site=site).select_related("user")
+    count = base_qs.count()
+    rows = list(base_qs.order_by("-created_at")[:lim])
+    members: list[dict[str, Any]] = []
+    for m in rows:
+        row: dict[str, Any] = {
+            "joined_at": m.created_at.isoformat(),
+            "identity_masked": _member_identity_masked(m.user),
+        }
+        rc = (m.ref_code or "").strip()
+        if rc:
+            row["ref_code"] = rc[:32]
+        members.append(row)
+    return {
+        "site_public_id": str(site.public_id),
+        "count": count,
+        "members": members,
+    }
+
+
 def serialize_owner_lead_row(ev: ReferralLeadEvent) -> dict[str, Any]:
     stage = _stage_ui(ev.submission_stage)
     oc = _outcome_ui(ev.client_observed_outcome)

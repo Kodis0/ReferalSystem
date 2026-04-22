@@ -25,7 +25,7 @@ export function formatSiteCardTitle(publicId, primaryOrigin, displayName) {
   }
   if (!publicId) return "Проект";
   const compact = String(publicId).replace(/-/g, "");
-  return `Площадка · ${compact.slice(0, 8)}…`;
+  return `Проект · ${compact.slice(0, 8)}…`;
 }
 
 export function formatDomainLine(primaryOrigin, allowedOrigins) {
@@ -33,7 +33,7 @@ export function formatDomainLine(primaryOrigin, allowedOrigins) {
     (typeof primaryOrigin === "string" && primaryOrigin.trim()) ||
     (Array.isArray(allowedOrigins) && typeof allowedOrigins[0] === "string" ? allowedOrigins[0] : "") ||
     "";
-  if (!raw) return "Домен не задан (allowed_origins пуст)";
+  if (!raw) return "Домен не задан";
   try {
     if (raw.includes("://")) {
       const u = new URL(raw);

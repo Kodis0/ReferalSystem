@@ -11,7 +11,11 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import PartnerProfile, Site
-from .owner_diagnostics import build_embed_readiness, build_site_owner_diagnostics_payload
+from .owner_diagnostics import (
+    build_embed_readiness,
+    build_site_membership_owner_list_payload,
+    build_site_owner_diagnostics_payload,
+)
 from .serializers import (
     ReferralCaptureSerializer,
     SiteOwnerCreateSerializer,
@@ -124,11 +128,14 @@ def _owner_site_selection_required_response(user):
 
 
 def _requested_site_public_id(request):
-    if request.method in ("PATCH", "POST"):
+    if request.method in ("PATCH", "POST", "DELETE"):
         body = request.data if isinstance(request.data, dict) else {}
         if "site_public_id" in body:
-            return body.get("site_public_id")
-    return request.query_params.get("site_public_id")
+            raw = body.get("site_public_id")
+            if raw is not None and str(raw).strip():
+                return raw
+    qp = request.query_params.get("site_public_id")
+    return qp if (qp or "").strip() else None
 
 
 def _resolve_owner_site(request):
@@ -235,10 +242,21 @@ class SiteOwnerIntegrationView(APIView):
             return Response(ser.data)
         if "allowed_origins" in data:
             site.allowed_origins = data["allowed_origins"]
+        elif "origin" in data and data.get("origin"):
+            site.allowed_origins = [data["origin"]]
         if "platform_preset" in data:
             site.platform_preset = data["platform_preset"]
+        cfg = dict(site.config_json) if isinstance(site.config_json, dict) else {}
         if "config_json" in data:
-            site.config_json = data["config_json"]
+            cfg = dict(data["config_json"] or {})
+        if "display_name" in data:
+            dn = (data.get("display_name") or "").strip()
+            if dn:
+                cfg["display_name"] = dn
+            else:
+                cfg.pop("display_name", None)
+        if "config_json" in data or "display_name" in data:
+            site.config_json = cfg
         if "widget_enabled" in data:
             site.widget_enabled = data["widget_enabled"]
         update_fields = ["allowed_origins", "platform_preset", "config_json", "widget_enabled", "updated_at"]
@@ -250,6 +268,22 @@ class SiteOwnerIntegrationView(APIView):
         site.save(update_fields=update_fields)
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data)
+
+    def delete(self, request):
+        """
+        Owner-only hard delete of the resolved Site (project). Requires explicit
+        ``site_public_id`` (query or JSON body) so multi-site owners never delete implicitly.
+        """
+        if not _requested_site_public_id(request):
+            return Response(
+                {"detail": "site_public_id_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        site.delete()
+        return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
 
 class SiteOwnerIntegrationDiagnosticsView(APIView):
@@ -266,6 +300,26 @@ class SiteOwnerIntegrationDiagnosticsView(APIView):
             return error
         payload = build_site_owner_diagnostics_payload(site=site, recent_limit=50)
         return Response(payload)
+
+
+class SiteOwnerSiteMembersListView(APIView):
+    """
+    Authenticated site owner: SiteMembership rows for exactly one Site.
+    ``site_public_id`` query param is required (project-scoped owner screens).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (request.query_params.get("site_public_id") or "").strip():
+            return Response(
+                {"detail": "site_public_id_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        return Response(build_site_membership_owner_list_payload(site=site, list_limit=200))
 
 
 class SiteOwnerIntegrationVerifyView(APIView):

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Navigate, NavLink, Outlet, useParams } from "react-router-dom";
+import { Link, Navigate, NavLink, Outlet, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -46,7 +46,7 @@ export default function SiteProjectLayout() {
       if (!res.ok) {
         setHeadTitle("Проект");
         if (res.status === 404) {
-          setHeadSub("Не найден или нет доступа");
+          setHeadSub("Проект не найден или нет доступа");
         } else {
           const d = payload.detail;
           const detailMsg =
@@ -80,6 +80,9 @@ export default function SiteProjectLayout() {
 
   return (
     <div className="lk-dashboard lk-partner owner-programs__shell">
+      <p className="owner-programs__shell-crumb">
+        <Link to="/lk/partner">Проекты</Link>
+      </p>
       <header className="owner-programs__shell-header">
         <h1 className="owner-programs__shell-title">{headLoading ? "Проект…" : headTitle}</h1>
         <p className="owner-programs__shell-sub">{headLoading ? <span className="lk-partner__muted">Загрузка…</span> : headSub}</p>

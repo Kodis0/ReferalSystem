@@ -996,6 +996,126 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(site.status, Site.Status.ACTIVE)
         self.assertIsNotNone(site.activated_at)
 
+    def test_patch_display_name_and_origin_scoped_by_site_public_id(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_settings_" + uuid.uuid4().hex,
+            allowed_origins=["https://old.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+            config_json={"display_name": "Old", "amount_selector": ".x"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={
+                "display_name": "New title",
+                "origin": "https://new.example",
+                "platform_preset": Site.PlatformPreset.GENERIC,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["allowed_origins"], ["https://new.example"])
+        self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.GENERIC)
+        self.assertEqual(r.data["config_json"].get("display_name"), "New title")
+        self.assertEqual(r.data["config_json"].get("amount_selector"), ".x")
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("display_name"), "New title")
+        self.assertEqual(site.config_json.get("amount_selector"), ".x")
+
+    def test_stranger_cannot_patch_other_owner_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_stranger_patch_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+        )
+        self.api.force_authenticate(self.stranger)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={"display_name": "Hacked"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data["detail"], "site_missing")
+        site.refresh_from_db()
+        self.assertNotIn("display_name", site.config_json)
+
+    def test_delete_requires_site_public_id(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_del_noid_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.delete("/referrals/site/integration/", format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["detail"], "site_public_id_required")
+
+    def test_owner_can_delete_site_and_cascades_related(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_del_own_" + uuid.uuid4().hex,
+            allowed_origins=["https://del.example"],
+        )
+        partner_user = User.objects.create_user(
+            username="member_for_del",
+            email="member-del@example.com",
+            password="secret12",
+        )
+        partner_profile, _ = ensure_partner_profile(partner_user)
+        SiteMembership.objects.create(site=site, user=partner_user, partner=partner_profile)
+        ReferralLeadEvent.objects.create(site=site, partner=partner_profile, customer_email="a@b.co")
+        PublicLeadIngestAudit.objects.create(
+            site=site,
+            public_code="ok",
+            http_status=200,
+        )
+        self.api.force_authenticate(self.owner)
+        sid = site.public_id
+        r = self.api.delete(
+            f"/referrals/site/integration/?site_public_id={sid}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "deleted")
+        self.assertFalse(Site.objects.filter(public_id=sid).exists())
+        self.assertEqual(SiteMembership.objects.filter(site_id=site.id).count(), 0)
+        self.assertEqual(ReferralLeadEvent.objects.filter(site_id=site.id).count(), 0)
+        self.assertEqual(PublicLeadIngestAudit.objects.filter(site_id=site.id).count(), 0)
+
+    def test_stranger_cannot_delete_other_owner_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_del_stranger_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.stranger)
+        r = self.api.delete(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertTrue(Site.objects.filter(id=site.id).exists())
+
+    def test_after_delete_site_missing_from_owner_integration_list(self):
+        a = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_list_a_" + uuid.uuid4().hex,
+            config_json={"display_name": "A"},
+        )
+        b = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_list_b_" + uuid.uuid4().hex,
+            config_json={"display_name": "B"},
+        )
+        self.api.force_authenticate(self.owner)
+        r_del = self.api.delete(
+            f"/referrals/site/integration/?site_public_id={a.public_id}",
+            format="json",
+        )
+        self.assertEqual(r_del.status_code, 200)
+        r_list = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r_list.status_code, 200)
+        self.assertEqual(r_list.data["public_id"], str(b.public_id))
+
 
 class SiteOwnerDiagnosticsApiTests(TestCase):
     def setUp(self):
@@ -1206,6 +1326,86 @@ class SiteOwnerDiagnosticsApiTests(TestCase):
         self.assertEqual(iq["rate_limited_count"], 1)
         self.assertEqual(iq["total_requests"], 2)
         self.assertEqual(iq["rejected_count"], 0)
+
+
+class SiteOwnerMembersListApiTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="mem_owner",
+            email="mem-owner@example.com",
+            password="secret12",
+        )
+        self.other_owner = User.objects.create_user(
+            username="mem_other_owner",
+            email="mem-other-owner@example.com",
+            password="secret12",
+        )
+        self.api = APIClient()
+
+    def test_members_requires_auth(self):
+        r = self.api.get("/referrals/site/integration/members/?site_public_id=00000000-0000-0000-0000-000000000001")
+        self.assertEqual(r.status_code, 401)
+
+    def test_members_requires_site_public_id(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/members/")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["detail"], "site_public_id_required")
+
+    def test_owner_sees_masked_members_newest_first_for_selected_site(self):
+        site_a = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_mem_a_" + uuid.uuid4().hex,
+        )
+        site_b = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_mem_b_" + uuid.uuid4().hex,
+        )
+        ua = User.objects.create_user(username="mem_a1", email="alice-mem@example.com", password="secret12")
+        ub = User.objects.create_user(username="mem_a2", email="bob-mem@example.com", password="secret12")
+        uc = User.objects.create_user(username="mem_b1", email="carol-mem@example.com", password="secret12")
+        m_old = SiteMembership.objects.create(site=site_a, user=ua, ref_code="")
+        m_new = SiteMembership.objects.create(
+            site=site_a,
+            user=ub,
+            ref_code="REF_SNAP",
+        )
+        SiteMembership.objects.filter(pk=m_old.pk).update(
+            created_at=timezone.now() - timedelta(days=2)
+        )
+        SiteMembership.objects.filter(pk=m_new.pk).update(created_at=timezone.now() - timedelta(hours=1))
+        SiteMembership.objects.create(site=site_b, user=uc)
+
+        self.api.force_authenticate(self.owner)
+        r = self.api.get(f"/referrals/site/integration/members/?site_public_id={site_a.public_id}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["site_public_id"], str(site_a.public_id))
+        self.assertEqual(r.data["count"], 2)
+        self.assertEqual(len(r.data["members"]), 2)
+        self.assertEqual(r.data["members"][0]["identity_masked"], "b***@example.com")
+        self.assertEqual(r.data["members"][0]["ref_code"], "REF_SNAP")
+        self.assertEqual(r.data["members"][1]["identity_masked"], "a***@example.com")
+
+        r_b = self.api.get(f"/referrals/site/integration/members/?site_public_id={site_b.public_id}")
+        self.assertEqual(r_b.status_code, 200)
+        self.assertEqual(r_b.data["count"], 1)
+        self.assertEqual(r_b.data["members"][0]["identity_masked"], "c***@example.com")
+
+    def test_other_owner_cannot_read_foreign_site_members(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_mem_foreign_" + uuid.uuid4().hex,
+        )
+        member = User.objects.create_user(
+            username="mem_foreign_m",
+            email="foreign-mem@example.com",
+            password="secret12",
+        )
+        SiteMembership.objects.create(site=site, user=member)
+        self.api.force_authenticate(self.other_owner)
+        r = self.api.get(f"/referrals/site/integration/members/?site_public_id={site.public_id}")
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data["detail"], "site_missing")
 
 
 class SiteCtaDisplayLabelTests(TestCase):

@@ -20,7 +20,8 @@ import OwnerSitesListPage from "./owner-programs/OwnerSitesListPage";
 import CreateOwnerProjectPage from "./owner-programs/CreateOwnerProjectPage";
 import SiteProjectLayout from "./owner-programs/SiteProjectLayout";
 import ProjectOverviewPage from "./owner-programs/ProjectOverviewPage";
-import ProjectPlaceholderPage from "./owner-programs/ProjectPlaceholderPage";
+import ProjectMembersPage from "./owner-programs/ProjectMembersPage";
+import ProjectSettingsPage from "./owner-programs/ProjectSettingsPage";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import "./lk.css";
@@ -431,14 +432,8 @@ function LK() {
                 <Route index element={<Navigate to="overview" replace relative="path" />} />
                 <Route path="overview" element={<ProjectOverviewPage />} />
                 <Route path="widget" element={<ProjectWidgetInstallScreen />} />
-                <Route
-                  path="members"
-                  element={<ProjectPlaceholderPage title="Участники" body="Список участников и управление доступом появятся здесь позже." />}
-                />
-                <Route
-                  path="settings"
-                  element={<ProjectPlaceholderPage title="Настройки" body="Расширенные настройки проекта появятся здесь позже." />}
-                />
+                <Route path="members" element={<ProjectMembersPage />} />
+                <Route path="settings" element={<ProjectSettingsPage />} />
               </Route>
             </Route>
             <Route path="referral-program" element={<PartnerDashboard />} />

@@ -403,7 +403,7 @@ describe("WidgetInstallScreen", () => {
     render(<WidgetInstallScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Выберите сайт/i)).toBeInTheDocument();
+      expect(screen.getByText(/Выберите проект/i)).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /site-one · Черновик/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /site-two · Активен/i })).toBeInTheDocument();

@@ -104,12 +104,19 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
         child=serializers.CharField(max_length=512),
         required=False,
     )
+    origin = serializers.CharField(max_length=512, trim_whitespace=True, required=False, allow_blank=True)
+    display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
     platform_preset = serializers.ChoiceField(
         choices=Site.PlatformPreset.choices,
         required=False,
     )
     config_json = serializers.JSONField(required=False)
     widget_enabled = serializers.BooleanField(required=False)
+
+    def validate_origin(self, value: str) -> str:
+        if not (value or "").strip():
+            return ""
+        return normalize_owner_site_origin(value)
 
 
 class SiteOwnerCreateSerializer(serializers.Serializer):
