@@ -26,6 +26,15 @@ export default function LkSidebar() {
             </span>
             <span className="lk-sidebar__text">Панель</span>
           </Link>
+          <NavLink
+            to="/lk/partner"
+            className={({ isActive }) => itemClass(isActive)}
+          >
+            <span className="lk-sidebar__icon" aria-hidden="true">
+              <Link2 size={18} />
+            </span>
+            <span className="lk-sidebar__text">Партнёрские программы</span>
+          </NavLink>
           <Link
             to="/lk/dashboard#my-programs"
             className={itemClass(programsActive)}
@@ -34,17 +43,8 @@ export default function LkSidebar() {
             <span className="lk-sidebar__icon" aria-hidden="true">
               <ListChecks size={18} />
             </span>
-            <span className="lk-sidebar__text">Мои программы</span>
+            <span className="lk-sidebar__text">Агентские программы</span>
           </Link>
-          <NavLink
-            to="/lk/partner"
-            className={({ isActive }) => itemClass(isActive)}
-          >
-            <span className="lk-sidebar__icon" aria-hidden="true">
-              <Link2 size={18} />
-            </span>
-            <span className="lk-sidebar__text">Партнёрка</span>
-          </NavLink>
           <NavLink
             to="/lk/widget-install"
             className={({ isActive }) => itemClass(isActive)}
