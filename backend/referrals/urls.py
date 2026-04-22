@@ -4,6 +4,7 @@ from .views import (
     PartnerDashboardView,
     PartnerOnboardView,
     ReferralCaptureView,
+    SiteOwnerCreateView,
     SiteOwnerIntegrationActivateView,
     SiteOwnerBootstrapView,
     SiteOwnerIntegrationDiagnosticsView,
@@ -19,6 +20,11 @@ urlpatterns = [
         "site/bootstrap/",
         SiteOwnerBootstrapView.as_view(),
         name="site-owner-bootstrap",
+    ),
+    path(
+        "site/create/",
+        SiteOwnerCreateView.as_view(),
+        name="site-owner-create",
     ),
     path(
         "site/integration/",

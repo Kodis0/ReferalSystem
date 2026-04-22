@@ -8,7 +8,10 @@ export function siteLifecycleLabelRu(status) {
   return map[status] || status || "—";
 }
 
-export function formatSiteCardTitle(publicId, primaryOrigin) {
+export function formatSiteCardTitle(publicId, primaryOrigin, displayName) {
+  if (typeof displayName === "string" && displayName.trim()) {
+    return displayName.trim();
+  }
   if (primaryOrigin) {
     try {
       if (String(primaryOrigin).includes("://")) {

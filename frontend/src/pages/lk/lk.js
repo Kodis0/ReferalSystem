@@ -17,6 +17,7 @@ import PartnerDashboard from "./partner/partner";
 import WidgetInstallScreen from "./widget-install/widget-install";
 import ProjectWidgetInstallScreen from "./widget-install/ProjectWidgetInstallScreen";
 import OwnerSitesListPage from "./owner-programs/OwnerSitesListPage";
+import CreateOwnerProjectPage from "./owner-programs/CreateOwnerProjectPage";
 import SiteProjectLayout from "./owner-programs/SiteProjectLayout";
 import ProjectOverviewPage from "./owner-programs/ProjectOverviewPage";
 import ProjectPlaceholderPage from "./owner-programs/ProjectPlaceholderPage";
@@ -425,6 +426,7 @@ function LK() {
             <Route path="idea" element={<IdeaPage />} />
             <Route path="partner" element={<Outlet />}>
               <Route index element={<OwnerSitesListPage />} />
+              <Route path="new" element={<CreateOwnerProjectPage />} />
               <Route path=":sitePublicId" element={<SiteProjectLayout />}>
                 <Route index element={<Navigate to="overview" replace relative="path" />} />
                 <Route path="overview" element={<ProjectOverviewPage />} />

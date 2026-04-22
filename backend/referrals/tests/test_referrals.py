@@ -752,6 +752,79 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(Site.objects.filter(owner=self.stranger).count(), 1)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
 
+    def test_site_create_requires_auth(self):
+        r = self.api.post(
+            "/referrals/site/create/",
+            data={"display_name": "A", "origin": "https://a.example"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 401)
+
+    @override_settings(
+        FRONTEND_URL="https://app.example.com",
+        PUBLIC_API_BASE="https://api.example.com",
+    )
+    def test_owner_can_create_second_site_via_create_endpoint(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_first_" + uuid.uuid4().hex,
+            allowed_origins=["https://first.example"],
+        )
+        self.api.force_authenticate(self.owner)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        r = self.api.post(
+            "/referrals/site/create/",
+            data={
+                "display_name": "Second shop",
+                "origin": "second.example",
+                "platform_preset": Site.PlatformPreset.TILDA,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 2)
+        newest = Site.objects.filter(owner=self.owner).order_by("-created_at", "-id").first()
+        self.assertEqual(r.data["public_id"], str(newest.public_id))
+        self.assertEqual(newest.allowed_origins, ["https://second.example"])
+        self.assertEqual(newest.config_json.get("display_name"), "Second shop")
+        self.assertEqual(newest.platform_preset, Site.PlatformPreset.TILDA)
+
+    def test_site_create_assigns_owner_to_authenticated_user_only(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_owner_only_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.stranger)
+        r = self.api.post(
+            "/referrals/site/create/",
+            data={"display_name": "Stranger project", "origin": "https://s.example"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        site = Site.objects.get(public_id=r.data["public_id"])
+        self.assertEqual(site.owner_id, self.stranger.id)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Site.objects.filter(owner=self.stranger).count(), 1)
+
+    def test_site_list_payload_includes_display_name_when_multiple_sites(self):
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_a_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={"display_name": "Alpha"},
+        )
+        Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_b_" + uuid.uuid4().hex,
+            allowed_origins=["https://b.example"],
+            config_json={"display_name": "Beta"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/")
+        self.assertEqual(r.status_code, 409)
+        names = {row["display_name"] for row in r.data["sites"]}
+        self.assertEqual(names, {"Alpha", "Beta"})
+
     @override_settings(
         FRONTEND_URL="https://app.example.com",
         PUBLIC_API_BASE="https://api.example.com",

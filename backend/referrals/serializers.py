@@ -1,7 +1,27 @@
+from urllib.parse import urlparse
+
 from django.conf import settings
 from rest_framework import serializers
 
 from .models import Site
+
+
+def normalize_owner_site_origin(value: str) -> str:
+    """Normalize partner input (host or URL) to a single browser Origin string."""
+    s = (value or "").strip()
+    if not s:
+        raise serializers.ValidationError("Укажите домен или origin.")
+    if "://" not in s:
+        s = "https://" + s.split("/")[0]
+    parsed = urlparse(s)
+    if parsed.scheme not in ("http", "https"):
+        raise serializers.ValidationError("Разрешены только адреса с http:// или https://.")
+    if not parsed.hostname:
+        raise serializers.ValidationError("Некорректный домен или origin.")
+    host = parsed.hostname.lower()
+    if parsed.port:
+        return f"{parsed.scheme}://{host}:{parsed.port}"
+    return f"{parsed.scheme}://{host}"
 
 
 class ReferralCaptureSerializer(serializers.Serializer):
@@ -90,3 +110,17 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     )
     config_json = serializers.JSONField(required=False)
     widget_enabled = serializers.BooleanField(required=False)
+
+
+class SiteOwnerCreateSerializer(serializers.Serializer):
+    """Explicit create of a new Site (multi-site); not idempotent like bootstrap."""
+
+    display_name = serializers.CharField(max_length=200, trim_whitespace=True)
+    origin = serializers.CharField(max_length=512, trim_whitespace=True)
+    platform_preset = serializers.ChoiceField(
+        choices=Site.PlatformPreset.choices,
+        default=Site.PlatformPreset.TILDA,
+    )
+
+    def validate_origin(self, value: str) -> str:
+        return normalize_owner_site_origin(value)

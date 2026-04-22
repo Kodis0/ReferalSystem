@@ -14,6 +14,7 @@ from .models import PartnerProfile, Site
 from .owner_diagnostics import build_embed_readiness, build_site_owner_diagnostics_payload
 from .serializers import (
     ReferralCaptureSerializer,
+    SiteOwnerCreateSerializer,
     SiteOwnerIntegrationSerializer,
     SiteOwnerIntegrationUpdateSerializer,
 )
@@ -96,6 +97,10 @@ def _owner_site_option_payload(site: Site) -> dict:
         first = origins[0]
         if isinstance(first, str):
             primary_origin = first.strip()
+    cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    display_name = ""
+    if isinstance(cfg.get("display_name"), str):
+        display_name = cfg["display_name"].strip()
     return {
         "public_id": str(site.public_id),
         "status": site.status,
@@ -104,6 +109,7 @@ def _owner_site_option_payload(site: Site) -> dict:
         "widget_enabled": bool(site.widget_enabled),
         "allowed_origins_count": len(site.allowed_origins or []),
         "primary_origin": primary_origin,
+        "display_name": display_name,
     }
 
 
@@ -173,6 +179,32 @@ class SiteOwnerBootstrapView(APIView):
         )
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data, status=status.HTTP_201_CREATED)
+
+
+class SiteOwnerCreateView(APIView):
+    """
+    Authenticated owner: always create a new Site row (partner \"project\").
+
+    Unlike ``SiteOwnerBootstrapView``, this is not idempotent and does not return an
+    existing site when the user already has one.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ser = SiteOwnerCreateSerializer(data=request.data)
+        if not ser.is_valid():
+            return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = ser.validated_data
+        site = Site.objects.create(
+            owner=request.user,
+            publishable_key=generate_publishable_key(),
+            allowed_origins=[data["origin"]],
+            platform_preset=data["platform_preset"],
+            config_json={"display_name": data["display_name"]},
+        )
+        out = SiteOwnerIntegrationSerializer(site, context={"request": request})
+        return Response(out.data, status=status.HTTP_201_CREATED)
 
 
 class SiteOwnerIntegrationView(APIView):

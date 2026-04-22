@@ -56,7 +56,9 @@ export default function SiteProjectLayout() {
         return;
       }
       const origins = Array.isArray(payload.allowed_origins) ? payload.allowed_origins : [];
-      setHeadTitle(formatSiteCardTitle(payload.public_id, origins[0]));
+      const cfg = payload.config_json && typeof payload.config_json === "object" ? payload.config_json : {};
+      const dn = typeof cfg.display_name === "string" ? cfg.display_name.trim() : "";
+      setHeadTitle(formatSiteCardTitle(payload.public_id, origins[0], dn));
       setHeadSub(`${formatDomainLine(null, origins)} · ${siteLifecycleLabelRu(payload.status)}`);
     } catch {
       setHeadTitle("Проект");

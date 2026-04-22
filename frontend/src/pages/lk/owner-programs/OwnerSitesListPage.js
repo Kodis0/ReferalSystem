@@ -26,11 +26,14 @@ function normalizeSitesFromIntegrationResponse(status, payload) {
         widget_enabled: Boolean(s.widget_enabled),
         allowed_origins_count: typeof s.allowed_origins_count === "number" ? s.allowed_origins_count : 0,
         primary_origin: typeof s.primary_origin === "string" ? s.primary_origin : "",
+        display_name: typeof s.display_name === "string" ? s.display_name.trim() : "",
       }));
   }
   if (status === 200 && payload?.public_id && isUuidString(payload.public_id)) {
     const origins = Array.isArray(payload.allowed_origins) ? payload.allowed_origins : [];
     const primary = typeof origins[0] === "string" ? origins[0] : "";
+    const cfg = payload.config_json && typeof payload.config_json === "object" ? payload.config_json : {};
+    const dn = typeof cfg.display_name === "string" ? cfg.display_name.trim() : "";
     return [
       {
         public_id: payload.public_id.trim(),
@@ -38,6 +41,7 @@ function normalizeSitesFromIntegrationResponse(status, payload) {
         widget_enabled: Boolean(payload.widget_enabled),
         allowed_origins_count: origins.length,
         primary_origin: primary,
+        display_name: dn,
       },
     ];
   }
@@ -50,8 +54,6 @@ export default function OwnerSitesListPage() {
   const [error, setError] = useState("");
   const [siteMissing, setSiteMissing] = useState(false);
   const [sites, setSites] = useState([]);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,41 +93,13 @@ export default function OwnerSitesListPage() {
     load();
   }, [load]);
 
-  const onCreate = async () => {
-    setCreateLoading(true);
-    setCreateError("");
-    try {
-      const res = await fetch(API_ENDPOINTS.siteBootstrap, {
-        method: "POST",
-        headers: authHeaders(),
-        credentials: "include",
-        body: "{}",
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const d = payload.detail;
-        const detailMsg =
-          typeof d === "string" ? d : Array.isArray(d) ? d.join("\n") : d != null ? String(d) : "";
-        setCreateError(detailMsg || `Не удалось создать проект (${res.status})`);
-        return;
-      }
-      const id = payload.public_id && isUuidString(payload.public_id) ? payload.public_id.trim() : "";
-      if (id) {
-        navigate(`/lk/partner/${id}/overview`, { replace: true });
-        return;
-      }
-      await load();
-    } catch (e) {
-      console.error(e);
-      setCreateError("Сетевая ошибка, попробуйте позже");
-    } finally {
-      setCreateLoading(false);
-    }
+  const goCreate = () => {
+    navigate("/lk/partner/new");
   };
 
   return (
     <div className="lk-dashboard lk-partner">
-      <h1 className="lk-dashboard__title">Партнёрские программы</h1>
+      <h1 className="lk-dashboard__title">Проекты</h1>
       <p className="lk-dashboard__subtitle">
         Проекты вашего аккаунта (площадки с виджетом). Откройте карточку, чтобы перейти к обзору и
         установке виджета.
@@ -141,11 +115,10 @@ export default function OwnerSitesListPage() {
             диагностика.
           </p>
           <div className="owner-programs__actions">
-            <button type="button" className="owner-programs__btn" disabled={createLoading} onClick={onCreate}>
-              {createLoading ? "Создание…" : "Создать проект"}
+            <button type="button" className="owner-programs__btn" onClick={goCreate}>
+              Создать проект
             </button>
           </div>
-          {createError ? <div className="owner-programs__error">{createError}</div> : null}
         </>
       )}
 
@@ -156,15 +129,14 @@ export default function OwnerSitesListPage() {
       {!loading && !error && !siteMissing && sites.length > 0 && (
         <>
           <div className="owner-programs__actions">
-            <button type="button" className="owner-programs__btn" disabled={createLoading} onClick={onCreate}>
-              {createLoading ? "Создание…" : "Создать проект"}
+            <button type="button" className="owner-programs__btn" onClick={goCreate}>
+              Создать проект
             </button>
-            {createError ? <span className="owner-programs__error" style={{ marginTop: 0 }}>{createError}</span> : null}
           </div>
           <div className="owner-programs__grid">
             {sites.map((s) => {
               const domainLine = formatDomainLine(s.primary_origin, null);
-              const title = formatSiteCardTitle(s.public_id, s.primary_origin);
+              const title = formatSiteCardTitle(s.public_id, s.primary_origin, s.display_name);
               return (
                 <Link key={s.public_id} to={`/lk/partner/${s.public_id}/overview`} className="owner-programs__card">
                   <h2 className="owner-programs__card-title">{title}</h2>

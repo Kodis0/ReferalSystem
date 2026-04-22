@@ -11,6 +11,7 @@ export const API_ENDPOINTS = {
   partnerOnboard: `${API_BASE}/referrals/partner/onboard/`,
   partnerMe: `${API_BASE}/referrals/partner/me/`,
   siteBootstrap: `${API_BASE}/referrals/site/bootstrap/`,
+  siteCreate: `${API_BASE}/referrals/site/create/`,
   siteIntegration: `${API_BASE}/referrals/site/integration/`,
   siteIntegrationDiagnostics: `${API_BASE}/referrals/site/integration/diagnostics/`,
   siteIntegrationVerify: `${API_BASE}/referrals/site/integration/verify/`,
