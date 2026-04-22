@@ -75,13 +75,13 @@ export default function AgentProgramDetailPage() {
   return (
     <div className="lk-dashboard lk-dashboard__program-detail" data-testid="agent-program-detail">
       <Link to="/lk/dashboard#my-programs" className="lk-dashboard__program-detail-back">
-        ← К списку программ
+        ← К агентским программам
       </Link>
 
       {loading && <p className="lk-dashboard__programs-muted">Загрузка…</p>}
 
       {!loading && errorKind === "auth" && (
-        <p className="lk-dashboard__programs-muted">Войдите в аккаунт, чтобы открыть программу.</p>
+        <p className="lk-dashboard__programs-muted">Войдите, чтобы открыть карточку программы.</p>
       )}
 
       {!loading && errorKind === "not_found" && (
@@ -92,27 +92,29 @@ export default function AgentProgramDetailPage() {
 
       {!loading && errorKind === "network" && (
         <p className="lk-dashboard__programs-muted" data-testid="agent-program-error">
-          Не удалось загрузить данные. Попробуйте обновить страницу.
+          Не удалось загрузить данные программы. Обновите страницу или попробуйте позже.
         </p>
       )}
 
       {!loading && program && (
         <>
           <h1 className="lk-dashboard__title" data-testid="agent-program-title">
-            {program.site_display_label || `Площадка · ${program.site_public_id}`}
+            {program.site_display_label || `Программа · ${program.site_public_id}`}
           </h1>
-          <p className="lk-dashboard__subtitle">Ваше участие в реферальной программе площадки</p>
+          <p className="lk-dashboard__subtitle">
+            Вы участвуете в агентской программе. Подробности и акции смотрите на сайте организатора.
+          </p>
 
           <div className="lk-dashboard__program-detail-meta">
             <p className="lk-dashboard__programs-muted" style={{ marginBottom: "8px" }}>
               <span className="lk-dashboard__programs-label" style={{ display: "inline", marginRight: "8px" }}>
-                Подключено:
+                Дата подключения:
               </span>
               {formatJoinedAt(program.joined_at)}
             </p>
             {program.site_status ? (
               <p className="lk-dashboard__programs-muted" style={{ margin: 0 }}>
-                Статус площадки:{" "}
+                Статус:{" "}
                 <span className="lk-dashboard__programs-status">{program.site_status}</span>
               </p>
             ) : null}
@@ -123,13 +125,12 @@ export default function AgentProgramDetailPage() {
               Что дальше
             </h2>
             <p className="lk-dashboard__programs-muted">
-              Вы подключены к программе. Акции и материалы для агентов публикует владелец площадки на своём
-              сайте — следите за обновлениями там. Если владелец подключит материалы через LUMO, мы сможем
-              показать их здесь позже.
+              Учёт участия идёт автоматически. Новости и материалы публикует организатор на своём сайте;
+              если он подключит материалы через LUMO, они появятся здесь.
             </p>
             <div className="lk-dashboard__program-next-actions">
               <Link to="/lk/dashboard#my-programs" className="lk-dashboard__program-next-cta">
-                К списку программ
+                К агентским программам
               </Link>
             </div>
           </section>

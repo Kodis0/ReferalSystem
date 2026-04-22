@@ -1,5 +1,5 @@
 /**
- * LK dashboard — "Мои программы" (member SiteMembership list).
+ * LK dashboard — агентские программы (member SiteMembership list).
  *
  * @jest-environment jsdom
  */
@@ -36,11 +36,11 @@ describe("Dashboard My Programs", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Мои программы")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(
-        screen.getByText(/Пока нет подключённых площадок/i)
+        screen.getByText(/Пока нет подключённых программ/i)
       ).toBeInTheDocument();
     });
   });
@@ -74,7 +74,7 @@ describe("Dashboard My Programs", () => {
     await waitFor(() => {
       expect(screen.getByText("Demo Shop")).toBeInTheDocument();
     });
-    expect(screen.getByText(/Подключено:/)).toBeInTheDocument();
+    expect(screen.getByText(/Дата подключения:/)).toBeInTheDocument();
     expect(screen.getByText("verified")).toBeInTheDocument();
     const link = screen.getByTestId("agent-program-list-link");
     expect(link).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");

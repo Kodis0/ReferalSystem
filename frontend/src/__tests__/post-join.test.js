@@ -25,7 +25,7 @@ describe("postJoinNavigation helpers", () => {
   it("formatSitePublicIdForDisplay returns safe fingerprint", () => {
     expect(
       formatSitePublicIdForDisplay("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
-    ).toMatch(/Площадка ·/);
+    ).toMatch(/Программа ·/);
   });
 
   it("parsePostJoinFromSearchParams validates UUID and outcome", () => {
@@ -72,7 +72,7 @@ describe("postJoinNavigation helpers", () => {
   it("resolvePostJoinSiteLabel prefers display label over UUID fingerprint", () => {
     const sid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     expect(resolvePostJoinSiteLabel("Store front", sid)).toBe("Store front");
-    expect(resolvePostJoinSiteLabel("", sid)).toMatch(/Площадка ·/);
-    expect(resolvePostJoinSiteLabel(undefined, sid)).toMatch(/Площадка ·/);
+    expect(resolvePostJoinSiteLabel("", sid)).toMatch(/Программа ·/);
+    expect(resolvePostJoinSiteLabel(undefined, sid)).toMatch(/Программа ·/);
   });
 });

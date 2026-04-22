@@ -36,7 +36,9 @@ function Dashboard() {
       )}
 
       <h1 className="lk-dashboard__title">Панель</h1>
-      <p className="lk-dashboard__subtitle">Тут будет вся важная информация</p>
+      <p className="lk-dashboard__subtitle">
+        Краткий обзор аккаунта и список агентских программ, к которым вы подключены.
+      </p>
 
       <MyProgramsSection />
     </div>

@@ -71,8 +71,10 @@ function PartnerDashboard() {
 
   return (
     <div className="lk-dashboard lk-partner">
-      <h1 className="lk-dashboard__title">Реферальная программа</h1>
-      <p className="lk-dashboard__subtitle">Ссылка и статистика по вашему аккаунту партнёра</p>
+      <h1 className="lk-dashboard__title">Партнёрская ссылка</h1>
+      <p className="lk-dashboard__subtitle">
+        Персональная ссылка, код и статистика — отдельно от агентских программ на панели.
+      </p>
 
       {loading && <p className="lk-partner__muted">Загрузка…</p>}
       {!loading && error && <div className="lk-partner__error">{String(error)}</div>}

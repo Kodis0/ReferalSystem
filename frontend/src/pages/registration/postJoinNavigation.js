@@ -53,10 +53,10 @@ export function buildPostJoinDashboardPath(sitePublicId, outcome, siteDisplayLab
  */
 export function formatSitePublicIdForDisplay(sitePublicId) {
   if (!sitePublicId || !isUuidString(sitePublicId)) {
-    return "эта площадка";
+    return "эта программа";
   }
   const compact = sitePublicId.replace(/-/g, "");
-  return `Площадка · ${compact.slice(0, 8)}…`;
+  return `Программа · ${compact.slice(0, 8)}…`;
 }
 
 /**

@@ -54,10 +54,10 @@ describe("Agent program detail page", () => {
     await waitFor(() => {
       expect(screen.getByTestId("agent-program-title")).toHaveTextContent("Demo Shop");
     });
-    expect(screen.getByText(/Подключено:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Дата подключения:/i)).toBeInTheDocument();
     expect(screen.getByText("verified")).toBeInTheDocument();
     expect(screen.getByText(/Что дальше/i)).toBeInTheDocument();
-    const listLinks = screen.getAllByRole("link", { name: /К списку программ/i });
+    const listLinks = screen.getAllByRole("link", { name: /К агентским программам/i });
     expect(listLinks.length).toBe(2);
     listLinks.forEach((el) => {
       expect(el).toHaveAttribute("href", "/lk/dashboard#my-programs");

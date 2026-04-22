@@ -62,20 +62,23 @@ export function MyProgramsSection() {
       aria-labelledby="lk-dashboard-programs-heading"
     >
       <h2 id="lk-dashboard-programs-heading" className="lk-dashboard__programs-title">
-        Мои программы
+        Агентские программы
       </h2>
+      <p className="lk-dashboard__programs-lead">
+        Программы, в которых вы участвуете как агент после приглашения от организатора.
+      </p>
       {programs === null && !programsError && (
         <p className="lk-dashboard__programs-muted">Загрузка…</p>
       )}
       {programsError && (
         <p className="lk-dashboard__programs-muted">
-          Не удалось загрузить список программ. Попробуйте обновить страницу.
+          Не удалось загрузить список программ. Обновите страницу или попробуйте позже.
         </p>
       )}
       {programs !== null && !programsError && programs.length === 0 && (
         <p className="lk-dashboard__programs-muted">
-          Пока нет подключённых площадок. Когда вы присоединитесь к реферальной программе по
-          приглашению, она появится здесь.
+          Пока нет подключённых программ. Когда вы примете приглашение, программа появится в этом
+          списке.
         </p>
       )}
       {programs !== null && !programsError && programs.length > 0 && (
@@ -89,14 +92,14 @@ export function MyProgramsSection() {
               >
                 <div className="lk-dashboard__programs-item-main">
                   <span className="lk-dashboard__programs-label">
-                    {p.site_display_label || `Площадка · ${p.site_public_id}`}
+                    {p.site_display_label || `Программа · ${p.site_public_id}`}
                   </span>
                   {p.site_status ? (
                     <span className="lk-dashboard__programs-status">{p.site_status}</span>
                   ) : null}
                 </div>
                 <div className="lk-dashboard__programs-joined">
-                  Подключено: {formatJoinedAt(p.joined_at)}
+                  Дата подключения: {formatJoinedAt(p.joined_at)}
                 </div>
               </Link>
             </li>
