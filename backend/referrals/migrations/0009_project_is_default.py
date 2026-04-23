@@ -45,6 +45,11 @@ def backwards_unset_default_projects(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL can fail to create the index for a new non-null field with a
+    # default inside one atomic migration because the table still has pending
+    # trigger events in that same transaction.
+    atomic = False
+
     dependencies = [
         ("referrals", "0008_project_and_site_project"),
     ]
