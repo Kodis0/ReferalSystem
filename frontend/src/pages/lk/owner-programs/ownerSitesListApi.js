@@ -71,7 +71,7 @@ export async function fetchOwnerSitesList() {
   });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const d = payload.detail;
+    const d = payload?.code ?? payload?.detail;
     const detailMsg =
       typeof d === "string" ? d : Array.isArray(d) ? d.join("\n") : d != null ? String(d) : "";
     return { ok: false, projects: [], sites: [], error: detailMsg || `Ошибка загрузки (${res.status})` };

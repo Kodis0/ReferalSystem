@@ -19,6 +19,9 @@ function renderFocusedWidgetInstall(ui) {
 }
 
 describe("WidgetInstallScreen", () => {
+  // Contract (owner/LK widget-install): machine key + owner-visible error text both flow through
+  // `payload.code ?? payload.detail` — "prefers code" rows assert `detail` does not leak when `code` is set.
+
   beforeEach(() => {
     localStorage.setItem("access_token", "test-token");
   });
@@ -157,6 +160,27 @@ describe("WidgetInstallScreen", () => {
     });
   }
 
+  it.each([
+    ["detail only", { detail: "integration_load_err" }, undefined],
+    ["code only", { code: "integration_load_err" }, undefined],
+    ["prefers code", { code: "integration_load_err", detail: "legacy_detail" }, "legacy_detail"],
+  ])("shows generic integration load error from API body (%s)", async (_label, errorBody, legacyDetailMustNotAppear) => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => errorBody,
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("integration_load_err")).toBeInTheDocument();
+    });
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
+  });
+
   it("loads integration and shows main snippet onboarding block", async () => {
     const fetchMock = mockFetchIntegrationAndDiagnostics();
 
@@ -294,11 +318,15 @@ describe("WidgetInstallScreen", () => {
     expect(screen.getByText("10.00 RUB")).toBeInTheDocument();
   });
 
-  it("shows empty state and CTA when site_missing", async () => {
+  it.each([
+    ["detail only", { detail: "site_missing" }, undefined],
+    ["code only", { code: "site_missing" }, undefined],
+    ["prefers code", { code: "site_missing", detail: "legacy_detail" }, "legacy_detail"],
+  ])("shows empty state and CTA when site_missing (%s)", async (_label, errorBody, legacyDetailMustNotAppear) => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 404,
-      json: async () => ({ detail: "site_missing" }),
+      json: async () => errorBody,
     });
 
     renderWithLkRouter(<WidgetInstallScreen />);
@@ -307,6 +335,9 @@ describe("WidgetInstallScreen", () => {
       expect(screen.getByText(/ещё не подключён сайт/i)).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /Подключить сайт/i })).toBeInTheDocument();
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
   });
 
   it("create site POSTs bootstrap then reloads integration and diagnostics", async () => {
@@ -361,14 +392,18 @@ describe("WidgetInstallScreen", () => {
     expect(screen.getByRole("heading", { name: /Состояние интеграции/i })).toBeInTheDocument();
   });
 
-  it("shows create error when bootstrap fails", async () => {
+  it.each([
+    ["detail only", { detail: "server_error" }, undefined],
+    ["code only", { code: "server_error" }, undefined],
+    ["prefers code", { code: "server_error", detail: "legacy_detail" }, "legacy_detail"],
+  ])("shows create error when bootstrap fails (%s)", async (_label, bootstrapBody, legacyDetailMustNotAppear) => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
       if (u.includes("/referrals/site/bootstrap/")) {
         return Promise.resolve({
           ok: false,
           status: 500,
-          json: async () => ({ detail: "server_error" }),
+          json: async () => bootstrapBody,
         });
       }
       return Promise.resolve({
@@ -389,6 +424,9 @@ describe("WidgetInstallScreen", () => {
     await waitFor(() => {
       expect(screen.getByText("server_error")).toBeInTheDocument();
     });
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
   });
 
   it("copy snippet uses clipboard API", async () => {
@@ -479,23 +517,66 @@ describe("WidgetInstallScreen", () => {
     });
   });
 
-  it("shows site chooser when backend requires explicit site selection", async () => {
+  it.each([
+    ["detail only", { detail: "patch_save_err" }, undefined],
+    ["code only", { code: "patch_save_err" }, undefined],
+    ["prefers code", { code: "patch_save_err", detail: "legacy_detail" }, "legacy_detail"],
+  ])("shows save hint when integration PATCH fails (%s)", async (_label, errBody, legacyDetailMustNotAppear) => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && options.method === "PATCH") {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => errBody,
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Сохранить настройки/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить настройки/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("patch_save_err")).toBeInTheDocument();
+    });
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
+  });
+
+  const siteSelectionSites = [
+    { public_id: "site-one", status: "draft" },
+    { public_id: "site-two", status: "active" },
+  ];
+
+  it.each([
+    ["detail only", { detail: "site_selection_required", sites: siteSelectionSites }, undefined],
+    ["code only", { code: "site_selection_required", sites: siteSelectionSites }, undefined],
+    [
+      "prefers code",
+      { code: "site_selection_required", detail: "legacy_detail", sites: siteSelectionSites },
+      "legacy_detail",
+    ],
+  ])("shows site chooser when backend requires explicit site selection (%s)", async (_label, errorBody, legacyDetailMustNotAppear) => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 409,
-      json: async () => ({
-        detail: "site_selection_required",
-        sites: [
-          {
-            public_id: "site-one",
-            status: "draft",
-          },
-          {
-            public_id: "site-two",
-            status: "active",
-          },
-        ],
-      }),
+      json: async () => errorBody,
     });
 
     renderWithLkRouter(<WidgetInstallScreen />);
@@ -505,6 +586,9 @@ describe("WidgetInstallScreen", () => {
     });
     expect(screen.getByRole("button", { name: /site-one · Черновик/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /site-two · Активно/i })).toBeInTheDocument();
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
   });
 
   it("verify and activate buttons call lifecycle endpoints", async () => {
@@ -566,6 +650,90 @@ describe("WidgetInstallScreen", () => {
         expect.objectContaining({ method: "POST" })
       );
     });
+  });
+
+  it.each([
+    ["detail only", { detail: "verify_other_err" }, undefined],
+    ["code only", { code: "verify_other_err" }, undefined],
+    ["prefers code", { code: "verify_other_err", detail: "legacy_detail" }, "legacy_detail"],
+  ])("shows save hint on verify POST fallback when not site_connection_not_found (%s)", async (_label, errBody, legacyDetailMustNotAppear) => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          json: async () => errBody,
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Проверить подключение/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Проверить подключение/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("verify_other_err")).toBeInTheDocument();
+    });
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    ["detail only", { detail: "activate_err" }, undefined],
+    ["code only", { code: "activate_err" }, undefined],
+    ["prefers code", { code: "activate_err", detail: "legacy_detail" }, "legacy_detail"],
+  ])("shows save hint when activation POST fails (%s)", async (_label, errBody, legacyDetailMustNotAppear) => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/activate/") && options.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => errBody,
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Активировать сайт/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Активировать сайт/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("activate_err")).toBeInTheDocument();
+    });
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
   });
 
   it("renders focused connection check button and idle status", async () => {
@@ -661,7 +829,18 @@ describe("WidgetInstallScreen", () => {
     expect(screen.getByText("Подключение найдено. Сайт подключён.")).toBeInTheDocument();
   });
 
-  it("shows focused connection check failure state", async () => {
+  it.each([
+    ["detail only", { detail: "site_connection_not_found" }, undefined],
+    ["code only", { code: "site_connection_not_found" }, undefined],
+    [
+      "prefers code",
+      {
+        code: "site_connection_not_found",
+        detail: "legacy_human_message_should_not_change_branch",
+      },
+      "legacy_human_message_should_not_change_branch",
+    ],
+  ])("shows focused connection check failure state (%s)", async (_label, verifyErrorBody, legacyDetailMustNotAppear) => {
     jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
       const u = String(url);
       if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
@@ -669,7 +848,7 @@ describe("WidgetInstallScreen", () => {
           ok: false,
           status: 409,
           json: async () => ({
-            detail: "site_connection_not_found",
+            ...verifyErrorBody,
             connection_check: {
               status: "not_found",
               last_seen_at: null,
@@ -702,5 +881,8 @@ describe("WidgetInstallScreen", () => {
     expect(
       screen.getByText(/Проверьте установку, публикацию сайта и откройте страницу ещё раз/i)
     ).toBeInTheDocument();
+    if (legacyDetailMustNotAppear) {
+      expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
+    }
   });
 });

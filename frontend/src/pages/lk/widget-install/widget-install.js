@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { CirclePause, CirclePlay, PlugZap, RefreshCw, Trash2 } from "lucide-react";
+import { Link, useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/light";
 import xml from "react-syntax-highlighter/dist/cjs/languages/hljs/xml";
 import { atomOneDarkReasonable } from "react-syntax-highlighter/dist/cjs/styles/hljs";
@@ -9,7 +10,7 @@ import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "../owner-programs/owner-programs.css";
 import "./widget-install.css";
-import { formatDomainLine, siteLifecycleLabelRu } from "../owner-programs/siteDisplay";
+import { siteLifecycleLabelRu } from "../owner-programs/siteDisplay";
 
 SyntaxHighlighter.registerLanguage("xml", xml);
 
@@ -171,6 +172,20 @@ function withSelectedSite(url, sitePublicId) {
   return u.toString();
 }
 
+/** Machine error key from API: prefers `code`, falls back to legacy `detail` string. */
+function apiErrorCode(payload) {
+  return payload?.code ?? payload?.detail;
+}
+
+/** Human-readable / joinable body for owner hints (same string/array rules as legacy `detail`). */
+function apiErrorDisplayText(payload) {
+  const raw = apiErrorCode(payload);
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) return raw.join("\n");
+  if (raw != null) return String(raw);
+  return "";
+}
+
 function syncSelectedSiteInUrl(sitePublicId, { skip = false } = {}) {
   // When the screen is rendered under a canonical site route (skip=true), the URL
   // path is the only source of truth for site identity. Adding ?site_public_id=
@@ -280,7 +295,8 @@ function formatLastSeenAt(iso) {
   });
 }
 
-function connectionCheckPresentation(localState, persistedCheck) {
+function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
+  const verifyFromToolbar = Boolean(opts.verifyFromToolbar);
   const persistedFound = persistedCheck?.status === "found";
   const persistedOrigin = String(persistedCheck?.last_seen_origin || "").trim();
 
@@ -302,7 +318,11 @@ function connectionCheckPresentation(localState, persistedCheck) {
     return {
       tone: "bad",
       title: "Подключение не найдено",
-      message: localState.message || "Проверьте установку и попробуйте снова после публикации сайта.",
+      message:
+        localState.message ||
+        (verifyFromToolbar
+          ? "Проверьте установку кода и публикацию страницы, затем снова запустите проверку вверху."
+          : "Проверьте установку и попробуйте снова после публикации сайта."),
     };
   }
   if (persistedFound) {
@@ -317,22 +337,30 @@ function connectionCheckPresentation(localState, persistedCheck) {
   return {
     tone: "idle",
     title: "Ещё не проверяли",
-    message: "После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже.",
+    message: verifyFromToolbar
+      ? "Опубликуйте страницу с кодом, затем запустите проверку кнопкой у названия сайта вверху."
+      : "После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже.",
   };
 }
 
-function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView }) {
+function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView, showVerifyButton = true, hideIntro = false }) {
   return (
     <section className="lk-widget-install__card lk-widget-install__connection-check" data-testid="site-connection-check-card">
       <h2 className="lk-partner__section-title">Проверка подключения</h2>
-      <p className="lk-partner__muted">
-        После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже.
-      </p>
-      <div className="lk-widget-install__connection-check-actions">
-        <button type="button" className="lk-widget-install__btn" disabled={verifyLoading} onClick={onVerify}>
-          {verifyLoading ? "Проверяем…" : "Проверить подключение"}
-        </button>
-      </div>
+      {!hideIntro ? (
+        <p className="lk-partner__muted">
+          {showVerifyButton
+            ? "После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже."
+            : "После установки кода опубликуйте сайт и откройте страницу. Проверку можно запустить кнопкой на панели действий у названия сайта."}
+        </p>
+      ) : null}
+      {showVerifyButton ? (
+        <div className="lk-widget-install__connection-check-actions">
+          <button type="button" className="lk-widget-install__btn" disabled={verifyLoading} onClick={onVerify}>
+            {verifyLoading ? "Проверяем…" : "Проверить подключение"}
+          </button>
+        </div>
+      ) : null}
       <div
         className={`lk-widget-install__connection-check-status lk-widget-install__connection-check-status_${statusView.tone}`}
         role="status"
@@ -342,6 +370,65 @@ function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView 
         <p className="lk-widget-install__connection-check-copy">{statusView.message}</p>
       </div>
     </section>
+  );
+}
+
+function SiteShellWidgetActionsBar({ actionsRef, deleteSiteBusy, verifyLoading, refreshBusy, lifecycleStatus, widgetEnabled, toggleBusy }) {
+  const captureRunning = lifecycleStatus === "active" && widgetEnabled;
+  const toggleLabel = (() => {
+    if (lifecycleStatus !== "active") return toggleBusy ? "Активация…" : "Активировать сайт";
+    if (!widgetEnabled) return toggleBusy ? "Сохраняем…" : "Включить сбор заявок";
+    return toggleBusy ? "Сохраняем…" : "Выключить сбор заявок";
+  })();
+  const ToggleIcon = captureRunning ? CirclePause : CirclePlay;
+  const actionBusy = verifyLoading || refreshBusy || deleteSiteBusy || toggleBusy;
+
+  return (
+    <>
+      <button
+        type="button"
+        className="owner-programs__icon-action owner-programs__icon-action_danger"
+        onClick={() => actionsRef.current.onDeleteSite?.()}
+        disabled={actionBusy}
+        aria-label="Удалить сайт"
+        data-testid="site-shell-action-delete"
+      >
+        <Trash2 size={22} strokeWidth={2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={`owner-programs__icon-action${captureRunning ? " owner-programs__icon-action_on" : ""}`}
+        onClick={() => actionsRef.current.onUnifiedToggle?.()}
+        disabled={actionBusy}
+        aria-label={toggleLabel}
+        title={toggleLabel}
+        data-testid="site-shell-action-toggle-capture"
+      >
+        <ToggleIcon size={22} strokeWidth={2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className="owner-programs__icon-action"
+        onClick={() => actionsRef.current.onVerify?.()}
+        disabled={actionBusy}
+        aria-label={verifyLoading ? "Проверяем подключение…" : "Проверить подключение"}
+        title="Проверить подключение"
+        data-testid="site-shell-action-verify"
+      >
+        <PlugZap size={22} strokeWidth={2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className="owner-programs__icon-action"
+        onClick={() => actionsRef.current.onRefreshStatus?.()}
+        disabled={actionBusy}
+        aria-label={refreshBusy ? "Обновление статуса…" : "Обновить статус"}
+        title="Обновить статус"
+        data-testid="site-shell-action-refresh"
+      >
+        <RefreshCw size={22} strokeWidth={2} className={refreshBusy ? "owner-programs__icon-action-spin" : ""} aria-hidden />
+      </button>
+    </>
   );
 }
 
@@ -388,9 +475,15 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const [captureConfig, setCaptureConfig] = useState(() => normalizeCaptureConfig(null));
   const [projectBasePath, setProjectBasePath] = useState("");
   const [connectionCheckUi, setConnectionCheckUi] = useState({ status: "idle", message: "" });
+  const [refreshBusy, setRefreshBusy] = useState(false);
+  const [deleteSiteBusy, setDeleteSiteBusy] = useState(false);
   const loadGenerationRef = useRef(0);
+  const siteShellActionsRef = useRef({});
   const locationRef = useRef(location);
   locationRef.current = location;
+
+  const outlet = useOutletContext() || {};
+  const { setSiteShellToolbar, projectEntry, reloadProjectEntry, buildProjectPath } = outlet;
 
   const projectIdFromRoute = useMemo(() => {
     const raw = String(params?.projectId ?? "").trim();
@@ -404,7 +497,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     return "";
   }, [projectBasePath, projectIdFromRoute]);
 
-  const load = useCallback(async (sitePublicIdOverride) => {
+  const load = useCallback(async (sitePublicIdOverride, options = {}) => {
+    const { quiet = false } = options;
     const generation = ++loadGenerationRef.current;
     // When mounted under a canonical site route, the path is the only source of
     // truth — never fall back to ?site_public_id= or local state.
@@ -414,15 +508,20 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     const effectiveSitePublicId = routeSitePublicId
       ? routeSitePublicId
       : sitePublicIdOverride ?? (searchResolvedId || selectedSitePublicId);
-    setLoading(true);
-    setSiteMissing(false);
-    setSiteSelectionRequired(false);
-    setCreateSiteError("");
-    setError("");
-    setSaveHint("");
-    setCopyHint("");
-    setDiagError("");
-    setConnectionCheckUi({ status: "idle", message: "" });
+    if (!quiet) {
+      setLoading(true);
+      setSiteMissing(false);
+      setSiteSelectionRequired(false);
+      setCreateSiteError("");
+      setError("");
+      setSaveHint("");
+      setCopyHint("");
+      setDiagError("");
+      setConnectionCheckUi({ status: "idle", message: "" });
+    } else {
+      setConnectionCheckUi({ status: "idle", message: "" });
+      setDiagError("");
+    }
     try {
       const resInt = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, effectiveSitePublicId), {
         method: "GET",
@@ -431,14 +530,15 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       });
       const intPayload = await resInt.json().catch(() => ({}));
       if (generation !== loadGenerationRef.current) return;
-      if (resInt.status === 404 && intPayload.detail === "site_missing") {
+      const intErrorCode = apiErrorCode(intPayload);
+      if (resInt.status === 404 && intErrorCode === "site_missing") {
         setData(null);
         setDiag(null);
         setSiteOptions([]);
         setSiteMissing(true);
         return;
       }
-      if (resInt.status === 409 && intPayload.detail === "site_selection_required") {
+      if (resInt.status === 409 && intErrorCode === "site_selection_required") {
         setData(null);
         setDiag(null);
         setSiteOptions(Array.isArray(intPayload.sites) ? intPayload.sites : []);
@@ -448,9 +548,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       if (!resInt.ok) {
         setData(null);
         setDiag(null);
-        const d = intPayload.detail;
-        const detailMsg =
-          typeof d === "string" ? d : Array.isArray(d) ? d.join("\n") : d != null ? String(d) : "";
+        const detailMsg = apiErrorDisplayText(intPayload);
         setError(detailMsg || `Ошибка загрузки (${resInt.status})`);
         return;
       }
@@ -491,7 +589,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       setDiag(null);
       setError("network");
     } finally {
-      if (generation === loadGenerationRef.current) {
+      if (generation === loadGenerationRef.current && !quiet) {
         setLoading(false);
       }
     }
@@ -539,9 +637,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const d = payload.detail;
-        const detailMsg =
-          typeof d === "string" ? d : Array.isArray(d) ? d.join("\n") : d != null ? String(d) : "";
+        const detailMsg = apiErrorDisplayText(payload);
         setCreateSiteError(detailMsg || `Не удалось создать сайт (${res.status})`);
         return;
       }
@@ -605,7 +701,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setSaveHint(payload.detail ? String(payload.detail) : `Сохранение: ${res.status}`);
+        const hint = apiErrorDisplayText(payload);
+        setSaveHint(hint || `Сохранение: ${res.status}`);
         return;
       }
       setData(payload);
@@ -653,7 +750,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (payload.detail === "site_connection_not_found") {
+        const verifyErrorCode = apiErrorCode(payload);
+        if (verifyErrorCode === "site_connection_not_found") {
           const nextMessage =
             "Подключение не найдено. Проверьте установку, публикацию сайта и откройте страницу ещё раз.";
           setConnectionCheckUi({ status: "not_found", message: nextMessage });
@@ -661,7 +759,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           return;
         }
         setConnectionCheckUi({ status: "idle", message: "" });
-        setSaveHint(payload.detail ? String(payload.detail) : `Проверка: ${res.status}`);
+        const verifyHint = apiErrorDisplayText(payload);
+        setSaveHint(verifyHint || `Проверка: ${res.status}`);
         return;
       }
       setData(payload);
@@ -708,7 +807,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setSaveHint(payload.detail ? String(payload.detail) : `Активация: ${res.status}`);
+        const activateHint = apiErrorDisplayText(payload);
+        setSaveHint(activateHint || `Активация: ${res.status}`);
         return;
       }
       setData(payload);
@@ -729,6 +829,106 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       setActivateLoading(false);
     }
   };
+
+  const onRefreshStatus = useCallback(async () => {
+    setRefreshBusy(true);
+    try {
+      await load(undefined, { quiet: true });
+    } finally {
+      setRefreshBusy(false);
+    }
+  }, [load]);
+
+  const handleDeleteSiteFromShell = useCallback(async () => {
+    const title =
+      (typeof data?.site_display_name === "string" && data.site_display_name.trim()) ||
+      (typeof data?.config_json?.site_display_name === "string" && data.config_json.site_display_name.trim()) ||
+      "Сайт";
+    if (!window.confirm(`Удалить сайт "${title}"?`)) return;
+    const projectId = typeof projectEntry?.id === "number" ? projectEntry.id : data?.project?.id;
+    if (typeof projectId !== "number" || !selectedSitePublicId) return;
+    setDeleteSiteBusy(true);
+    setSaveHint("");
+    try {
+      const res = await fetch(API_ENDPOINTS.projectSiteDelete(projectId), {
+        method: "DELETE",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ site_public_id: selectedSitePublicId }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detailMsg = apiErrorDisplayText(payload);
+        setSaveHint(detailMsg || `Не удалось удалить (${res.status})`);
+        return;
+      }
+      if (typeof reloadProjectEntry === "function") {
+        await reloadProjectEntry(projectId);
+      }
+      if (typeof buildProjectPath === "function") {
+        navigate(buildProjectPath("sites"), { replace: true });
+      } else {
+        navigate("/lk/partner", { replace: true });
+      }
+    } catch (e) {
+      console.error(e);
+      setSaveHint("Не удалось удалить сайт");
+    } finally {
+      setDeleteSiteBusy(false);
+    }
+  }, [buildProjectPath, data, navigate, projectEntry?.id, reloadProjectEntry, selectedSitePublicId]);
+
+  const onUnifiedShellToggle = useCallback(() => {
+    const ls = diag?.site_status || data?.status;
+    if (ls !== "active") {
+      void onActivate();
+      return;
+    }
+    void onSave({ widget_enabled: !widgetEnabled });
+  }, [data?.status, diag?.site_status, onActivate, onSave, widgetEnabled]);
+
+  siteShellActionsRef.current = {
+    onVerify,
+    onRefreshStatus,
+    onDeleteSite: handleDeleteSiteFromShell,
+    onUnifiedToggle: onUnifiedShellToggle,
+  };
+
+  useEffect(() => {
+    if (!projectSitePresentation || typeof setSiteShellToolbar !== "function") {
+      return undefined;
+    }
+    if (loading || error || !data) {
+      setSiteShellToolbar(null);
+      return undefined;
+    }
+    const lifecycleForToolbar = diag?.site_status || data?.status;
+    setSiteShellToolbar(
+      <SiteShellWidgetActionsBar
+        actionsRef={siteShellActionsRef}
+        deleteSiteBusy={deleteSiteBusy}
+        verifyLoading={verifyLoading}
+        refreshBusy={refreshBusy}
+        lifecycleStatus={lifecycleForToolbar}
+        widgetEnabled={widgetEnabled}
+        toggleBusy={saving || activateLoading}
+      />,
+    );
+    return () => setSiteShellToolbar(null);
+  }, [
+    activateLoading,
+    data,
+    deleteSiteBusy,
+    diag?.site_status,
+    error,
+    loading,
+    projectSitePresentation,
+    refreshBusy,
+    saving,
+    setSiteShellToolbar,
+    verifyLoading,
+    widgetEnabled,
+  ]);
 
   const statusClass =
     diag?.integration_status === "healthy"
@@ -857,7 +1057,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const iq24 = iq?.["24h"];
   const iq7 = iq?.["7d"];
   const lifecycleStatus = diag?.site_status || data?.status;
-  const connectionCheckView = connectionCheckPresentation(connectionCheckUi, diag?.connection_check);
+  const connectionCheckView = connectionCheckPresentation(connectionCheckUi, diag?.connection_check, {
+    verifyFromToolbar: projectSitePresentation,
+  });
   const enabledOptionalFields = captureConfig.enabled_optional_fields;
   const siteName =
     (typeof data?.site_display_name === "string" && data.site_display_name.trim()) ||
@@ -896,35 +1098,17 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   ];
 
   if (projectSitePresentation) {
-    const domainLine = formatDomainLine("", Array.isArray(data?.allowed_origins) ? data.allowed_origins : []);
-    const displayDomain = primaryOrigin
-      ? formatDomainLine(primaryOrigin, [primaryOrigin])
-      : domainLine && domainLine !== "Домен не задан"
-        ? domainLine
-        : "Домен не задан";
     const lastSeen = formatLastSeenAt(diag?.connection_check?.last_seen_at);
     const connectionFound = connectionCheckView.tone === "ok" || diag?.connection_check?.status === "found";
-    // Soft hint for "last viewed" highlight on project sites overview.
-    // The overview page may use this query as a *visual hint only* — it does not
-    // participate in site identity selection on any site-level page.
-    const widgetDeepHref = `${projectBasePath}/widget`;
+    const platformLabel = typeof data?.platform_preset === "string" ? data.platform_preset : platformPreset;
+    const summaryWarnings = integrationWarnings.slice(0, 3);
 
     return (
-      <div className="owner-programs__page owner-programs__site-page" data-testid="project-site-management-page">
-        <header className="owner-programs__members-head owner-programs__site-page-head">
-          <div>
-            <h2 className="owner-programs__overview-title owner-programs__site-page-title">{siteName}</h2>
-            <p className="owner-programs__muted owner-programs__site-page-domain">{displayDomain}</p>
-            <div className="owner-programs__card-meta owner-programs__site-page-meta">
-              <span className="owner-programs__pill">{siteLifecycleLabelRu(lifecycleStatus)}</span>
-              <span className="owner-programs__pill">{integrationStatusLabel(diag?.integration_status)}</span>
-              <span className="owner-programs__muted">
-                Платформа: {typeof data?.platform_preset === "string" ? data.platform_preset : platformPreset}
-              </span>
-            </div>
-          </div>
-        </header>
-
+      <div
+        className="owner-programs__page owner-programs__site-page"
+        data-testid="project-site-management-page"
+        data-site-label={siteName}
+      >
         {diagError ? <div className="owner-programs__error">{diagError}</div> : null}
 
         <div className="owner-programs__site-stack">
@@ -933,18 +1117,33 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               Сводка
             </h3>
             <p className="owner-programs__muted" style={{ marginTop: 0 }}>
-              {connectionFound ? "Подключение найдено." : "Подключение пока не подтверждено проверкой."}
+              <strong>{siteLifecycleLabelRu(lifecycleStatus)}</strong>
+              {" · "}
+              <strong>{integrationStatusLabel(diag?.integration_status)}</strong>
+              {platformLabel ? (
+                <>
+                  {" · "}
+                  <span className="owner-programs__muted">платформа: {platformLabel}</span>
+                </>
+              ) : null}
+            </p>
+            <p className="owner-programs__muted" style={{ marginTop: 8, marginBottom: summaryWarnings.length ? 8 : 0 }}>
+              {connectionFound ? "Сигнал от кода получен." : "Сигнал от кода по проверке ещё не подтверждён."}
               {lastSeen ? ` Последний сигнал: ${lastSeen}.` : ""}
             </p>
-            <p className="owner-programs__muted" style={{ marginBottom: 0 }}>
-              {setupStatusText}
-            </p>
+            {summaryWarnings.length ? (
+              <ul className="lk-widget-install__warn-list" style={{ marginTop: 0, marginBottom: 0 }}>
+                {summaryWarnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
           </section>
 
           <WidgetInstallSnippetCard
             compact
             title="Код на сайте"
-            subtitle="Скопируйте и оставьте в шаблоне. После изменений опубликуйте сайт."
+            subtitle="Скопируйте и вставьте в шаблон сайта."
             snippet={data.widget_embed_snippet}
             onCopy={onCopySnippet}
             copyHint={copyHint}
@@ -954,6 +1153,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
             verifyLoading={verifyLoading}
             onVerify={onVerify}
             statusView={connectionCheckView}
+            showVerifyButton={false}
+            hideIntro
           />
 
           <section className="owner-programs__site-section">
@@ -1006,76 +1207,6 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
             </div>
             {saveHint ? <p className="lk-widget-install__hint">{saveHint}</p> : null}
           </section>
-
-          <section className="owner-programs__site-section">
-            <h3 className="owner-programs__site-section-title">Действия</h3>
-            <p className="owner-programs__muted" style={{ marginTop: 0 }}>
-              Проверьте сигнал с сайта, затем активируйте площадку. Сбор заявок можно временно выключить без удаления кода.
-            </p>
-            <div className="owner-programs__site-actions">
-              <button type="button" className="lk-widget-install__btn" disabled={verifyLoading} onClick={onVerify}>
-                {verifyLoading ? "Проверяем…" : "Проверить подключение"}
-              </button>
-              {lifecycleStatus !== "active" ? (
-                <button type="button" className="lk-widget-install__btn" disabled={activateLoading} onClick={onActivate}>
-                  {activateLoading ? "Активируем…" : "Активировать сайт"}
-                </button>
-              ) : null}
-              {widgetEnabled ? (
-                <button
-                  type="button"
-                  className="lk-widget-install__btn lk-widget-install__btn_secondary"
-                  disabled={saving}
-                  onClick={() => onSave({ widget_enabled: false })}
-                >
-                  {saving ? "Сохраняем…" : "Выключить сбор заявок"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="lk-widget-install__btn lk-widget-install__btn_secondary"
-                  disabled={saving}
-                  onClick={() => onSave({ widget_enabled: true })}
-                >
-                  {saving ? "Сохраняем…" : "Включить сбор заявок"}
-                </button>
-              )}
-            </div>
-            {integrationWarnings.length ? (
-              <div style={{ marginTop: 12 }}>
-                <div className="lk-widget-install__field-label">На что обратить внимание</div>
-                <ul className="lk-widget-install__warn-list" style={{ marginBottom: 0 }}>
-                  {integrationWarnings.map((warning, index) => (
-                    <li key={`${warning}-${index}`}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-
-          <details className="owner-programs__site-section owner-programs__site-tech-details">
-            <summary>Технические детали</summary>
-            <div className="owner-programs__site-tech-body">
-              <p className="owner-programs__muted" style={{ marginTop: 0 }}>
-                Расширенные поля, JSON-конфигурация и подробная диагностика — в режиме полной панели.
-              </p>
-              <div className="lk-widget-install__field-label">publishable_key</div>
-              <div className="lk-widget-install__mono" style={{ wordBreak: "break-all" }}>
-                {data.publishable_key || "—"}
-              </div>
-              <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
-                public_id
-              </div>
-              <div className="lk-widget-install__mono" style={{ wordBreak: "break-all" }}>
-                {data.public_id || "—"}
-              </div>
-              <div className="owner-programs__site-actions" style={{ marginTop: 14 }}>
-                <Link className="tw-link link_primary link_s" to={widgetDeepHref}>
-                  Открыть полную панель виджета
-                </Link>
-              </div>
-            </div>
-          </details>
         </div>
       </div>
     );

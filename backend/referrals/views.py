@@ -45,6 +45,12 @@ from .services import (
     site_shell_avatar_data_url,
 )
 
+
+def _owner_api_error_body(detail: str, **extra: object) -> dict:
+    """Add machine-readable ``code`` (same token as ``detail``) without changing ``detail`` text."""
+    return {"detail": detail, "code": detail, **extra}
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 class ReferralCaptureView(APIView):
     """
@@ -94,7 +100,7 @@ class PartnerDashboardView(APIView):
             profile = request.user.partner_profile
         except PartnerProfile.DoesNotExist:
             return Response(
-                {"detail": "partner_profile_missing"},
+                _owner_api_error_body("partner_profile_missing"),
                 status=status.HTTP_404_NOT_FOUND,
             )
         base = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
@@ -186,10 +192,10 @@ def _owner_project_groups(user) -> list[dict]:
 
 def _owner_site_selection_required_response(user):
     return Response(
-        {
-            "detail": "site_selection_required",
-            "sites": [_owner_site_option_payload(site) for site in _owner_site_options(user)],
-        },
+        _owner_api_error_body(
+            "site_selection_required",
+            sites=[_owner_site_option_payload(site) for site in _owner_site_options(user)],
+        ),
         status=status.HTTP_409_CONFLICT,
     )
 
@@ -214,12 +220,12 @@ def _resolve_owner_site(request):
         except ValidationError:
             site = None
         if site is None:
-            return None, Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return None, Response(_owner_api_error_body("site_missing"), status=status.HTTP_404_NOT_FOUND)
         return site, None
 
     sites = list(qs[:2])
     if not sites:
-        return None, Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+        return None, Response(_owner_api_error_body("site_missing"), status=status.HTTP_404_NOT_FOUND)
     if len(sites) == 1:
         return sites[0], None
     return None, _owner_site_selection_required_response(request.user)
@@ -356,14 +362,14 @@ class ProjectOwnerDetailView(APIView):
     def get(self, request, project_id):
         project = Project.objects.filter(pk=project_id, owner=request.user).first()
         if project is None:
-            return Response({"detail": "project_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(_owner_api_error_body("project_missing"), status=status.HTTP_404_NOT_FOUND)
         sites = list(project.sites.all().order_by("-created_at", "-id"))
         return Response(_owner_project_payload(project=project, sites=sites), status=status.HTTP_200_OK)
 
     def patch(self, request, project_id):
         project = Project.objects.filter(pk=project_id, owner=request.user).first()
         if project is None:
-            return Response({"detail": "project_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(_owner_api_error_body("project_missing"), status=status.HTTP_404_NOT_FOUND)
         ser = ProjectOwnerUpdateSerializer(data=request.data, partial=True)
         if not ser.is_valid():
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -386,14 +392,14 @@ class ProjectOwnerDetailView(APIView):
     def delete(self, request, project_id):
         project = Project.objects.filter(pk=project_id, owner=request.user).first()
         if project is None:
-            return Response({"detail": "project_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(_owner_api_error_body("project_missing"), status=status.HTTP_404_NOT_FOUND)
         if project.is_default:
             return Response(
-                {"detail": "project_default_locked"},
+                _owner_api_error_body("project_default_locked"),
                 status=status.HTTP_409_CONFLICT,
             )
         if project.sites.exists():
-            return Response({"detail": "project_not_empty"}, status=status.HTTP_409_CONFLICT)
+            return Response(_owner_api_error_body("project_not_empty"), status=status.HTTP_409_CONFLICT)
         project.delete()
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
@@ -425,7 +431,7 @@ class ProjectSiteOwnerCreateView(APIView):
     def post(self, request, project_id):
         project = Project.objects.filter(pk=project_id, owner=request.user).first()
         if project is None:
-            return Response({"detail": "project_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(_owner_api_error_body("project_missing"), status=status.HTTP_404_NOT_FOUND)
         ser = ProjectSiteOwnerCreateSerializer(data=request.data)
         if not ser.is_valid():
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -446,11 +452,11 @@ class ProjectSiteOwnerCreateView(APIView):
     def delete(self, request, project_id):
         project = Project.objects.filter(pk=project_id, owner=request.user).first()
         if project is None:
-            return Response({"detail": "project_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(_owner_api_error_body("project_missing"), status=status.HTTP_404_NOT_FOUND)
         requested_public_id = _requested_site_public_id(request)
         if not requested_public_id:
             return Response(
-                {"detail": "site_public_id_required"},
+                _owner_api_error_body("site_public_id_required"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
@@ -462,7 +468,7 @@ class ProjectSiteOwnerCreateView(APIView):
         except ValidationError:
             site = None
         if site is None:
-            return Response({"detail": "site_missing"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(_owner_api_error_body("site_missing"), status=status.HTTP_404_NOT_FOUND)
         site.delete()
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
@@ -563,7 +569,7 @@ class SiteOwnerIntegrationView(APIView):
         """
         if not _requested_site_public_id(request):
             return Response(
-                {"detail": "site_public_id_required"},
+                _owner_api_error_body("site_public_id_required"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
         site, error = _resolve_owner_site(request)
@@ -600,7 +606,7 @@ class SiteOwnerSiteMembersListView(APIView):
     def get(self, request):
         if not (request.query_params.get("site_public_id") or "").strip():
             return Response(
-                {"detail": "site_public_id_required"},
+                _owner_api_error_body("site_public_id_required"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
         site, error = _resolve_owner_site(request)
@@ -620,22 +626,22 @@ class SiteOwnerIntegrationVerifyView(APIView):
         connection_check = build_site_connection_check(site)
         if not _site_embed_ready(site):
             return Response(
-                {
-                    "detail": "site_not_ready_for_verify",
-                    "site_status": site.status,
-                    "embed_readiness": readiness,
-                    "connection_check": connection_check,
-                },
+                _owner_api_error_body(
+                    "site_not_ready_for_verify",
+                    site_status=site.status,
+                    embed_readiness=readiness,
+                    connection_check=connection_check,
+                ),
                 status=status.HTTP_409_CONFLICT,
             )
         if connection_check["status"] != "found":
             return Response(
-                {
-                    "detail": "site_connection_not_found",
-                    "site_status": site.status,
-                    "embed_readiness": readiness,
-                    "connection_check": connection_check,
-                },
+                _owner_api_error_body(
+                    "site_connection_not_found",
+                    site_status=site.status,
+                    embed_readiness=readiness,
+                    connection_check=connection_check,
+                ),
                 status=status.HTTP_409_CONFLICT,
             )
         if site.status == Site.Status.DRAFT:
@@ -659,19 +665,19 @@ class SiteOwnerIntegrationActivateView(APIView):
         readiness = build_embed_readiness(site)
         if not _site_embed_ready(site):
             return Response(
-                {
-                    "detail": "site_not_ready_for_activate",
-                    "site_status": site.status,
-                    "embed_readiness": readiness,
-                },
+                _owner_api_error_body(
+                    "site_not_ready_for_activate",
+                    site_status=site.status,
+                    embed_readiness=readiness,
+                ),
                 status=status.HTTP_409_CONFLICT,
             )
         if site.status == Site.Status.DRAFT:
             return Response(
-                {
-                    "detail": "site_not_verified",
-                    "site_status": site.status,
-                },
+                _owner_api_error_body(
+                    "site_not_verified",
+                    site_status=site.status,
+                ),
                 status=status.HTTP_409_CONFLICT,
             )
         if site.status != Site.Status.ACTIVE:

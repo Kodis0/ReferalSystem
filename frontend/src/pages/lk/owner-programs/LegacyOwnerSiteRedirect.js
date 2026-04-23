@@ -73,7 +73,7 @@ export default function LegacyOwnerSiteRedirect() {
         const payload = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (!cancelled) {
-            const detail = payload?.detail;
+            const detail = payload?.code ?? payload?.detail;
             const detailMsg =
               typeof detail === "string"
                 ? detail

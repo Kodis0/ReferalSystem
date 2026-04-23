@@ -7,7 +7,7 @@
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import LkSidebar from "../pages/lk/LkSidebar";
 import CreateOwnerProjectPage from "../pages/lk/owner-programs/CreateOwnerProjectPage";
 import OwnerSitesListPage from "../pages/lk/owner-programs/OwnerSitesListPage";
@@ -274,10 +274,13 @@ describe("LkSidebar owner IA", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /With Site/i })).toHaveAttribute(
-        "href",
-        `/lk/partner/project/105/sites?site_public_id=${siteId}`,
-      );
+      const href = screen.getByRole("link", { name: /With Site/i }).getAttribute("href");
+      expect(href).toBe(`/lk/partner/project/105/sites?site_public_id=${siteId}`);
+      const u = new URL(href, "http://localhost");
+      expect(u.pathname).toBe("/lk/partner/project/105/sites");
+      expect(u.pathname).not.toMatch(/\/sites\/[0-9a-f-]{8}-/i);
+      expect(u.searchParams.get("site_public_id")).toBe(siteId);
+      expect([...u.searchParams.keys()].filter((k) => k === "site_public_id").length).toBe(1);
     });
   });
 });
@@ -583,6 +586,31 @@ describe("CreateOwnerProjectPage", () => {
         body: expect.stringMatching(/"avatar_data_url":"data:image\/svg\+xml;base64,/),
       }),
     );
+  });
+
+  it("surfaces API error code when detail is omitted on create failure", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      if (String(url).includes("/referrals/project/create/") && opts?.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({ code: "display_name_required" }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/new"]}>
+        <Routes>
+          <Route path="/lk/partner/new" element={<CreateOwnerProjectPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.type(screen.getByLabelText(/Название проекта/i), "Мой магазин");
+    await userEvent.click(screen.getByTestId("submit-form-btn"));
+    await waitFor(() => {
+      expect(screen.getByText("display_name_required")).toBeInTheDocument();
+    });
   });
 });
 
@@ -1014,7 +1042,7 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-site-management-page")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Beta site" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Beta site");
   });
 
   it("hides shell header and tabs on project info page", async () => {
@@ -1819,6 +1847,51 @@ describe("ProjectMembersPage", () => {
       expect(screen.getByText("site_missing")).toBeInTheDocument();
     });
   });
+
+  it("shows error when members request fails with machine code only", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ code: "site_missing" }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("site_missing")).toBeInTheDocument();
+    });
+  });
+
+  it("prefers machine code over detail when both are present", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ code: "site_missing", detail: "legacy_detail_only" }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("site_missing")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("legacy_detail_only")).not.toBeInTheDocument();
+  });
 });
 
 describe("ProjectSettingsPage", () => {
@@ -2033,55 +2106,7 @@ describe("ProjectSettingsPage", () => {
     });
   });
 
-  it("delete after confirmation redirects to project list", async () => {
-    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
-      const u = String(url);
-      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            public_id: siteId,
-            allowed_origins: ["https://a.example"],
-            platform_preset: "tilda",
-            project: { name: "X", description: "", avatar_data_url: "" },
-            config_json: { display_name: "X" },
-            widget_enabled: true,
-          }),
-        });
-      }
-      if (u.includes("/referrals/site/integration/") && opts?.method === "DELETE") {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ status: "deleted" }),
-        });
-      }
-      return Promise.resolve({ ok: false, json: async () => ({}) });
-    });
-
-    render(
-      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
-        <Routes>
-          <Route path="/lk/partner" element={<div data-testid="partner-list">Список</div>} />
-          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
-            <Route path="settings" element={<ProjectSettingsPage />} />
-            <Route path="sites" element={<div data-testid="project-sites-list">Сайты проекта</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("delete-project-button")).toBeInTheDocument();
-    });
-    await userEvent.type(screen.getByTestId("delete-confirm-input"), "УДАЛИТЬ");
-    await userEvent.click(screen.getByTestId("delete-project-button"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("project-sites-list")).toBeInTheDocument();
-    });
-  });
-
-  it("shows error when delete fails", async () => {
+  it("shows error when save fails with machine code only", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
       const u = String(url);
       if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
@@ -2097,11 +2122,11 @@ describe("ProjectSettingsPage", () => {
           }),
         });
       }
-      if (u.includes("/referrals/site/integration/") && opts?.method === "DELETE") {
+      if (u.includes("/referrals/site/integration/") && opts?.method === "PATCH") {
         return Promise.resolve({
           ok: false,
-          status: 404,
-          json: async () => ({ detail: "site_missing" }),
+          status: 400,
+          json: async () => ({ code: "bad_payload" }),
         });
       }
       return Promise.resolve({ ok: false, json: async () => ({}) });
@@ -2118,15 +2143,14 @@ describe("ProjectSettingsPage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("delete-project-button")).toBeInTheDocument();
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
     });
-    await userEvent.type(screen.getByTestId("delete-confirm-input"), "УДАЛИТЬ");
-    await userEvent.click(screen.getByTestId("delete-project-button"));
-
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
     await waitFor(() => {
-      expect(screen.getByText("site_missing")).toBeInTheDocument();
+      expect(screen.getByText("bad_payload")).toBeInTheDocument();
     });
   });
+
 });
 
 describe("Canonical site identity contract", () => {
@@ -2193,6 +2217,42 @@ describe("Canonical site identity contract", () => {
     };
   }
 
+  function mockLegacyOwnerSiteRedirectIntegration() {
+    return jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteFromPath,
+            allowed_origins: ["https://x.example"],
+            platform_preset: "tilda",
+            project: { id: projectId, name: "P", description: "", avatar_data_url: "" },
+            config_json: {},
+            widget_enabled: true,
+            status: "draft",
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+  }
+
+  function CanonicalPathProbe() {
+    const { pathname, search } = useLocation();
+    return (
+      <span data-testid="canonical-path-probe">
+        {pathname}
+        {search}
+      </span>
+    );
+  }
+
+  function UrlSnapshot() {
+    const { pathname, search } = useLocation();
+    return <span data-testid="url-snapshot">{pathname}{search}</span>;
+  }
+
   // --- 1. Direct open of canonical route renders exactly that site -----------
   it("canonical route renders exactly :sitePublicId from path", async () => {
     const fetchMock = mockOwnerAndIntegration({
@@ -2225,7 +2285,7 @@ describe("Canonical site identity contract", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-site-management-page")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Path site" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Path site");
     expect(screen.queryByTestId("project-create-menu-trigger")).not.toBeInTheDocument();
 
     // Integration was fetched for path site, never for primary site.
@@ -2236,8 +2296,12 @@ describe("Canonical site identity contract", () => {
     expect(integrationCalls.every((u) => !u.includes(primarySite))).toBe(true);
   });
 
+  // STAB-008 · canonical current-site policy: on `/sites/:sitePublicId/…`, path wins over
+  // `?site_public_id=` (strip on mismatch only), no rewrite when values match, project-level
+  // routes leave the query unchanged.
+
   // --- 2. Path beats query: query is ignored on a canonical site route -------
-  it("canonical site route ignores ?site_public_id= in query", async () => {
+  it("[STAB-008] site-scoped route removes conflicting site_public_id; path wins (no search)", async () => {
     const fetchMock = mockOwnerAndIntegration({
       owner: makeOwnerProjectsPayload([
         makeProject({
@@ -2261,21 +2325,161 @@ describe("Canonical site identity contract", () => {
       >
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
-            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+            <Route
+              path="sites/:sitePublicId"
+              element={
+                <>
+                  <UrlSnapshot />
+                  <ProjectSiteManagementScreen />
+                </>
+              }
+            />
           </Route>
         </Routes>
       </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Path wins" })).toBeInTheDocument();
+      expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Path wins");
     });
     expect(screen.queryByRole("heading", { name: "Query loses" })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      const snap = screen.getByTestId("url-snapshot").textContent;
+      expect(snap).toBe(`/lk/partner/project/${projectId}/sites/${siteFromPath}`);
+      expect(snap).not.toContain("site_public_id");
+    });
 
     const integrationCalls = fetchMock.mock.calls
       .map(([url]) => String(url))
       .filter((u) => u.includes("/referrals/site/integration/") && !u.includes("diagnostics"));
     expect(integrationCalls.every((u) => !u.includes(siteFromQuery))).toBe(true);
+  });
+
+  it("[STAB-008] site-scoped route strips conflicting site_public_id and preserves other query params", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [
+            makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } }),
+            makeSite({ public_id: siteFromQuery, project_id: projectId, project: { name: "P" } }),
+          ],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Path wins"),
+        [siteFromQuery]: makeIntegrationPayload(siteFromQuery, "Query loses"),
+      },
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/lk/partner/project/${projectId}/sites/${siteFromPath}?site_public_id=${siteFromQuery}&keep=1`,
+        ]}
+      >
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route
+              path="sites/:sitePublicId"
+              element={
+                <>
+                  <UrlSnapshot />
+                  <ProjectSiteManagementScreen />
+                </>
+              }
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Path wins");
+    });
+    await waitFor(() => {
+      const snap = screen.getByTestId("url-snapshot").textContent;
+      expect(snap).toBe(`/lk/partner/project/${projectId}/sites/${siteFromPath}?keep=1`);
+      expect(snap).not.toContain("site_public_id");
+    });
+  });
+
+  it("[STAB-008] site-scoped route does not rewrite URL when site_public_id matches path (case-insensitive)", async () => {
+    const pathId = siteFromPath;
+    const upperQuery = pathId.toUpperCase();
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: pathId, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [pathId]: makeIntegrationPayload(pathId, "Same id"),
+      },
+    });
+
+    const initial = `/lk/partner/project/${projectId}/sites/${pathId}?site_public_id=${encodeURIComponent(upperQuery)}`;
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route
+              path="sites/:sitePublicId"
+              element={
+                <>
+                  <UrlSnapshot />
+                  <ProjectSiteManagementScreen />
+                </>
+              }
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Same id");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("url-snapshot").textContent).toBe(initial);
+    });
+  });
+
+  it("[STAB-008] project-level route leaves site_public_id and other query params untouched", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Overview site"),
+      },
+    });
+
+    const initial = `/lk/partner/project/${projectId}/overview?site_public_id=${siteFromPath}&keep=1`;
+    render(
+      <MemoryRouter initialEntries={[initial]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<UrlSnapshot />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      const snap = screen.getByTestId("url-snapshot").textContent;
+      expect(snap).toBe(initial);
+      expect(snap).toContain(`site_public_id=${siteFromPath}`);
+      expect(snap).toContain("keep=1");
+    });
   });
 
   // --- 3. Invalid canonical site id never falls back to primary/first --------
@@ -2343,7 +2547,7 @@ describe("Canonical site identity contract", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Migrated" })).toBeInTheDocument();
+      expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Migrated");
     });
   });
 
@@ -2384,6 +2588,45 @@ describe("Canonical site identity contract", () => {
       expect(screen.getByTestId("canonical-site-landing")).toBeInTheDocument();
     });
   });
+
+  it.each([
+    ["overview", `/lk/partner/${siteFromPath}/overview`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+    ["base path (no trailing section)", `/lk/partner/${siteFromPath}`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+    ["members", `/lk/partner/${siteFromPath}/members`, `/lk/partner/project/${projectId}/sites/${siteFromPath}/members`],
+    ["settings", `/lk/partner/${siteFromPath}/settings`, `/lk/partner/project/${projectId}/sites/${siteFromPath}/settings`],
+    ["widget", `/lk/partner/${siteFromPath}/widget`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+    ["site tab", `/lk/partner/${siteFromPath}/site`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+    ["sites section", `/lk/partner/${siteFromPath}/sites`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+    ["info", `/lk/partner/${siteFromPath}/info`, `/lk/partner/project/${projectId}/info`],
+    ["unknown section (default)", `/lk/partner/${siteFromPath}/unknown`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+  ])(
+    "LegacyOwnerSiteRedirect maps legacy %s to canonical path",
+    async (_label, legacyInitialPath, expectedCanonicalPath) => {
+      mockLegacyOwnerSiteRedirectIntegration();
+
+      render(
+        <MemoryRouter initialEntries={[legacyInitialPath]}>
+          <Routes>
+            <Route path="/lk/partner/:sitePublicId/*" element={<LegacyOwnerSiteRedirect />} />
+            <Route
+              path="/lk/partner/project/:projectId/sites/:sitePublicId/members"
+              element={<CanonicalPathProbe />}
+            />
+            <Route
+              path="/lk/partner/project/:projectId/sites/:sitePublicId/settings"
+              element={<CanonicalPathProbe />}
+            />
+            <Route path="/lk/partner/project/:projectId/info" element={<CanonicalPathProbe />} />
+            <Route path="/lk/partner/project/:projectId/sites/:sitePublicId" element={<CanonicalPathProbe />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("canonical-path-probe").textContent).toBe(expectedCanonicalPath);
+      });
+    },
+  );
 
   // --- 6. Connect flow lands on canonical site route (state-driven only) ----
   it("ProjectWidgetInstallScreen redirects to project sites list when no transitional state", () => {
@@ -2433,7 +2676,7 @@ describe("Canonical site identity contract", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Canonical only" })).toBeInTheDocument();
+      expect(screen.getByTestId("project-site-management-page")).toHaveAttribute("data-site-label", "Canonical only");
     });
 
     expect(window.location.search).toBe("");

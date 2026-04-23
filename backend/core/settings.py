@@ -184,6 +184,14 @@ if not DEBUG and DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
         "Set DB_ENGINE=django.db.backends.postgresql and DB_* in backend/.env."
     )
 
+if not DEBUG:
+    _secret_key_stripped = (SECRET_KEY or "").strip()
+    if not _secret_key_stripped or _secret_key_stripped == "django-insecure-change-me-in-env":
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set to a strong secret when DJANGO_DEBUG=False "
+            "(not empty and not the default insecure placeholder). Set it in backend/.env."
+        )
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

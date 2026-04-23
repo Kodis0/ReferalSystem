@@ -31,7 +31,7 @@ function formatApiFieldErrors(payload) {
   if (!payload || typeof payload !== "object") return "";
   const parts = [];
   for (const [k, v] of Object.entries(payload)) {
-    if (k === "detail") continue;
+    if (k === "detail" || k === "code") continue;
     if (Array.isArray(v)) parts.push(`${k}: ${v.join(" ")}`);
     else if (typeof v === "string") parts.push(`${k}: ${v}`);
   }
@@ -67,7 +67,7 @@ export default function ProjectInfoPage() {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = payload?.detail;
+        const detail = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof detail === "string" ? detail : Array.isArray(detail) ? detail.join("\n") : detail != null ? String(detail) : "";
         setError(detailMsg || `Не удалось загрузить проект (${res.status})`);
@@ -112,7 +112,7 @@ export default function ProjectInfoPage() {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = payload?.detail;
+        const detail = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof detail === "string" ? detail : Array.isArray(detail) ? detail.join("\n") : detail != null ? String(detail) : "";
         setError(detailMsg || formatApiFieldErrors(payload) || `Не удалось сохранить (${res.status})`);

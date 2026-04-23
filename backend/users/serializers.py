@@ -7,6 +7,20 @@ from .models import CustomUser
 
 User = get_user_model()
 
+
+def split_fio_string(value: str) -> tuple[str, str, str]:
+    """Фамилия, имя, отчество из одной строки «Фамилия Имя Отчество»."""
+    s = (value or "").strip()
+    if not s:
+        return "", "", ""
+    parts = s.split()
+    if len(parts) == 1:
+        return parts[0], "", ""
+    if len(parts) == 2:
+        return parts[0], parts[1], ""
+    return parts[0], parts[1], " ".join(parts[2:])
+
+
 # ------------------- Регистрация -------------------
 class RegisterSerializer(serializers.ModelSerializer):
     # Сделаем username опциональным и уберем валидаторы уникальности на уровне сериализатора
@@ -71,4 +85,94 @@ class SiteCtaJoinSerializer(serializers.Serializer):
 class CurrentUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['id', 'public_id', 'username', 'email', 'first_name', 'last_name']  # любые поля для фронта
+        fields = [
+            "id",
+            "public_id",
+            "username",
+            "email",
+            "account_type",
+            "first_name",
+            "last_name",
+            "patronymic",
+            "fio",
+            "birth_date",
+            "passport_series",
+            "passport_number",
+            "passport_issued_by",
+            "passport_issue_date",
+            "passport_registration_address",
+            "avatar_data_url",
+        ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not (data.get("fio") or "").strip():
+            parts = [data.get("last_name"), data.get("first_name"), data.get("patronymic")]
+            data["fio"] = " ".join(p for p in parts if p).strip()
+        if not (data.get("account_type") or "").strip():
+            data["account_type"] = "individual"
+        return data
+
+
+ACCOUNT_TYPE_CHOICES = (
+    ("individual", "Физическое лицо"),
+    ("sole_proprietor", "Индивидуальный предприниматель"),
+    ("legal_entity", "Юридическое лицо"),
+)
+
+
+class CurrentUserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Частичное обновление профиля, паспортных данных и фото (data URL)."""
+
+    avatar_data_url = serializers.CharField(required=False, allow_blank=True, max_length=2_500_000)
+    email = serializers.EmailField(required=False)
+    birth_date = serializers.DateField(required=False, allow_null=True)
+    passport_issue_date = serializers.DateField(required=False, allow_null=True)
+    fio = serializers.CharField(required=False, allow_blank=True, max_length=400)
+    account_type = serializers.ChoiceField(
+        choices=ACCOUNT_TYPE_CHOICES,
+        required=False,
+    )
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            "email",
+            "account_type",
+            "first_name",
+            "last_name",
+            "patronymic",
+            "fio",
+            "birth_date",
+            "passport_series",
+            "passport_number",
+            "passport_issued_by",
+            "passport_issue_date",
+            "passport_registration_address",
+            "avatar_data_url",
+        ]
+
+    def update(self, instance, validated_data):
+        if "fio" in validated_data:
+            raw = validated_data.pop("fio")
+            s = raw.strip() if isinstance(raw, str) else ""
+            instance.fio = s
+            ln, fn, pat = split_fio_string(s)
+            instance.last_name = ln
+            instance.first_name = fn
+            instance.patronymic = pat
+        return super().update(instance, validated_data)
+
+    def validate_email(self, value):
+        if value is None:
+            return value
+        s = str(value).strip()
+        if not s:
+            raise serializers.ValidationError("Укажите корректный email.")
+        request = self.context.get("request")
+        if request is None:
+            return s
+        qs = User.objects.filter(email__iexact=s).exclude(pk=request.user.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Этот email уже занят другим аккаунтом.")
+        return s

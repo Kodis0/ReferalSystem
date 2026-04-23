@@ -32,6 +32,27 @@ from .models import (
     Site,
     SiteMembership,
 )
+from .services_owner_site_shell import (
+    SITE_DISPLAY_NAME_CONFIG_KEY,
+    SITE_SHELL_AVATAR_CONFIG_KEY,
+    owner_project_metadata_from_site,
+    site_owner_display_name,
+    site_shell_avatar_data_url,
+)
+from .services_site_capture_config import (
+    SITE_CAPTURE_CONFIG_KEY,
+    SITE_CAPTURE_CONFIG_VERSION,
+    SITE_CAPTURE_OPTIONAL_FIELDS,
+    SITE_CAPTURE_RECOMMENDED_FIELDS,
+    SITE_CAPTURE_REQUIRED_FIELDS,
+    sanitize_site_capture_config,
+    site_capture_config_dict,
+)
+from .services_site_cta_display import site_cta_display_label
+from .services_partner_dashboard_formatting import (
+    mask_email_for_partner_dashboard,
+    page_path_for_partner_dashboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +66,6 @@ _PROJECT_AVATAR_PALETTES = (
     ("#082F49", "#1D4ED8", "#0F3D91", "#2563EB"),
 )
 DEFAULT_OWNER_PROJECT_NAME = "Общий проект"
-SITE_SHELL_AVATAR_CONFIG_KEY = "site_avatar_data_url"
-SITE_DISPLAY_NAME_CONFIG_KEY = "site_display_name"
-SITE_CAPTURE_CONFIG_KEY = "capture_config"
-SITE_CAPTURE_CONFIG_VERSION = 1
-SITE_CAPTURE_REQUIRED_FIELDS = ("ref", "page_url", "form_id")
-SITE_CAPTURE_OPTIONAL_FIELDS = ("name", "email", "phone", "amount", "currency", "product_name")
-SITE_CAPTURE_RECOMMENDED_FIELDS = ("name", "email", "phone")
 _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
     {
         "display_name",
@@ -355,81 +369,6 @@ def link_session_attributions_to_user(
     ).update(customer_user=user)
 
 
-def site_shell_avatar_data_url(site: Site) -> str:
-    """Owner UI avatar for a Site (stored on Site only; does not change Project.avatar)."""
-    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
-    raw = cfg.get(SITE_SHELL_AVATAR_CONFIG_KEY)
-    return raw.strip() if isinstance(raw, str) else ""
-
-
-def owner_project_metadata_from_site(site: Site) -> dict[str, str]:
-    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
-    name = cfg.get("display_name")
-    description = cfg.get("description")
-    avatar_data_url = cfg.get("avatar_data_url")
-    return {
-        "name": name.strip() if isinstance(name, str) else "",
-        "description": description.strip() if isinstance(description, str) else "",
-        "avatar_data_url": avatar_data_url.strip()
-        if isinstance(avatar_data_url, str)
-        else "",
-    }
-
-
-def site_owner_display_name(site: Site) -> str:
-    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
-    raw = cfg.get(SITE_DISPLAY_NAME_CONFIG_KEY)
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()[:200]
-    project = getattr(site, "project", None)
-    if project is not None and isinstance(project.name, str) and project.name.strip():
-        return project.name.strip()[:200]
-    origins = site.allowed_origins if isinstance(site.allowed_origins, list) else []
-    for origin in origins:
-        if not isinstance(origin, str) or not origin.strip():
-            continue
-        try:
-            parsed = urlparse(origin.strip() if "://" in origin else f"https://{origin.strip()}")
-        except Exception:
-            parsed = None
-        host = parsed.hostname if parsed is not None else ""
-        if host:
-            return host[:200]
-    return ""
-
-
-def sanitize_site_capture_config(raw: Any) -> dict[str, Any]:
-    allowed = set(SITE_CAPTURE_OPTIONAL_FIELDS)
-    values = raw if isinstance(raw, Mapping) else {}
-    enabled_raw = values.get("enabled_optional_fields")
-    enabled_items = enabled_raw if isinstance(enabled_raw, list) else []
-    enabled_seen: set[str] = set()
-    enabled: list[str] = []
-    for item in enabled_items:
-        key = str(item or "").strip()
-        if key in allowed and key not in enabled_seen:
-            enabled_seen.add(key)
-            enabled.append(key)
-    return {
-        "version": SITE_CAPTURE_CONFIG_VERSION,
-        "enabled_optional_fields": enabled,
-    }
-
-
-def site_capture_config_dict(site: Site) -> dict[str, Any]:
-    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
-    has_capture_config = SITE_CAPTURE_CONFIG_KEY in cfg
-    raw = cfg.get(SITE_CAPTURE_CONFIG_KEY)
-    normalized = sanitize_site_capture_config(raw)
-    if not has_capture_config:
-        normalized["enabled_optional_fields"] = list(SITE_CAPTURE_OPTIONAL_FIELDS)
-    return {
-        **normalized,
-        "required_fields": list(SITE_CAPTURE_REQUIRED_FIELDS),
-        "recommended_fields": list(SITE_CAPTURE_RECOMMENDED_FIELDS),
-    }
-
-
 def create_project_for_site(site: Site) -> Project:
     if site.project_id:
         if getattr(site, "project", None) is not None:
@@ -460,63 +399,6 @@ def site_allows_cta_signup_membership(site: Site) -> bool:
     (config/ops milestone), not a third-party browser or Tilda attestation.
     """
     return site.status in (Site.Status.VERIFIED, Site.Status.ACTIVE)
-
-
-_CTA_SITE_LABEL_CONFIG_KEYS = (
-    "display_name",
-    "site_title",
-    "title",
-    "brand_name",
-)
-
-
-def _sanitize_cta_site_display_label(raw: str) -> str:
-    if not raw or not isinstance(raw, str):
-        return ""
-    s = raw.strip()
-    if not s:
-        return ""
-    s = "".join(ch for ch in s if ch == "\t" or ord(ch) >= 32)
-    s = " ".join(s.split())
-    return s[:120]
-
-
-def site_cta_display_label(site: Site) -> str:
-    """
-    Human-readable line for CTA / post-join UX (no new DB field).
-
-    Prefer optional string keys in ``config_json``, else the hostname of the first parsable
-    ``allowed_origins`` URL (owner already sets origins for the embed).
-    """
-    cfg = site.config_json if isinstance(site.config_json, dict) else {}
-    for key in _CTA_SITE_LABEL_CONFIG_KEYS:
-        val = cfg.get(key)
-        if isinstance(val, str):
-            label = _sanitize_cta_site_display_label(val)
-            if label:
-                return label
-    origins = site.allowed_origins or []
-    if not isinstance(origins, list):
-        return ""
-    for origin in origins:
-        if not isinstance(origin, str):
-            continue
-        o = origin.strip()
-        if not o:
-            continue
-        if "://" not in o:
-            o = f"https://{o}"
-        try:
-            host = (urlparse(o).hostname or "").strip().lower()
-        except ValueError:
-            continue
-        if not host:
-            continue
-        if host.startswith("www."):
-            host = host[4:]
-        if host:
-            return host[:120]
-    return ""
 
 
 def resolve_valid_attribution(
@@ -1310,48 +1192,6 @@ def upsert_order_from_tilda_payload(
 
     order.refresh_from_db()
     return order, created
-
-
-def mask_email_for_partner_dashboard(raw: str) -> Optional[str]:
-    """
-    Return a heavily redacted email for partner-facing surfaces (not reversible).
-    If the value does not look like a normal email, returns None (do not echo arbitrary PII).
-    """
-    s = (raw or "").strip()
-    if not s or "@" not in s:
-        return None
-    local, _, domain = s.partition("@")
-    local = local.strip()
-    domain = domain.strip()
-    if not local or not domain:
-        return None
-    domain_lower = domain.lower()
-    if len(local) == 1:
-        masked_local = "*"
-    else:
-        masked_local = f"{local[0]}***"
-    return f"{masked_local}@{domain_lower}"
-
-
-def page_path_for_partner_dashboard(page_url: str, *, max_len: int = 96) -> str:
-    """
-    Page reference for partners: path only (no query string), never the full raw URL in the UI payload.
-    """
-    s = (page_url or "").strip()
-    if not s:
-        return ""
-    try:
-        parsed = urlparse(s)
-        if parsed.scheme or parsed.netloc:
-            path = parsed.path or "/"
-        else:
-            path = s.split("?", 1)[0].split("#", 1)[0]
-    except Exception:
-        path = s.split("?", 1)[0].split("#", 1)[0]
-    path = path.strip() or "/"
-    if len(path) > max_len:
-        return f"{path[: max_len - 1]}…"
-    return path
 
 
 def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: str) -> dict:

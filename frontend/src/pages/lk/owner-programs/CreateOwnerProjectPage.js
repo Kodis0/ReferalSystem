@@ -15,7 +15,7 @@ function formatApiFieldErrors(payload) {
   if (!payload || typeof payload !== "object") return "";
   const parts = [];
   for (const [k, v] of Object.entries(payload)) {
-    if (k === "detail") continue;
+    if (k === "detail" || k === "code") continue;
     if (Array.isArray(v)) parts.push(`${k}: ${v.join(" ")}`);
     else if (typeof v === "string") parts.push(`${k}: ${v}`);
   }
@@ -205,7 +205,7 @@ export default function CreateOwnerProjectPage() {
           }
           setFieldErrors(fe);
         }
-        const dtl = payload.detail;
+        const dtl = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof dtl === "string" ? dtl : Array.isArray(dtl) ? dtl.join("\n") : dtl != null ? String(dtl) : "";
         const flat = formatApiFieldErrors(payload);

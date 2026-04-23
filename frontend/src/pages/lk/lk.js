@@ -9,6 +9,7 @@ import LampIcon from "../../static/images/Lamp.svg";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
 import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
 import Settings from "./settings/settings"; // импорт компонента Settings
+import AccountPersonalDataPage from "./settings/AccountPersonalDataPage";
 import LkSidebar from "./LkSidebar";
 import NewsPage from "./news/news";
 import BugPage from "./bug/bug";
@@ -97,7 +98,7 @@ function LK() {
   const personalizationRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useCurrentUser();
+  const { user, fetchUser } = useCurrentUser();
   const { logout } = useAuth();
 
   const accountId = formatAccountId(user);
@@ -347,7 +348,7 @@ function LK() {
 
             {menuOpen && (
               <div className="lk-header__menu" role="menu">
-                <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => navigate("/LK/settings")}>
+                <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => navigate("/lk/settings")}>
                   Настройки аккаунта
                 </button>
                 <button
@@ -536,7 +537,11 @@ function LK() {
           <Routes>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="settings" element={<Settings />} />
+            <Route
+              path="settings/personal"
+              element={<AccountPersonalDataPage user={user} fetchUser={fetchUser} />}
+            />
+            <Route path="settings" element={<Settings user={user} fetchUser={fetchUser} />} />
             <Route path="news" element={<NewsPage />} />
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />

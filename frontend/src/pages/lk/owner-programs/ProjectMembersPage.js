@@ -73,7 +73,7 @@ export default function ProjectMembersPage() {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const d = payload.detail;
+        const d = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof d === "string" ? d : Array.isArray(d) ? d.join("\n") : d != null ? String(d) : "";
         setCount(null);

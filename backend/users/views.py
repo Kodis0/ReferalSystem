@@ -26,6 +26,7 @@ from referrals.services import (
 
 from .models import CustomUser
 from .serializers import (
+    CurrentUserProfileUpdateSerializer,
     CurrentUserSerializer,
     LoginSerializer,
     RegisterSerializer,
@@ -205,6 +206,18 @@ class CurrentUserView(APIView):
     def get(self, request):
         serializer = CurrentUserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        serializer = CurrentUserProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        request.user.refresh_from_db()
+        return Response(CurrentUserSerializer(request.user).data, status=status.HTTP_200_OK)
 
 
 class MyProgramsView(APIView):

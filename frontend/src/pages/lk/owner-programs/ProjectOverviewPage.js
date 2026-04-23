@@ -296,7 +296,7 @@ export default function ProjectOverviewPage() {
         });
         const payload = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const detail = payload?.detail;
+          const detail = payload?.code ?? payload?.detail;
           const detailMsg =
             typeof detail === "string" ? detail : Array.isArray(detail) ? detail.join("\n") : detail != null ? String(detail) : "";
           throw new Error(detailMsg || `Не удалось удалить сайт (${res.status})`);

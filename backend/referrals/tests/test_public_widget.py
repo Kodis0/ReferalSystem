@@ -13,8 +13,11 @@ from referrals.public_ingest_contract import (
     CODE_DUPLICATE_SUPPRESSED,
     CODE_INVALID_CLIENT_OUTCOME,
     CODE_INVALID_EVENT,
+    CODE_INVALID_KEY,
+    CODE_INVALID_ORIGIN,
     CODE_INVALID_PAYLOAD,
     CODE_LEAD_EVENT_NOT_FOUND,
+    CODE_ORIGIN_REQUIRED,
     CODE_RATE_LIMITED,
     CODE_SITE_NOT_FOUND,
     INTERNAL_WIDGET_DISABLED,
@@ -171,8 +174,8 @@ class PublicWidgetApiTests(TestCase):
         self.assertEqual(r.status_code, 201)
         data = r.json()
         self.assertEqual(data["status"], "ok")
-        self.assertEqual(data["result"], "created")
-        self.assertEqual(data["code"], "created")
+        self.assertEqual(data["result"], CODE_CREATED)
+        self.assertEqual(data["code"], CODE_CREATED)
         self.assertEqual(data["event"], "lead_submitted")
         ev = ReferralLeadEvent.objects.get(site=self.site)
         self.assertEqual(data["lead_event_id"], ev.id)
@@ -264,7 +267,9 @@ class PublicWidgetApiTests(TestCase):
         self.assertEqual(r.status_code, 400)
         j = r.json()
         self.assertEqual(j.get("status"), "error")
-        self.assertEqual(j.get("code"), "invalid_event")
+        self.assertEqual(j.get("code"), CODE_INVALID_EVENT)
+        self.assertEqual(j.get("detail"), CODE_INVALID_EVENT)
+        self.assertIn("message", j)
 
     def test_lead_rejects_non_object_json(self):
         q = f"?site={self.site.public_id}"
@@ -277,7 +282,11 @@ class PublicWidgetApiTests(TestCase):
             HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
         )
         self.assertEqual(r.status_code, 400)
-        self.assertEqual(r.json().get("code"), "invalid_payload")
+        j = r.json()
+        self.assertEqual(j.get("status"), "error")
+        self.assertEqual(j.get("code"), CODE_INVALID_PAYLOAD)
+        self.assertEqual(j.get("detail"), CODE_INVALID_PAYLOAD)
+        self.assertIn("message", j)
 
     def test_lead_unknown_site(self):
         url = "/public/v1/events/leads?site=" + str(uuid.uuid4())
@@ -289,7 +298,11 @@ class PublicWidgetApiTests(TestCase):
             HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
         )
         self.assertEqual(r.status_code, 404)
-        self.assertEqual(r.json().get("code"), CODE_SITE_NOT_FOUND)
+        j = r.json()
+        self.assertEqual(j.get("status"), "error")
+        self.assertEqual(j.get("code"), CODE_SITE_NOT_FOUND)
+        self.assertEqual(j.get("detail"), CODE_SITE_NOT_FOUND)
+        self.assertIn("message", j)
 
     @override_settings(DEBUG=False)
     def test_lead_widget_disabled_public_same_as_not_found(self):
@@ -305,7 +318,11 @@ class PublicWidgetApiTests(TestCase):
             HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
         )
         self.assertEqual(r.status_code, 404)
-        self.assertEqual(r.json().get("code"), CODE_SITE_NOT_FOUND)
+        j = r.json()
+        self.assertEqual(j.get("status"), "error")
+        self.assertEqual(j.get("code"), CODE_SITE_NOT_FOUND)
+        self.assertEqual(j.get("detail"), CODE_SITE_NOT_FOUND)
+        self.assertIn("message", j)
 
     @override_settings(
         LEAD_INGEST_THROTTLE_IP="3/minute",
@@ -333,7 +350,11 @@ class PublicWidgetApiTests(TestCase):
                 self.assertIn(r.status_code, (200, 201), msg=r.content)
             else:
                 self.assertEqual(r.status_code, 429)
-                self.assertEqual(r.json().get("code"), CODE_RATE_LIMITED)
+                jr = r.json()
+                self.assertEqual(jr.get("status"), "error")
+                self.assertEqual(jr.get("code"), CODE_RATE_LIMITED)
+                self.assertEqual(jr.get("detail"), CODE_RATE_LIMITED)
+                self.assertIn("message", jr)
                 self.assertEqual(r["Access-Control-Allow-Origin"], self.origin)
 
     @override_settings(
@@ -362,7 +383,11 @@ class PublicWidgetApiTests(TestCase):
                 self.assertEqual(r.status_code, 201, msg=r.content)
             else:
                 self.assertEqual(r.status_code, 429)
-                self.assertEqual(r.json().get("code"), CODE_RATE_LIMITED)
+                jr = r.json()
+                self.assertEqual(jr.get("status"), "error")
+                self.assertEqual(jr.get("code"), CODE_RATE_LIMITED)
+                self.assertEqual(jr.get("detail"), CODE_RATE_LIMITED)
+                self.assertIn("message", jr)
 
     @override_settings(DEBUG=False)
     def test_lead_ingest_invalid_key_has_cors(self):
@@ -376,8 +401,31 @@ class PublicWidgetApiTests(TestCase):
             HTTP_X_PUBLISHABLE_KEY="wrong-key",
         )
         self.assertEqual(r.status_code, 403)
-        self.assertEqual(r.json().get("code"), "invalid_key")
+        j = r.json()
+        self.assertEqual(j.get("status"), "error")
+        self.assertEqual(j.get("code"), CODE_INVALID_KEY)
+        self.assertEqual(j.get("detail"), CODE_INVALID_KEY)
+        self.assertIn("message", j)
         self.assertEqual(r["Access-Control-Allow-Origin"], self.origin)
+
+    @override_settings(DEBUG=False)
+    def test_lead_ingest_post_rejects_invalid_origin_contract(self):
+        q = f"?site={self.site.public_id}"
+        url = "/public/v1/events/leads" + q
+        r = self.client.post(
+            url,
+            data={"event": "lead_submitted", "email": "x@y.co"},
+            format="json",
+            HTTP_ORIGIN="https://evil.example",
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 403)
+        j = r.json()
+        self.assertEqual(j.get("status"), "error")
+        self.assertEqual(j.get("code"), CODE_INVALID_ORIGIN)
+        self.assertEqual(j.get("detail"), CODE_INVALID_ORIGIN)
+        self.assertIn("message", j)
+        # Gate rejects disallowed origins before CORS headers are attached (_cors_headers is empty).
 
     @override_settings(DEBUG=False)
     def test_lead_ingest_missing_origin_structured(self):
@@ -390,7 +438,11 @@ class PublicWidgetApiTests(TestCase):
             HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
         )
         self.assertEqual(r.status_code, 403)
-        self.assertEqual(r.json().get("code"), "origin_required")
+        j = r.json()
+        self.assertEqual(j.get("status"), "error")
+        self.assertEqual(j.get("code"), CODE_ORIGIN_REQUIRED)
+        self.assertEqual(j.get("detail"), CODE_ORIGIN_REQUIRED)
+        self.assertIn("message", j)
 
     @override_settings(
         LEAD_INGEST_EXPOSE_COUNTERS=True,

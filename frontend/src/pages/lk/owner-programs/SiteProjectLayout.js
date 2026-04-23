@@ -179,6 +179,10 @@ export default function SiteProjectLayout() {
   const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false);
   const [deleteProjectState, setDeleteProjectState] = useState("idle");
   const [deleteProjectError, setDeleteProjectError] = useState("");
+  const [siteShellToolbar, setSiteShellToolbarSlot] = useState(null);
+  const setSiteShellToolbar = useCallback((node) => {
+    setSiteShellToolbarSlot(node);
+  }, []);
   const createMenuRef = useRef(null);
   const locationViewMode = location.state?.projectViewMode;
   // Project's primary site is a project-level concept: only used by project-level
@@ -408,6 +412,22 @@ export default function SiteProjectLayout() {
     if (isSiteRouteShell) setCreateMenuOpen(false);
   }, [isSiteRouteShell]);
 
+  // Site-scoped shell (`/sites/:sitePublicId/...`): path wins over `?site_public_id=`; strip only on mismatch.
+  useEffect(() => {
+    if (!isSiteRouteShell || !routeSitePublicId) return;
+    const params = new URLSearchParams(location.search);
+    const raw = params.get("site_public_id");
+    const q = typeof raw === "string" ? raw.trim() : "";
+    if (!q) return;
+    if (q.toLowerCase() === routeSitePublicId.trim().toLowerCase()) return;
+    params.delete("site_public_id");
+    const search = params.toString();
+    navigate(
+      { pathname: location.pathname, search: search ? `?${search}` : "" },
+      { replace: true, state: location.state },
+    );
+  }, [isSiteRouteShell, routeSitePublicId, location.pathname, location.search, location.state, navigate]);
+
   const saveAvatar = useCallback(
     async (nextAvatarDataUrl, successMessage) => {
       const url = API_ENDPOINTS.projectDetail(numericProjectId);
@@ -419,7 +439,7 @@ export default function SiteProjectLayout() {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = payload?.detail;
+        const detail = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof detail === "string"
             ? detail
@@ -465,7 +485,7 @@ export default function SiteProjectLayout() {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = payload?.detail;
+        const detail = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof detail === "string"
             ? detail
@@ -603,7 +623,7 @@ export default function SiteProjectLayout() {
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const detail = payload?.detail;
+        const detail = payload?.code ?? payload?.detail;
         const detailMsg =
           typeof detail === "string" ? detail : Array.isArray(detail) ? detail.join("\n") : detail != null ? String(detail) : "";
         throw new Error(detailMsg || `Не удалось удалить проект (${res.status})`);
@@ -638,7 +658,7 @@ export default function SiteProjectLayout() {
         });
         const payload = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const detail = payload?.detail;
+          const detail = payload?.code ?? payload?.detail;
           const detailMsg =
             typeof detail === "string"
               ? detail
@@ -695,6 +715,13 @@ export default function SiteProjectLayout() {
     hasProjectId && location.pathname === `${projectBasePath}/widget` && locationViewMode === "connect-site";
   const hideShellChromeForFocusedConnect = onProjectWidgetConnectPath;
   const hideShellChrome = hideShellChromeForSiteCreate || hideShellChromeForFocusedConnect;
+
+  useEffect(() => {
+    if (!isSiteRouteShell || hideShellChrome || isProjectInfoPage) {
+      setSiteShellToolbarSlot(null);
+    }
+  }, [hideShellChrome, isProjectInfoPage, isSiteRouteShell]);
+
   const outletContext = useMemo(
     () => ({
       base: projectBasePath,
@@ -724,6 +751,7 @@ export default function SiteProjectLayout() {
       projectBasePath,
       toggleAddSiteForm,
       handleAddSite,
+      setSiteShellToolbar,
     }),
     [
       addSiteError,
@@ -745,6 +773,7 @@ export default function SiteProjectLayout() {
       loadHead,
       numericProjectId,
       toggleAddSiteForm,
+      setSiteShellToolbar,
     ],
   );
 
@@ -892,6 +921,11 @@ export default function SiteProjectLayout() {
               </div>
             </div>
             <div className="owner-programs__shell-header-actions">
+              {isSiteRouteShell && siteShellToolbar ? (
+                <div className="owner-programs__site-shell-toolbar" role="toolbar" aria-label="Действия по сайту">
+                  {siteShellToolbar}
+                </div>
+              ) : null}
               {!isDefaultProject && Array.isArray(projectEntry?.sites) && projectEntry.sites.length === 0 ? (
                 <button
                   type="button"
