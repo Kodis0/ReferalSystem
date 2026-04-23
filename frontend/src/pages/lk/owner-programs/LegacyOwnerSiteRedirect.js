@@ -30,23 +30,23 @@ function currentOwnerSection(pathname, sitePublicId) {
 // sections that no longer carry a site param in the URL.
 function buildCanonicalTargetPath(projectId, section, sitePublicId) {
   const projectBase = `/lk/partner/project/${projectId}`;
+  const siteBase = `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
   switch (section) {
-    case "overview":
     case "site":
     case "widget":
-      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
+      return `${siteBase}/widget`;
     case "dashboard":
-      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}/dashboard`;
+      return `${siteBase}/dashboard`;
     case "members":
-      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}/members`;
+      return `${siteBase}/members`;
     case "settings":
-      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}/settings`;
+      return `${siteBase}/settings`;
     case "info":
       return `${projectBase}/info`;
+    case "overview":
     case "sites":
-      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
     default:
-      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
+      return `${siteBase}/dashboard`;
   }
 }
 

@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate, Navigate, Outlet, useLocation } from "react-router-dom";
+import { Routes, Route, Link, useNavigate, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Search, UserRound } from "lucide-react";
 import LumoLogo from "../../static/images/LUMO2.svg";
@@ -29,7 +29,20 @@ import ProjectInfoPage from "./owner-programs/ProjectInfoPage";
 import SiteDashboardPage from "./owner-programs/SiteDashboardPage";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
+import { isUuidString } from "../registration/postJoinNavigation";
 import "./lk.css";
+
+/** Базовый URL сайта ведёт на дашборд; «Виджет» — отдельный сегмент `/widget`. */
+function SiteShellDefaultToDashboard() {
+  const { projectId, sitePublicId } = useParams();
+  const raw = String(sitePublicId || "").trim();
+  const pid = String(projectId ?? "");
+  if (!isUuidString(raw)) {
+    return <Navigate to={`/lk/partner/project/${pid}/sites`} replace />;
+  }
+  const sid = encodeURIComponent(raw);
+  return <Navigate to={`/lk/partner/project/${pid}/sites/${sid}/dashboard`} replace />;
+}
 
 function formatAccountId(user) {
   const publicId = typeof user?.public_id === "string" ? user.public_id.trim().toLowerCase() : "";
@@ -123,7 +136,6 @@ function LK() {
     return saved === "en" ? "en" : "ru";
   });
 
-  const horizontalPadding = panelWidthMode === "fixed" ? 240 : 120;
   const lkHeaderBg = lkTheme === "light" ? "#ffffff" : "#242F3D";
   const currentPath = location.pathname.toLowerCase();
 
@@ -194,7 +206,7 @@ function LK() {
           top: 0,
           zIndex: 100,
           height: 76,
-          padding: `0 ${horizontalPadding}px`,
+          padding: 0,
           background: lkHeaderBg,
           borderBottom: "none",
         }}
@@ -529,10 +541,7 @@ function LK() {
         </div>
       )}
 
-      <div
-        className="lk-layout"
-        style={{ "--lk-layout-inline-padding": `${horizontalPadding}px` }}
-      >
+      <div className="lk-layout">
         <LkSidebar />
         <div className="LK-content">
           <Routes>
@@ -556,7 +565,8 @@ function LK() {
                 <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
                 <Route path="sites/:sitePublicId/settings" element={<ProjectSettingsPage />} />
                 <Route path="sites/:sitePublicId/dashboard" element={<SiteDashboardPage />} />
-                <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+                <Route path="sites/:sitePublicId/widget" element={<ProjectSiteManagementScreen />} />
+                <Route path="sites/:sitePublicId" element={<SiteShellDefaultToDashboard />} />
                 <Route path="info" element={<ProjectInfoPage />} />
                 <Route path="site" element={<ProjectSiteManagementScreen legacyTabRoute />} />
                 <Route path="widget" element={<ProjectWidgetInstallScreen />} />

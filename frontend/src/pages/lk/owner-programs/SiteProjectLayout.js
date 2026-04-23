@@ -28,6 +28,9 @@ function withSitePublicIdQuery(url, sitePublicId) {
   }
 }
 
+/** Интервал проверки «сайт в сети» в шапке карточки сайта (серверный HTTP-зонд). */
+const SITE_REACHABILITY_POLL_MS = 5 * 60 * 1000;
+
 // Project-level shell never derives "current site" from a fallback chain. Site-level
 // screens read useParams().sitePublicId directly. The shell only knows the route param
 // (when on canonical site route) and the project's primary site (for project-level
@@ -184,6 +187,8 @@ export default function SiteProjectLayout() {
   const setSiteShellToolbar = useCallback((node) => {
     setSiteShellToolbarSlot(node);
   }, []);
+  /** idle — не показываем; no_url — нет origin; checking | online | offline — бейдж */
+  const [siteReachability, setSiteReachability] = useState({ phase: "idle" });
   const createMenuRef = useRef(null);
   const locationViewMode = location.state?.projectViewMode;
   // Project's primary site is a project-level concept: only used by project-level
@@ -222,7 +227,7 @@ export default function SiteProjectLayout() {
   /** Вкладка «Виджет» на маршруте конкретного сайта. */
   const widgetSiteNavPath = useMemo(() => {
     if (!hasProjectId) return "/lk/partner";
-    if (shellScopedSitePublicIdForNav) return buildScopedProjectSitePath(shellScopedSitePublicIdForNav);
+    if (shellScopedSitePublicIdForNav) return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/widget`;
     return buildScopedProjectPath("sites");
   }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
 
@@ -611,6 +616,12 @@ export default function SiteProjectLayout() {
     navigate(buildScopedProjectPath("info"));
   }, [buildScopedProjectPath, navigate]);
 
+  const openSiteSettings = useCallback(() => {
+    if (!shellScopedSitePublicIdForNav) return;
+    if (location.pathname === settingsSiteNavPath) return;
+    navigate(settingsSiteNavPath);
+  }, [location.pathname, navigate, settingsSiteNavPath, shellScopedSitePublicIdForNav]);
+
   const openDeleteProjectDialog = useCallback(() => {
     setDeleteProjectError("");
     setDeleteProjectDialogOpen(true);
@@ -716,15 +727,65 @@ export default function SiteProjectLayout() {
       ? "Проект…"
       : headTitle;
   const siteShellOrigin = sitePrimaryDomainLabel(siteRowForShell);
-  const isDefaultProject = Boolean(
-    projectEntry?.project?.is_default || projectEntry?.is_default || headTitle === "Общий проект",
-  );
   const isProjectInfoPage = location.pathname === `${projectBasePath}/info`;
   const hideShellChromeForSiteCreate = addSiteOpen;
   const onProjectWidgetConnectPath =
     hasProjectId && location.pathname === `${projectBasePath}/widget` && locationViewMode === "connect-site";
   const hideShellChromeForFocusedConnect = onProjectWidgetConnectPath;
   const hideShellChrome = hideShellChromeForSiteCreate || hideShellChromeForFocusedConnect;
+
+  useEffect(() => {
+    if (!isSiteRouteShell || hideShellChrome || !routeSitePublicId) {
+      setSiteReachability({ phase: "idle" });
+      return undefined;
+    }
+    if (headLoading || !siteRowForShell) {
+      return undefined;
+    }
+    if (!siteShellOrigin.trim()) {
+      setSiteReachability({ phase: "no_url" });
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function runOnce() {
+      if (cancelled) return;
+      setSiteReachability((prev) => (prev.phase === "idle" ? { phase: "checking" } : prev));
+      try {
+        const url = withSitePublicIdQuery(API_ENDPOINTS.siteReachability, routeSitePublicId);
+        const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          setSiteReachability((prev) => ({
+            phase: prev.phase === "online" || prev.phase === "offline" ? prev.phase : "idle",
+          }));
+          return;
+        }
+        setSiteReachability({
+          phase: body.reachable ? "online" : "offline",
+        });
+      } catch {
+        if (!cancelled) {
+          setSiteReachability((prev) => ({
+            phase: prev.phase === "online" || prev.phase === "offline" ? prev.phase : "idle",
+          }));
+        }
+      }
+    }
+
+    runOnce();
+    const timer = window.setInterval(runOnce, SITE_REACHABILITY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [headLoading, hideShellChrome, isSiteRouteShell, routeSitePublicId, siteRowForShell, siteShellOrigin]);
+
+  const isDefaultProject = Boolean(
+    projectEntry?.project?.is_default || projectEntry?.is_default || headTitle === "Общий проект",
+  );
 
   useEffect(() => {
     if (!isSiteRouteShell || hideShellChrome || isProjectInfoPage) {
@@ -790,6 +851,14 @@ export default function SiteProjectLayout() {
   if (!hasProjectId) {
     return <Navigate to="/lk/partner" replace />;
   }
+
+  const showSiteReachability =
+    isSiteRouteShell &&
+    !headLoading &&
+    siteRowForShell &&
+    (siteReachability.phase === "checking" ||
+      siteReachability.phase === "online" ||
+      siteReachability.phase === "offline");
 
   return (
     <div
@@ -891,44 +960,113 @@ export default function SiteProjectLayout() {
                   )}
                 </label>
               )}
-              <div
-                className={`owner-programs__shell-header-copy${
-                  isSiteRouteShell ? "" : " owner-programs__shell-header-copy_clickable"
-                }`}
-                role={isSiteRouteShell ? undefined : "button"}
-                tabIndex={isSiteRouteShell ? undefined : 0}
-                onClick={isSiteRouteShell ? undefined : openProjectInfo}
-                onKeyDown={
-                  isSiteRouteShell
-                    ? undefined
-                    : (event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          openProjectInfo();
-                        }
-                      }
-                }
-              >
-                <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
-                <p className="owner-programs__shell-sub">
-                  {headLoading && !isSiteRouteShell ? (
-                    <span className="lk-partner__muted">Загрузка…</span>
-                  ) : headLoading && isSiteRouteShell && !siteRowForShell ? (
-                    <span className="lk-partner__muted">Загрузка…</span>
-                  ) : isSiteRouteShell ? (
-                    siteShellOrigin || "Адрес сайта не указан"
-                  ) : projectComment ? (
-                    projectComment
-                  ) : (
-                    "Комментарий к проекту не указан"
-                  )}
-                </p>
-                {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
-                {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
-                  <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
-                ) : null}
-                {!avatarError && deleteProjectError ? <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p> : null}
-              </div>
+              {isSiteRouteShell ? (
+                <div className="owner-programs__shell-header-copy">
+                  <div
+                    className="owner-programs__shell-header-copy_clickable owner-programs__shell-header-title-hit"
+                    role="button"
+                    tabIndex={0}
+                    onClick={openSiteSettings}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      openSiteSettings();
+                    }}
+                    aria-label="Открыть настройки сайта"
+                  >
+                    <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
+                  </div>
+                  <div
+                    className={
+                      showSiteReachability
+                        ? "owner-programs__shell-meta-row owner-programs__shell-meta-row_site"
+                        : "owner-programs__shell-meta-row"
+                    }
+                  >
+                    {showSiteReachability ? (
+                      <p className="owner-programs__shell-reachability" role="status" aria-live="polite">
+                        <span
+                          className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${
+                            siteReachability.phase === "online"
+                              ? "online"
+                              : siteReachability.phase === "offline"
+                                ? "offline"
+                                : "pending"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <span className="owner-programs__shell-reachability-text">
+                          {siteReachability.phase === "checking"
+                            ? "Проверка доступности…"
+                            : siteReachability.phase === "online"
+                              ? "В сети"
+                              : "Не в сети"}
+                        </span>
+                      </p>
+                    ) : null}
+                    <div
+                      className="owner-programs__shell-header-copy_clickable owner-programs__shell-header-domain-hit"
+                      role="button"
+                      tabIndex={0}
+                      onClick={openSiteSettings}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        openSiteSettings();
+                      }}
+                      aria-label="Открыть настройки сайта — домен и адрес"
+                    >
+                      <p className="owner-programs__shell-sub">
+                        {headLoading && !siteRowForShell ? (
+                          <span className="lk-partner__muted">Загрузка…</span>
+                        ) : (
+                          siteShellOrigin || "Адрес сайта не указан"
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
+                  {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
+                    <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
+                  ) : null}
+                  {!avatarError && deleteProjectError ? (
+                    <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <div
+                  className="owner-programs__shell-header-copy owner-programs__shell-header-copy_clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={openProjectInfo}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    openProjectInfo();
+                  }}
+                  aria-label="Открыть информацию о проекте"
+                >
+                  <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
+                  <div className="owner-programs__shell-meta-row">
+                    <p className="owner-programs__shell-sub">
+                      {headLoading ? (
+                        <span className="lk-partner__muted">Загрузка…</span>
+                      ) : projectComment ? (
+                        projectComment
+                      ) : (
+                        "Комментарий к проекту не указан"
+                      )}
+                    </p>
+                  </div>
+                  {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
+                  {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
+                    <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
+                  ) : null}
+                  {!avatarError && deleteProjectError ? (
+                    <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p>
+                  ) : null}
+                </div>
+              )}
             </div>
             <div className="owner-programs__shell-header-actions">
               {isSiteRouteShell && siteShellToolbar ? (

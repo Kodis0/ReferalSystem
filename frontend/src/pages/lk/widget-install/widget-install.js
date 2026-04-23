@@ -214,7 +214,7 @@ function buildProjectSiteWidgetPath(integrationPayload, selectedSitePublicId, pr
     (projectBasePathState && String(projectBasePathState).trim()) ||
     (projectIdFromRoute ? `/lk/partner/project/${projectIdFromRoute}` : "");
   if (!base) return "";
-  return `${base}/sites/${encodeURIComponent(siteId)}`;
+  return `${base}/sites/${encodeURIComponent(siteId)}/widget`;
 }
 
 function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyHint, steps = null, compact = false }) {
@@ -570,7 +570,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
 
   const siteManagementPath = useMemo(() => {
     if (!effectiveProjectBasePath || !selectedSitePublicId) return "";
-    return `${effectiveProjectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}`;
+    return `${effectiveProjectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}/widget`;
   }, [effectiveProjectBasePath, selectedSitePublicId]);
 
   useEffect(() => {

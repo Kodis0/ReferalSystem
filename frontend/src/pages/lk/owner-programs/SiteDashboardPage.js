@@ -36,11 +36,12 @@ function parseSeriesNumbers(rows, key) {
   });
 }
 
-const CHART_VB_W = 562;
-const CHART_VB_H = 268;
-/** Symmetric plot insets; left band matches title/subtitle (text starts at x=0 in SVG). */
+const CHART_VB_W = 604;
+const CHART_VB_H = 306;
+/** Plot insets; Y ticks sit just left of the plot (text-anchor end) so no dead band before the grid. */
 const CHART_PAD = { top: 12, right: 52, bottom: 28, left: 52 };
-const CHART_Y_LABEL_ANCHOR_X = 0;
+/** Gap between Y tick labels and vertical grid (SVG user units). */
+const CHART_Y_LABEL_GAP = 6;
 const CHART_Y_TICKS = 6;
 const CHART_X_MAX_TICKS = 8;
 
@@ -221,7 +222,11 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
   const wrapRef = useRef(null);
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
-  const geom = useMemo(() => buildLineGeometry(values, CHART_VB_W, CHART_VB_H, CHART_PAD), [values]);
+  const chartPad = useMemo(
+    () => ({ ...CHART_PAD, left: fmt === formatMoney ? 64 : 50 }),
+    [fmt],
+  );
+  const geom = useMemo(() => buildLineGeometry(values, CHART_VB_W, CHART_VB_H, chartPad), [values, chartPad]);
   const ticks = useMemo(() => {
     if (!byDay.length) return null;
     const n = byDay.length;
@@ -377,9 +382,9 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
           {geom.yTicks.map((row, i) => (
             <text
               key={`yl-${i}`}
-              x={CHART_Y_LABEL_ANCHOR_X}
+              x={geom.innerLeft - CHART_Y_LABEL_GAP}
               y={row.y}
-              textAnchor="start"
+              textAnchor="end"
               dominantBaseline="middle"
             >
               {formatYAxisTickValue(row.value, geom.y1 - geom.y0, fmt)}
@@ -502,7 +507,6 @@ export default function SiteDashboardPage() {
   const kpis = payload?.kpis && typeof payload.kpis === "object" ? payload.kpis : {};
 
   const recentSales = Array.isArray(payload?.recent_sales) ? payload.recent_sales : [];
-  const chartCapped = Boolean(payload?.series?.chart_capped_to_365d);
   const periodLabel = PERIODS.find((p) => p.id === period)?.label ?? "7 дней";
 
   if (!siteId) {
@@ -575,9 +579,6 @@ export default function SiteDashboardPage() {
             </span>
           </h2>
         </div>
-        {chartCapped ? (
-          <p className="owner-programs__site-dash-hint">Графики: последние 365 дней (при выборе «Всё время»).</p>
-        ) : null}
       </div>
 
       {loading ? <p className="lk-partner__muted">Загрузка…</p> : null}

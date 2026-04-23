@@ -248,7 +248,7 @@ export default function ProjectOverviewPage() {
   const openSiteCard = useCallback(
     (sitePublicId) => {
       if (!sitePublicId || typeof buildProjectSitePath !== "function") return;
-      navigate(buildProjectSitePath(sitePublicId));
+      navigate(`${buildProjectSitePath(sitePublicId)}/dashboard`);
     },
     [buildProjectSitePath, navigate],
   );

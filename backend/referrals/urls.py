@@ -14,6 +14,7 @@ from .views import (
     SiteOwnerIntegrationDiagnosticsView,
     SiteOwnerIntegrationView,
     SiteOwnerIntegrationVerifyView,
+    SiteOwnerReachabilityView,
     SiteOwnerSiteMembersListView,
     SiteOwnerSitesListView,
 )
@@ -61,6 +62,11 @@ urlpatterns = [
         "site/integration/diagnostics/",
         SiteOwnerIntegrationDiagnosticsView.as_view(),
         name="site-owner-integration-diagnostics",
+    ),
+    path(
+        "site/reachability/",
+        SiteOwnerReachabilityView.as_view(),
+        name="site-owner-reachability",
     ),
     path(
         "site/integration/analytics/",

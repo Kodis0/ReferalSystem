@@ -7,7 +7,7 @@ import WidgetInstallScreen from "./widget-install";
  * Site management UI inside project shell.
  *
  * This is a site-level screen. Its identity comes ONLY from useParams().sitePublicId
- * on the canonical route /lk/partner/project/:projectId/sites/:sitePublicId.
+ * on the canonical route /lk/partner/project/:projectId/sites/:sitePublicId/widget.
  *
  * Legacy mode (legacyTabRoute=true) is a transitional input: it normalizes
  * /lk/partner/project/:projectId/site?site_public_id=... (or legacy location.state)
@@ -52,7 +52,7 @@ export default function ProjectSiteManagementScreen({ legacyTabRoute = false }) 
     if (legacyCandidate) {
       return (
         <Navigate
-          to={`/lk/partner/project/${projectId}/sites/${encodeURIComponent(legacyCandidate)}`}
+          to={`/lk/partner/project/${projectId}/sites/${encodeURIComponent(legacyCandidate)}/widget`}
           replace
         />
       );

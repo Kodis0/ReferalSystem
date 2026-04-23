@@ -1,9 +1,10 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, isValid as isValidDate, parse } from "date-fns";
 import { ru } from "date-fns/locale";
 import DatePicker, { registerLocale } from "react-datepicker";
 import { API_ENDPOINTS } from "../../../config/api";
+import LkListboxSelect from "../components/LkListboxSelect";
 import "react-datepicker/dist/react-datepicker.css";
 import "./settings.css";
 
@@ -14,85 +15,6 @@ const ACCOUNT_TYPES = [
   { value: "sole_proprietor", label: "Индивидуальный предприниматель" },
   { value: "legal_entity", label: "Юридическое лицо" },
 ];
-
-function AccountTypeSelect({ value, onChange, options, labelledBy, disabled }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
-  const listboxId = "lk-settings-account-type-listbox";
-  const currentLabel = options.find((o) => o.value === value)?.label || value;
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function handlePointerDown(event) {
-      if (!rootRef.current || rootRef.current.contains(event.target)) return;
-      setOpen(false);
-    }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
-  return (
-    <div className="lk-settings-personal-page__select-shell" ref={rootRef}>
-      <button
-        type="button"
-        className="lk-settings-personal-page__select-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        aria-labelledby={labelledBy}
-        disabled={disabled}
-        data-testid="lk-settings-account-type-select"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <div className="lk-settings-personal-page__select-trigger-label">{currentLabel}</div>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          fill="none"
-          viewBox="0 0 24 24"
-          className={
-            open
-              ? "lk-settings-personal-page__select-trigger-arrow lk-settings-personal-page__select-trigger-arrow_open"
-              : "lk-settings-personal-page__select-trigger-arrow"
-          }
-          aria-hidden="true"
-        >
-          <path
-            fill="currentColor"
-            d="M12 16a1 1 0 0 1-.64-.23l-5-4a1 1 0 0 1 1.28-1.54L12 13.71l4.36-3.32a1 1 0 0 1 1.41.15 1 1 0 0 1-.14 1.46l-5 3.83A1 1 0 0 1 12 16Z"
-          />
-        </svg>
-      </button>
-      {open ? (
-        <div id={listboxId} className="lk-settings-personal-page__select-dropdown" role="listbox" aria-labelledby={labelledBy}>
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              role="option"
-              aria-selected={value === opt.value}
-              className={`lk-settings-personal-page__select-option${value === opt.value ? " lk-settings-personal-page__select-option_active" : ""}`}
-              onClick={() => {
-                onChange(opt.value);
-                setOpen(false);
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function dateFromApiToInput(value) {
   if (value == null || value === "") return "";
@@ -528,12 +450,14 @@ export default function AccountPersonalDataPage({ user, fetchUser }) {
               <span className="lk-settings-personal-page__field-label" id="lk-settings-account-type-label">
                 Тип аккаунта
               </span>
-              <AccountTypeSelect
+              <LkListboxSelect
                 value={accountType}
                 onChange={setAccountType}
                 options={ACCOUNT_TYPES}
                 labelledBy="lk-settings-account-type-label"
                 disabled={saving || !canSubmit}
+                listboxId="lk-settings-account-type-listbox"
+                dataTestId="lk-settings-account-type-select"
               />
             </label>
 

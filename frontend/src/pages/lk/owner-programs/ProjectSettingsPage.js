@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
+import LkListboxSelect from "../components/LkListboxSelect";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
+import "../settings/settings.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
 
@@ -53,9 +55,14 @@ function siteDescriptionFromPayload(payload) {
   return "";
 }
 
+const PLATFORM_OPTIONS = [
+  { value: "tilda", label: "Tilda" },
+  { value: "generic", label: "Generic" },
+];
+
 export default function ProjectSettingsPage() {
   const outletContext = useOutletContext() || {};
-  const { primarySitePublicId = "" } = outletContext;
+  const { primarySitePublicId = "", reloadProjectHead } = outletContext;
   const { sitePublicId: routeSettingsSiteParam } = useParams();
   const routeSettingsSiteId =
     typeof routeSettingsSiteParam === "string" && isUuidString(routeSettingsSiteParam.trim())
@@ -145,6 +152,13 @@ export default function ProjectSettingsPage() {
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setSaveState("success");
+      if (typeof reloadProjectHead === "function") {
+        try {
+          await reloadProjectHead();
+        } catch {
+          /* shell refresh best-effort */
+        }
+      }
       setTimeout(() => setSaveState("idle"), 2500);
     } catch (err) {
       console.error(err);
@@ -158,20 +172,22 @@ export default function ProjectSettingsPage() {
   }
 
   return (
-    <div className="owner-programs__page" data-testid="project-settings-page">
-      <section className="owner-programs__connect-site-panel">
-        <h2 className="owner-programs__overview-title">Настройки сайта</h2>
-        <p className="owner-programs__muted owner-programs__connect-site-lead">
-          Домен или origin и платформа задают интеграцию виджета для этого сайта. Название и описание ниже относятся к
-          этому сайту в ЛК.
-        </p>
+    <div id="create-owner-project" data-testid="project-settings-page">
+      <div className="page">
+        <div className="header">
+          <div className="header__info noAvatar">
+            <div className="headerTitleBlock">
+              <h1 className="h1">Настройки сайта</h1>
+            </div>
+          </div>
+        </div>
 
-        {loadState === "loading" ? <p className="lk-partner__muted">Загрузка…</p> : null}
+        {loadState === "loading" ? <p className="owner-programs__muted">Загрузка…</p> : null}
         {loadState === "error" ? <div className="formError">{loadError}</div> : null}
 
         {loadState === "ready" ? (
-          <div id="create-owner-project" className="owner-programs__connect-site-nested-create">
-            <form className="form" onSubmit={onSave} data-testid="project-settings-form">
+            <div className="owner-programs__connect-site-nested-create">
+              <form className="form" onSubmit={onSave} data-testid="project-settings-form">
               <label className="formControl" htmlFor="proj-settings-name">
                 <div className="formControl__label">
                   <span className="text text_s text_bold text_grey text_align_left">Название сайта в ЛК</span>
@@ -224,28 +240,22 @@ export default function ProjectSettingsPage() {
                     />
                   </div>
                 </div>
-                <p className="owner-programs__muted" style={{ margin: "8px 0 0", fontSize: 13, lineHeight: 1.5 }}>
-                  Основной URL — первый в списке разрешённых адресов для виджета.
-                </p>
               </label>
 
               <div className="formControl">
                 <div className="formControl__label" id="proj-settings-platform-label">
                   <span className="text text_s text_bold text_grey text_align_left">Платформа</span>
                 </div>
-                <div className="input">
-                  <div className="inputWrapper">
-                    <select
-                      id="proj-settings-platform"
-                      className="inputField"
-                      value={platformPreset}
-                      onChange={(e) => setPlatformPreset(e.target.value)}
-                      aria-labelledby="proj-settings-platform-label"
-                    >
-                      <option value="tilda">Tilda</option>
-                      <option value="generic">Generic</option>
-                    </select>
-                  </div>
+                <div className="owner-programs__lk-listbox-select-scope">
+                  <LkListboxSelect
+                    value={platformPreset}
+                    onChange={setPlatformPreset}
+                    options={PLATFORM_OPTIONS}
+                    labelledBy="proj-settings-platform-label"
+                    disabled={saveState === "saving"}
+                    listboxId="proj-settings-platform-listbox"
+                    dataTestId="proj-settings-platform-select"
+                  />
                 </div>
               </div>
 
@@ -265,10 +275,10 @@ export default function ProjectSettingsPage() {
                   {saveState === "saving" ? "Сохранение…" : "Сохранить"}
                 </button>
               </div>
-            </form>
-          </div>
+              </form>
+            </div>
         ) : null}
-      </section>
+      </div>
     </div>
   );
 }

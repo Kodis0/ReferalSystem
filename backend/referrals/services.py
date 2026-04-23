@@ -1653,6 +1653,60 @@ def build_site_connection_check(site: Site) -> dict[str, Any]:
     }
 
 
+def check_site_http_reachability(site: Site, *, timeout: float = 8.0) -> dict[str, Any]:
+    """
+    Best-effort HTTP probe of the site's primary allowed origin (server-side, for LK badge).
+    Any completed HTTP response counts as reachable; connection/DNS/SSL failures do not.
+    """
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    primary_origin, _ = owner_site_list_origin_display(site)
+    raw = (primary_origin or "").strip()
+    if not raw:
+        return {"reachable": False, "reason": "no_origin", "checked_url": None, "http_status": None}
+
+    url = raw if "://" in raw else f"https://{raw}"
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return {"reachable": False, "reason": "bad_url", "checked_url": url, "http_status": None}
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https") or not (parsed.netloc or "").strip():
+        return {"reachable": False, "reason": "unsupported_scheme", "checked_url": url, "http_status": None}
+
+    req = Request(
+        url,
+        method="HEAD",
+        headers={"User-Agent": "ReferalSystem-Reachability/1.0"},
+    )
+    try:
+        with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — URL from owner's Site.allowed_origins
+            code = resp.getcode()
+            return {"reachable": True, "reason": None, "checked_url": url, "http_status": int(code)}
+    except HTTPError as e:
+        # Server responded (including 4xx/5xx) — host is reachable over HTTP.
+        return {"reachable": True, "reason": None, "checked_url": url, "http_status": int(e.code)}
+    except URLError as e:
+        reason = getattr(e, "reason", e)
+        return {
+            "reachable": False,
+            "reason": "network_error",
+            "checked_url": url,
+            "http_status": None,
+            "error": str(reason) if reason is not None else "unreachable",
+        }
+    except Exception as e:  # pragma: no cover — defensive
+        return {
+            "reachable": False,
+            "reason": "probe_error",
+            "checked_url": url,
+            "http_status": None,
+            "error": str(e),
+        }
+
+
 def _parse_optional_lead_amount(raw: str) -> Decimal | None:
     if not (raw or "").strip():
         return None

@@ -26,6 +26,7 @@ export const API_ENDPOINTS = {
   siteIntegrationMembers: `${API_BASE}/referrals/site/integration/members/`,
   siteIntegrationVerify: `${API_BASE}/referrals/site/integration/verify/`,
   siteIntegrationActivate: `${API_BASE}/referrals/site/integration/activate/`,
+  siteReachability: `${API_BASE}/referrals/site/reachability/`,
 };
 
 export { API_BASE };

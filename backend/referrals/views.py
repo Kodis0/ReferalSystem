@@ -33,6 +33,7 @@ from .services import (
     SITE_DISPLAY_NAME_CONFIG_KEY,
     SITE_SHELL_DESCRIPTION_CONFIG_KEY,
     build_site_connection_check,
+    check_site_http_reachability,
     capture_referral_attribution,
     create_project_for_site,
     ensure_project_avatar_data_url,
@@ -624,6 +625,26 @@ class SiteOwnerIntegrationDiagnosticsView(APIView):
             return error
         payload = build_site_owner_diagnostics_payload(site=site, recent_limit=50)
         return Response(payload)
+
+
+class SiteOwnerReachabilityView(APIView):
+    """
+    Authenticated owner: HTTP reachability of the site's primary origin.
+    Query ``site_public_id`` is required (same as members list).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (request.query_params.get("site_public_id") or "").strip():
+            return Response(
+                _owner_api_error_body("site_public_id_required"),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        return Response(check_site_http_reachability(site))
 
 
 class SiteOwnerIntegrationAnalyticsView(APIView):
