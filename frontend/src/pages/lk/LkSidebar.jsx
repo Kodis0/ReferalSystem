@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import "./LkSidebar.css";
 import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
@@ -22,6 +22,15 @@ function projectTitle(project) {
 function projectAvatarDataUrl(project) {
   const raw = project?.project?.avatar_data_url;
   return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** Avoid refetch + FLIP layout on every nested tab under the same owner project. */
+function ownerProjectsRouteStaleKey(pathname) {
+  const p = pathname || "";
+  if (!p.startsWith("/lk/partner")) return p;
+  const m = p.match(/^\/lk\/partner\/project\/(\d+)/);
+  if (m) return `/lk/partner/project/${m[1]}`;
+  return p;
 }
 
 function projectTargetHref(project) {
@@ -183,6 +192,8 @@ export default function LkSidebar() {
     if (ok) setOwnerProjects(projects);
   }, []);
 
+  const ownerProjectsStaleKey = useMemo(() => ownerProjectsRouteStaleKey(pathname), [pathname]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -192,7 +203,7 @@ export default function LkSidebar() {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [ownerProjectsStaleKey]);
 
   useEffect(() => {
     function handleProjectAvatarUpdated() {

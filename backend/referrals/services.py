@@ -35,8 +35,10 @@ from .models import (
 from .services_owner_site_shell import (
     SITE_DISPLAY_NAME_CONFIG_KEY,
     SITE_SHELL_AVATAR_CONFIG_KEY,
+    SITE_SHELL_DESCRIPTION_CONFIG_KEY,
     owner_project_metadata_from_site,
     site_owner_display_name,
+    site_owner_shell_description,
     site_shell_avatar_data_url,
 )
 from .services_site_capture_config import (
@@ -73,6 +75,7 @@ _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
         "avatar_data_url",
         SITE_SHELL_AVATAR_CONFIG_KEY,
         SITE_DISPLAY_NAME_CONFIG_KEY,
+        SITE_SHELL_DESCRIPTION_CONFIG_KEY,
         SITE_CAPTURE_CONFIG_KEY,
     }
 )

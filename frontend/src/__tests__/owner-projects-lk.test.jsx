@@ -1929,6 +1929,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://shop.example"],
             platform_preset: "tilda",
+            site_display_name: "Canonical site",
+            site_description: "Описание сайта",
             project: { id: 601, name: "Canonical project", description: "Описание", avatar_data_url: "" },
             config_json: { display_name: "legacy" },
             widget_enabled: true,
@@ -1967,6 +1969,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://shop.example"],
             platform_preset: "tilda",
+            site_display_name: "Магазин",
+            site_description: "Описание",
             project: { name: "Магазин", description: "Описание", avatar_data_url: "" },
             config_json: { display_name: "legacy" },
             widget_enabled: true,
@@ -1989,8 +1993,8 @@ describe("ProjectSettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
     });
-    expect(screen.getByLabelText(/Название проекта/i)).toHaveValue("Магазин");
-    expect(screen.getByLabelText(/Описание проекта/i)).toHaveValue("Описание");
+    expect(screen.getByLabelText(/Название сайта/i)).toHaveValue("Магазин");
+    expect(screen.getByLabelText(/Описание сайта/i)).toHaveValue("Описание");
     expect(screen.getByLabelText(/Домен или origin/i)).toHaveValue("https://shop.example");
     expect(screen.getByLabelText(/Платформа/i)).toHaveValue("tilda");
   });
@@ -2005,6 +2009,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
             project: { name: "A", description: "Old desc", avatar_data_url: "" },
             config_json: { display_name: "A" },
             widget_enabled: true,
@@ -2018,8 +2024,10 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://b.example"],
             platform_preset: "generic",
-            project: { name: "B", description: "New desc", avatar_data_url: "" },
-            config_json: { display_name: "B", description: "New desc" },
+            site_display_name: "B",
+            site_description: "New desc",
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A", description: "Old desc" },
             widget_enabled: true,
           }),
         });
@@ -2040,10 +2048,10 @@ describe("ProjectSettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
     });
-    await userEvent.clear(screen.getByLabelText(/Название проекта/i));
-    await userEvent.type(screen.getByLabelText(/Название проекта/i), "B");
-    await userEvent.clear(screen.getByLabelText(/Описание проекта/i));
-    await userEvent.type(screen.getByLabelText(/Описание проекта/i), "New desc");
+    await userEvent.clear(screen.getByLabelText(/Название сайта/i));
+    await userEvent.type(screen.getByLabelText(/Название сайта/i), "B");
+    await userEvent.clear(screen.getByLabelText(/Описание сайта/i));
+    await userEvent.type(screen.getByLabelText(/Описание сайта/i), "New desc");
     await userEvent.clear(screen.getByLabelText(/Домен или origin/i));
     await userEvent.type(screen.getByLabelText(/Домен или origin/i), "https://b.example");
     await userEvent.selectOptions(screen.getByLabelText(/Платформа/i), "generic");
@@ -2054,8 +2062,8 @@ describe("ProjectSettingsPage", () => {
     });
     const patchCall = fetchMock.mock.calls.find(([, opts]) => opts?.method === "PATCH");
     expect(JSON.parse(patchCall[1].body)).toEqual({
-      display_name: "B",
-      description: "New desc",
+      site_display_name: "B",
+      site_description: "New desc",
       origin: "https://b.example",
       platform_preset: "generic",
     });
@@ -2595,6 +2603,11 @@ describe("Canonical site identity contract", () => {
     ["members", `/lk/partner/${siteFromPath}/members`, `/lk/partner/project/${projectId}/sites/${siteFromPath}/members`],
     ["settings", `/lk/partner/${siteFromPath}/settings`, `/lk/partner/project/${projectId}/sites/${siteFromPath}/settings`],
     ["widget", `/lk/partner/${siteFromPath}/widget`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
+    [
+      "dashboard",
+      `/lk/partner/${siteFromPath}/dashboard`,
+      `/lk/partner/project/${projectId}/sites/${siteFromPath}/dashboard`,
+    ],
     ["site tab", `/lk/partner/${siteFromPath}/site`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
     ["sites section", `/lk/partner/${siteFromPath}/sites`, `/lk/partner/project/${projectId}/sites/${siteFromPath}`],
     ["info", `/lk/partner/${siteFromPath}/info`, `/lk/partner/project/${projectId}/info`],
@@ -2617,6 +2630,10 @@ describe("Canonical site identity contract", () => {
               element={<CanonicalPathProbe />}
             />
             <Route path="/lk/partner/project/:projectId/info" element={<CanonicalPathProbe />} />
+            <Route
+              path="/lk/partner/project/:projectId/sites/:sitePublicId/dashboard"
+              element={<CanonicalPathProbe />}
+            />
             <Route path="/lk/partner/project/:projectId/sites/:sitePublicId" element={<CanonicalPathProbe />} />
           </Routes>
         </MemoryRouter>

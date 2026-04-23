@@ -8,6 +8,7 @@ from .services import (
     persist_project_avatar_if_empty,
     site_capture_config_dict,
     site_owner_display_name,
+    site_owner_shell_description,
     site_shell_avatar_data_url,
 )
 
@@ -84,6 +85,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
     public_api_base = serializers.SerializerMethodField()
     widget_script_base = serializers.SerializerMethodField()
     site_display_name = serializers.SerializerMethodField()
+    site_description = serializers.SerializerMethodField()
     site_avatar_data_url = serializers.SerializerMethodField()
     capture_config = serializers.SerializerMethodField()
 
@@ -100,6 +102,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "widget_enabled",
             "config_json",
             "site_display_name",
+            "site_description",
             "site_avatar_data_url",
             "capture_config",
             "project",
@@ -114,6 +117,9 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
 
     def get_site_display_name(self, obj: Site) -> str:
         return site_owner_display_name(obj)
+
+    def get_site_description(self, obj: Site) -> str:
+        return site_owner_shell_description(obj)
 
     def get_site_avatar_data_url(self, obj: Site) -> str:
         return site_shell_avatar_data_url(obj)
@@ -152,6 +158,7 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     origin = serializers.CharField(max_length=512, trim_whitespace=True, required=False, allow_blank=True)
     display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
     site_display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
+    site_description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
     description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
     avatar_data_url = serializers.CharField(required=False, allow_blank=True)
     site_avatar_data_url = serializers.CharField(required=False, allow_blank=True)

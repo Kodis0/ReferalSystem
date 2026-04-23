@@ -39,12 +39,18 @@ function primaryOriginFromPayload(payload) {
   return typeof first === "string" ? first : "";
 }
 
-function projectMetaFromPayload(payload) {
-  const project = payload?.project && typeof payload.project === "object" ? payload.project : {};
-  return {
-    name: typeof project.name === "string" ? project.name : "",
-    description: typeof project.description === "string" ? project.description : "",
-  };
+function siteNameFromPayload(payload) {
+  if (typeof payload?.site_display_name === "string" && payload.site_display_name.trim()) {
+    return payload.site_display_name.trim();
+  }
+  return "";
+}
+
+function siteDescriptionFromPayload(payload) {
+  if (typeof payload?.site_description === "string") {
+    return payload.site_description;
+  }
+  return "";
 }
 
 export default function ProjectSettingsPage() {
@@ -89,9 +95,8 @@ export default function ProjectSettingsPage() {
         setLoadState("error");
         return;
       }
-      const project = projectMetaFromPayload(payload);
-      setDisplayName(project.name);
-      setDescription(project.description);
+      setDisplayName(siteNameFromPayload(payload));
+      setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setPlatformPreset(
         payload.platform_preset === "generic" || payload.platform_preset === "tilda"
@@ -121,8 +126,8 @@ export default function ProjectSettingsPage() {
         headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({
-          display_name: displayName.trim(),
-          description: description.trim(),
+          site_display_name: displayName.trim(),
+          site_description: description.trim(),
           origin: origin.trim(),
           platform_preset: platformPreset,
         }),
@@ -136,9 +141,8 @@ export default function ProjectSettingsPage() {
         setSaveState("error");
         return;
       }
-      const project = projectMetaFromPayload(payload);
-      setDisplayName(project.name);
-      setDescription(project.description);
+      setDisplayName(siteNameFromPayload(payload));
+      setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setSaveState("success");
       setTimeout(() => setSaveState("idle"), 2500);
@@ -159,7 +163,7 @@ export default function ProjectSettingsPage() {
         <h2 className="owner-programs__overview-title">Настройки сайта</h2>
         <p className="owner-programs__muted owner-programs__connect-site-lead">
           Домен или origin и платформа задают интеграцию виджета для этого сайта. Название и описание ниже относятся к
-          проекту целиком (общие для всех сайтов в проекте).
+          этому сайту в ЛК.
         </p>
 
         {loadState === "loading" ? <p className="lk-partner__muted">Загрузка…</p> : null}
@@ -170,7 +174,7 @@ export default function ProjectSettingsPage() {
             <form className="form" onSubmit={onSave} data-testid="project-settings-form">
               <label className="formControl" htmlFor="proj-settings-name">
                 <div className="formControl__label">
-                  <span className="text text_s text_bold text_grey text_align_left">Название проекта в ЛК</span>
+                  <span className="text text_s text_bold text_grey text_align_left">Название сайта в ЛК</span>
                 </div>
                 <div className="input">
                   <div className="inputWrapper">
@@ -188,7 +192,7 @@ export default function ProjectSettingsPage() {
 
               <label className="formControl" htmlFor="proj-settings-description">
                 <div className="formControl__label">
-                  <span className="text text_s text_bold text_grey text_align_left">Описание проекта в ЛК</span>
+                  <span className="text text_s text_bold text_grey text_align_left">Описание сайта в ЛК</span>
                 </div>
                 <div className="input">
                   <div className="inputWrapper">

@@ -22,6 +22,7 @@ export const API_ENDPOINTS = {
   projectSiteDelete: (projectId) => `${API_BASE}/referrals/project/${encodeURIComponent(projectId)}/site/create/`,
   siteIntegration: `${API_BASE}/referrals/site/integration/`,
   siteIntegrationDiagnostics: `${API_BASE}/referrals/site/integration/diagnostics/`,
+  siteIntegrationAnalytics: `${API_BASE}/referrals/site/integration/analytics/`,
   siteIntegrationMembers: `${API_BASE}/referrals/site/integration/members/`,
   siteIntegrationVerify: `${API_BASE}/referrals/site/integration/verify/`,
   siteIntegrationActivate: `${API_BASE}/referrals/site/integration/activate/`,

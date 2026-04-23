@@ -7,6 +7,7 @@ import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
 import { sitePrimaryDomainLabel } from "./siteDisplay";
+import SiteShellToolbarSubscriber from "./SiteShellToolbarSubscriber";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -208,6 +209,15 @@ export default function SiteProjectLayout() {
     if (routeSitePublicId) return routeSitePublicId;
     return "";
   }, [routeSitePublicId]);
+
+  /** Вкладка «Дашборд» на маршруте конкретного сайта. */
+  const dashboardSiteNavPath = useMemo(() => {
+    if (!hasProjectId) return "/lk/partner";
+    if (shellScopedSitePublicIdForNav) {
+      return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/dashboard`;
+    }
+    return buildScopedProjectPath("sites");
+  }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
 
   /** Вкладка «Виджет» на маршруте конкретного сайта. */
   const widgetSiteNavPath = useMemo(() => {
@@ -971,17 +981,22 @@ export default function SiteProjectLayout() {
 
           <nav
             className="owner-programs__tabs"
-            aria-label={isSiteRouteShell ? "Виджет, настройки и пользователи сайта" : "Сервисы и пользователи проекта"}
+            aria-label={
+              isSiteRouteShell ? "Дашборд, виджет, настройки и пользователи сайта" : "Сервисы и пользователи проекта"
+            }
           >
             {isSiteRouteShell ? (
               <>
-                <NavLink to={widgetSiteNavPath} end className={tabClass}>
+                <NavLink to={dashboardSiteNavPath} end className={tabClass} preventScrollReset>
+                  Дашборд
+                </NavLink>
+                <NavLink to={widgetSiteNavPath} end className={tabClass} preventScrollReset>
                   Виджет
                 </NavLink>
-                <NavLink to={settingsSiteNavPath} end className={tabClass}>
+                <NavLink to={settingsSiteNavPath} end className={tabClass} preventScrollReset>
                   Настройки
                 </NavLink>
-                <NavLink to={membersSiteNavPath} end className={tabClass}>
+                <NavLink to={membersSiteNavPath} end className={tabClass} preventScrollReset>
                   Пользователи
                 </NavLink>
               </>
@@ -990,6 +1005,7 @@ export default function SiteProjectLayout() {
                 <NavLink
                   to={projectServicesNavPath}
                   end
+                  preventScrollReset
                   className={({ isActive }) =>
                     tabClass({
                       isActive: isActive || location.pathname === projectOverviewNavPath,
@@ -998,7 +1014,7 @@ export default function SiteProjectLayout() {
                 >
                   Сервисы
                 </NavLink>
-                <NavLink to={projectMembersNavPath} end className={tabClass}>
+                <NavLink to={projectMembersNavPath} end className={tabClass} preventScrollReset>
                   Пользователи
                 </NavLink>
               </>
@@ -1008,6 +1024,17 @@ export default function SiteProjectLayout() {
       ) : null}
 
       <Outlet context={outletContext} />
+      {isSiteRouteShell && routeSitePublicId && !hideShellChrome && !isProjectInfoPage ? (
+        <SiteShellToolbarSubscriber
+          key={routeSitePublicId}
+          sitePublicId={routeSitePublicId}
+          projectId={numericProjectId}
+          setSiteShellToolbar={setSiteShellToolbarSlot}
+          reloadProjectEntry={loadProjectEntry}
+          buildProjectPath={buildScopedProjectPath}
+          projectEntry={projectEntry}
+        />
+      ) : null}
       {deleteProjectDialogOpen ? (
         <div
           className="owner-programs__dialog-backdrop"

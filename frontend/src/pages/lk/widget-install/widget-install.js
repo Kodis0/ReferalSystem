@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CirclePause, CirclePlay, PlugZap, RefreshCw, Trash2 } from "lucide-react";
-import { Link, useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/light";
 import xml from "react-syntax-highlighter/dist/cjs/languages/hljs/xml";
 import { atomOneDarkReasonable } from "react-syntax-highlighter/dist/cjs/styles/hljs";
@@ -343,7 +342,16 @@ function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
   };
 }
 
-function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView, showVerifyButton = true, hideIntro = false }) {
+function WidgetInstallConnectionCheckCard({
+  verifyLoading,
+  refreshBusy = false,
+  onVerify,
+  onRefreshStatus,
+  statusView,
+  showVerifyButton = true,
+  hideIntro = false,
+}) {
+  const actionBusy = verifyLoading || refreshBusy;
   return (
     <section className="lk-widget-install__card lk-widget-install__connection-check" data-testid="site-connection-check-card">
       <h2 className="lk-partner__section-title">Проверка подключения</h2>
@@ -354,11 +362,23 @@ function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView,
             : "После установки кода опубликуйте сайт и откройте страницу. Проверку можно запустить кнопкой на панели действий у названия сайта."}
         </p>
       ) : null}
-      {showVerifyButton ? (
+      {showVerifyButton || onRefreshStatus ? (
         <div className="lk-widget-install__connection-check-actions">
-          <button type="button" className="lk-widget-install__btn" disabled={verifyLoading} onClick={onVerify}>
-            {verifyLoading ? "Проверяем…" : "Проверить подключение"}
-          </button>
+          {showVerifyButton ? (
+            <button type="button" className="lk-widget-install__btn" disabled={actionBusy} onClick={onVerify}>
+              {verifyLoading ? "Проверяем…" : "Проверить подключение"}
+            </button>
+          ) : null}
+          {onRefreshStatus ? (
+            <button
+              type="button"
+              className="lk-widget-install__btn lk-widget-install__btn_secondary"
+              disabled={actionBusy}
+              onClick={() => void onRefreshStatus()}
+            >
+              {refreshBusy ? "Обновляем…" : "Обновить статус"}
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div
@@ -370,65 +390,6 @@ function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView,
         <p className="lk-widget-install__connection-check-copy">{statusView.message}</p>
       </div>
     </section>
-  );
-}
-
-function SiteShellWidgetActionsBar({ actionsRef, deleteSiteBusy, verifyLoading, refreshBusy, lifecycleStatus, widgetEnabled, toggleBusy }) {
-  const captureRunning = lifecycleStatus === "active" && widgetEnabled;
-  const toggleLabel = (() => {
-    if (lifecycleStatus !== "active") return toggleBusy ? "Активация…" : "Активировать сайт";
-    if (!widgetEnabled) return toggleBusy ? "Сохраняем…" : "Включить сбор заявок";
-    return toggleBusy ? "Сохраняем…" : "Выключить сбор заявок";
-  })();
-  const ToggleIcon = captureRunning ? CirclePause : CirclePlay;
-  const actionBusy = verifyLoading || refreshBusy || deleteSiteBusy || toggleBusy;
-
-  return (
-    <>
-      <button
-        type="button"
-        className="owner-programs__icon-action owner-programs__icon-action_danger"
-        onClick={() => actionsRef.current.onDeleteSite?.()}
-        disabled={actionBusy}
-        aria-label="Удалить сайт"
-        data-testid="site-shell-action-delete"
-      >
-        <Trash2 size={22} strokeWidth={2} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className={`owner-programs__icon-action${captureRunning ? " owner-programs__icon-action_on" : ""}`}
-        onClick={() => actionsRef.current.onUnifiedToggle?.()}
-        disabled={actionBusy}
-        aria-label={toggleLabel}
-        title={toggleLabel}
-        data-testid="site-shell-action-toggle-capture"
-      >
-        <ToggleIcon size={22} strokeWidth={2} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className="owner-programs__icon-action"
-        onClick={() => actionsRef.current.onVerify?.()}
-        disabled={actionBusy}
-        aria-label={verifyLoading ? "Проверяем подключение…" : "Проверить подключение"}
-        title="Проверить подключение"
-        data-testid="site-shell-action-verify"
-      >
-        <PlugZap size={22} strokeWidth={2} aria-hidden />
-      </button>
-      <button
-        type="button"
-        className="owner-programs__icon-action"
-        onClick={() => actionsRef.current.onRefreshStatus?.()}
-        disabled={actionBusy}
-        aria-label={refreshBusy ? "Обновление статуса…" : "Обновить статус"}
-        title="Обновить статус"
-        data-testid="site-shell-action-refresh"
-      >
-        <RefreshCw size={22} strokeWidth={2} className={refreshBusy ? "owner-programs__icon-action-spin" : ""} aria-hidden />
-      </button>
-    </>
   );
 }
 
@@ -461,6 +422,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const [createSiteError, setCreateSiteError] = useState("");
   const [saving, setSaving] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const [activateLoading, setActivateLoading] = useState(false);
   const [error, setError] = useState("");
   const [saveHint, setSaveHint] = useState("");
@@ -475,15 +437,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const [captureConfig, setCaptureConfig] = useState(() => normalizeCaptureConfig(null));
   const [projectBasePath, setProjectBasePath] = useState("");
   const [connectionCheckUi, setConnectionCheckUi] = useState({ status: "idle", message: "" });
-  const [refreshBusy, setRefreshBusy] = useState(false);
-  const [deleteSiteBusy, setDeleteSiteBusy] = useState(false);
   const loadGenerationRef = useRef(0);
-  const siteShellActionsRef = useRef({});
   const locationRef = useRef(location);
   locationRef.current = location;
-
-  const outlet = useOutletContext() || {};
-  const { setSiteShellToolbar, projectEntry, reloadProjectEntry, buildProjectPath } = outlet;
 
   const projectIdFromRoute = useMemo(() => {
     const raw = String(params?.projectId ?? "").trim();
@@ -839,97 +795,6 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     }
   }, [load]);
 
-  const handleDeleteSiteFromShell = useCallback(async () => {
-    const title =
-      (typeof data?.site_display_name === "string" && data.site_display_name.trim()) ||
-      (typeof data?.config_json?.site_display_name === "string" && data.config_json.site_display_name.trim()) ||
-      "Сайт";
-    if (!window.confirm(`Удалить сайт "${title}"?`)) return;
-    const projectId = typeof projectEntry?.id === "number" ? projectEntry.id : data?.project?.id;
-    if (typeof projectId !== "number" || !selectedSitePublicId) return;
-    setDeleteSiteBusy(true);
-    setSaveHint("");
-    try {
-      const res = await fetch(API_ENDPOINTS.projectSiteDelete(projectId), {
-        method: "DELETE",
-        headers: authHeaders(),
-        credentials: "include",
-        body: JSON.stringify({ site_public_id: selectedSitePublicId }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detailMsg = apiErrorDisplayText(payload);
-        setSaveHint(detailMsg || `Не удалось удалить (${res.status})`);
-        return;
-      }
-      if (typeof reloadProjectEntry === "function") {
-        await reloadProjectEntry(projectId);
-      }
-      if (typeof buildProjectPath === "function") {
-        navigate(buildProjectPath("sites"), { replace: true });
-      } else {
-        navigate("/lk/partner", { replace: true });
-      }
-    } catch (e) {
-      console.error(e);
-      setSaveHint("Не удалось удалить сайт");
-    } finally {
-      setDeleteSiteBusy(false);
-    }
-  }, [buildProjectPath, data, navigate, projectEntry?.id, reloadProjectEntry, selectedSitePublicId]);
-
-  const onUnifiedShellToggle = useCallback(() => {
-    const ls = diag?.site_status || data?.status;
-    if (ls !== "active") {
-      void onActivate();
-      return;
-    }
-    void onSave({ widget_enabled: !widgetEnabled });
-  }, [data?.status, diag?.site_status, onActivate, onSave, widgetEnabled]);
-
-  siteShellActionsRef.current = {
-    onVerify,
-    onRefreshStatus,
-    onDeleteSite: handleDeleteSiteFromShell,
-    onUnifiedToggle: onUnifiedShellToggle,
-  };
-
-  useEffect(() => {
-    if (!projectSitePresentation || typeof setSiteShellToolbar !== "function") {
-      return undefined;
-    }
-    if (loading || error || !data) {
-      setSiteShellToolbar(null);
-      return undefined;
-    }
-    const lifecycleForToolbar = diag?.site_status || data?.status;
-    setSiteShellToolbar(
-      <SiteShellWidgetActionsBar
-        actionsRef={siteShellActionsRef}
-        deleteSiteBusy={deleteSiteBusy}
-        verifyLoading={verifyLoading}
-        refreshBusy={refreshBusy}
-        lifecycleStatus={lifecycleForToolbar}
-        widgetEnabled={widgetEnabled}
-        toggleBusy={saving || activateLoading}
-      />,
-    );
-    return () => setSiteShellToolbar(null);
-  }, [
-    activateLoading,
-    data,
-    deleteSiteBusy,
-    diag?.site_status,
-    error,
-    loading,
-    projectSitePresentation,
-    refreshBusy,
-    saving,
-    setSiteShellToolbar,
-    verifyLoading,
-    widgetEnabled,
-  ]);
-
   const statusClass =
     diag?.integration_status === "healthy"
       ? "lk-widget-install__status_ok"
@@ -940,6 +805,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           : "";
 
   if (loading) {
+    if (projectSitePresentation) {
+      return (
+        <div className="owner-programs__page owner-programs__site-page" aria-busy="true">
+          <p className="lk-partner__muted">Загрузка…</p>
+        </div>
+      );
+    }
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
@@ -1242,7 +1114,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
 
         <WidgetInstallConnectionCheckCard
           verifyLoading={verifyLoading}
+          refreshBusy={refreshBusy}
           onVerify={onVerify}
+          onRefreshStatus={onRefreshStatus}
           statusView={connectionCheckView}
         />
 
@@ -1358,7 +1232,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
             <button
               type="button"
               className="lk-widget-install__btn"
-              disabled={verifyLoading}
+              disabled={verifyLoading || refreshBusy}
               onClick={onVerify}
             >
               {verifyLoading ? "Проверяем…" : "Проверить подключение"}
@@ -1366,7 +1240,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
             <button
               type="button"
               className="lk-widget-install__btn lk-widget-install__btn_secondary"
-              disabled={activateLoading}
+              disabled={activateLoading || refreshBusy}
               onClick={onActivate}
             >
               {activateLoading ? "Активируем…" : inProjectShell ? "Активировать проект" : "Активировать сайт"}
@@ -1481,9 +1355,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               <button
                 type="button"
                 className="lk-widget-install__btn lk-widget-install__btn_secondary"
-                onClick={load}
+                disabled={refreshBusy || saving}
+                onClick={() => void onRefreshStatus()}
               >
-                Обновить данные
+                {refreshBusy ? "Обновляем…" : "Обновить данные"}
               </button>
             </div>
           </div>

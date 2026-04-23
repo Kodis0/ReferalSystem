@@ -8,6 +8,7 @@ from .models import Site
 
 SITE_SHELL_AVATAR_CONFIG_KEY = "site_avatar_data_url"
 SITE_DISPLAY_NAME_CONFIG_KEY = "site_display_name"
+SITE_SHELL_DESCRIPTION_CONFIG_KEY = "site_description"
 
 
 def site_shell_avatar_data_url(site: Site) -> str:
@@ -29,6 +30,12 @@ def owner_project_metadata_from_site(site: Site) -> dict[str, str]:
         if isinstance(avatar_data_url, str)
         else "",
     }
+
+
+def site_owner_shell_description(site: Site) -> str:
+    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
+    raw = cfg.get(SITE_SHELL_DESCRIPTION_CONFIG_KEY)
+    return raw.strip()[:2000] if isinstance(raw, str) and raw.strip() else ""
 
 
 def site_owner_display_name(site: Site) -> str:

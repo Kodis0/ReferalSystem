@@ -26,6 +26,7 @@ import ProjectOverviewPage from "./owner-programs/ProjectOverviewPage";
 import ProjectMembersPage from "./owner-programs/ProjectMembersPage";
 import ProjectSettingsPage from "./owner-programs/ProjectSettingsPage";
 import ProjectInfoPage from "./owner-programs/ProjectInfoPage";
+import SiteDashboardPage from "./owner-programs/SiteDashboardPage";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import "./lk.css";
@@ -554,6 +555,7 @@ function LK() {
                 <Route path="sites" element={<ProjectOverviewPage />} />
                 <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
                 <Route path="sites/:sitePublicId/settings" element={<ProjectSettingsPage />} />
+                <Route path="sites/:sitePublicId/dashboard" element={<SiteDashboardPage />} />
                 <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
                 <Route path="info" element={<ProjectInfoPage />} />
                 <Route path="site" element={<ProjectSiteManagementScreen legacyTabRoute />} />

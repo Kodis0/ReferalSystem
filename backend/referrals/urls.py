@@ -10,6 +10,7 @@ from .views import (
     SiteOwnerCreateView,
     SiteOwnerIntegrationActivateView,
     SiteOwnerBootstrapView,
+    SiteOwnerIntegrationAnalyticsView,
     SiteOwnerIntegrationDiagnosticsView,
     SiteOwnerIntegrationView,
     SiteOwnerIntegrationVerifyView,
@@ -60,6 +61,11 @@ urlpatterns = [
         "site/integration/diagnostics/",
         SiteOwnerIntegrationDiagnosticsView.as_view(),
         name="site-owner-integration-diagnostics",
+    ),
+    path(
+        "site/integration/analytics/",
+        SiteOwnerIntegrationAnalyticsView.as_view(),
+        name="site-owner-integration-analytics",
     ),
     path(
         "site/integration/members/",

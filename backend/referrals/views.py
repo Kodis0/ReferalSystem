@@ -16,6 +16,7 @@ from .owner_diagnostics import (
     build_site_membership_owner_list_payload,
     build_site_owner_diagnostics_payload,
 )
+from .owner_site_analytics import build_site_owner_analytics_payload
 from .serializers import (
     ProjectOwnerCreateSerializer,
     ProjectOwnerUpdateSerializer,
@@ -30,6 +31,7 @@ from .services import (
     SITE_SHELL_AVATAR_CONFIG_KEY,
     SITE_CAPTURE_CONFIG_KEY,
     SITE_DISPLAY_NAME_CONFIG_KEY,
+    SITE_SHELL_DESCRIPTION_CONFIG_KEY,
     build_site_connection_check,
     capture_referral_attribution,
     create_project_for_site,
@@ -514,6 +516,13 @@ class SiteOwnerIntegrationView(APIView):
                 cfg[SITE_DISPLAY_NAME_CONFIG_KEY] = site_display_name
             else:
                 cfg.pop(SITE_DISPLAY_NAME_CONFIG_KEY, None)
+        elif "display_name" in data:
+            # Top-level ``display_name`` on integration PATCH is the site shell label (not Project.name).
+            dn = (data.get("display_name") or "").strip()
+            if dn:
+                cfg[SITE_DISPLAY_NAME_CONFIG_KEY] = dn
+            else:
+                cfg.pop(SITE_DISPLAY_NAME_CONFIG_KEY, None)
         if "capture_config" in data:
             cfg[SITE_CAPTURE_CONFIG_KEY] = sanitize_site_capture_config(data.get("capture_config"))
         elif "config_json" in data and SITE_CAPTURE_CONFIG_KEY in cfg:
@@ -524,7 +533,21 @@ class SiteOwnerIntegrationView(APIView):
                 cfg[SITE_SHELL_AVATAR_CONFIG_KEY] = site_avatar
             else:
                 cfg.pop(SITE_SHELL_AVATAR_CONFIG_KEY, None)
-        project_updates = _project_metadata_updates_from_owner_payload(data, cfg)
+        if "site_description" in data:
+            site_desc = (data.get("site_description") or "").strip()
+            if site_desc:
+                cfg[SITE_SHELL_DESCRIPTION_CONFIG_KEY] = site_desc
+            else:
+                cfg.pop(SITE_SHELL_DESCRIPTION_CONFIG_KEY, None)
+        elif "description" in data:
+            # Top-level ``description`` on integration PATCH is per-site (not Project.description).
+            site_desc = (data.get("description") or "").strip()
+            if site_desc:
+                cfg[SITE_SHELL_DESCRIPTION_CONFIG_KEY] = site_desc
+            else:
+                cfg.pop(SITE_SHELL_DESCRIPTION_CONFIG_KEY, None)
+        data_for_project = {k: v for k, v in data.items() if k not in ("display_name", "description", "site_description")}
+        project_updates = _project_metadata_updates_from_owner_payload(data_for_project, cfg)
         project = None
         if project_updates or "config_json" in data:
             project = create_project_for_site(site)
@@ -540,7 +563,15 @@ class SiteOwnerIntegrationView(APIView):
         project_name = project_updates.get("name", current_project_meta["name"])
         project_description = project_updates.get("description", current_project_meta["description"])
         project_avatar_data_url = project_updates.get("avatar_data_url", current_project_meta["avatar_data_url"])
-        if "config_json" in data or "capture_config" in data or "site_display_name" in data or project_updates:
+        if (
+            "config_json" in data
+            or "capture_config" in data
+            or "site_display_name" in data
+            or "display_name" in data
+            or "description" in data
+            or "site_description" in data
+            or project_updates
+        ):
             _apply_project_metadata_dual_write(
                 cfg,
                 project_name=project_name,
@@ -592,6 +623,24 @@ class SiteOwnerIntegrationDiagnosticsView(APIView):
         if error is not None:
             return error
         payload = build_site_owner_diagnostics_payload(site=site, recent_limit=50)
+        return Response(payload)
+
+
+class SiteOwnerIntegrationAnalyticsView(APIView):
+    """
+    Site owner: KPIs, funnel, daily series, recent paid orders for the LK site dashboard.
+
+    Query: ``site_public_id`` (optional if a single site), ``period`` = ``7d`` | ``30d`` | ``all``.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        period = (request.query_params.get("period") or "").strip()
+        payload = build_site_owner_analytics_payload(site=site, period=period or None)
         return Response(payload)
 
 

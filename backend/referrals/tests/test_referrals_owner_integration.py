@@ -935,18 +935,60 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["allowed_origins"], ["https://new.example"])
         self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.GENERIC)
-        self.assertEqual(r.data["config_json"].get("display_name"), "New title")
-        self.assertEqual(r.data["config_json"].get("description"), "New description")
+        self.assertEqual(r.data["config_json"].get("display_name"), "Old")
+        self.assertEqual(r.data["config_json"].get("description"), "Old description")
         self.assertEqual(r.data["config_json"].get("amount_selector"), ".x")
-        self.assertEqual(r.data["project"]["name"], "New title")
-        self.assertEqual(r.data["project"]["description"], "New description")
+        self.assertEqual(r.data["site_display_name"], "New title")
+        self.assertEqual(r.data["site_description"], "New description")
+        self.assertEqual(r.data["project"]["name"], "Old")
+        self.assertEqual(r.data["project"]["description"], "Old description")
         site.refresh_from_db()
         site.project.refresh_from_db()
-        self.assertEqual(site.config_json.get("display_name"), "New title")
-        self.assertEqual(site.config_json.get("description"), "New description")
+        self.assertEqual(site.config_json.get("site_display_name"), "New title")
+        self.assertEqual(site.config_json.get("site_description"), "New description")
         self.assertEqual(site.config_json.get("amount_selector"), ".x")
-        self.assertEqual(site.project.name, "New title")
-        self.assertEqual(site.project.description, "New description")
+        self.assertEqual(site.project.name, "Old")
+        self.assertEqual(site.project.description, "Old description")
+
+    def test_patch_integration_shell_fields_do_not_touch_project_or_sibling_site(self):
+        project = Project.objects.create(owner=self.owner, name="Shared", description="ProjDesc")
+        site_a = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_shell_a_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+            config_json={"site_display_name": "Site A", "site_description": "Desc A"},
+        )
+        site_b = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_shell_b_" + uuid.uuid4().hex,
+            allowed_origins=["https://b.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+            config_json={"site_display_name": "Site B", "site_description": "Desc B"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site_a.public_id}",
+            data={
+                "site_display_name": "Site A updated",
+                "site_description": "Only A",
+                "origin": "https://a-new.example",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        project.refresh_from_db()
+        site_a.refresh_from_db()
+        site_b.refresh_from_db()
+        self.assertEqual(project.name, "Shared")
+        self.assertEqual(project.description, "ProjDesc")
+        self.assertEqual(site_a.config_json.get("site_display_name"), "Site A updated")
+        self.assertEqual(site_a.config_json.get("site_description"), "Only A")
+        self.assertEqual(site_a.allowed_origins, ["https://a-new.example"])
+        self.assertEqual(site_b.config_json.get("site_display_name"), "Site B")
+        self.assertEqual(site_b.config_json.get("site_description"), "Desc B")
 
     def test_patch_config_json_avatar_updates_project_and_preserves_runtime_keys(self):
         project = Project.objects.create(owner=self.owner, name="Avatar project")

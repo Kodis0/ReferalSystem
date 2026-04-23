@@ -50,6 +50,7 @@
 html {
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   scrollbar-width: thin;
+  scrollbar-gutter: stable;
   transition: scrollbar-color 0.25s ease;
 }
 
