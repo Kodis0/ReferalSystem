@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
@@ -36,13 +37,18 @@ function formatJoinedAt(iso) {
 export default function ProjectMembersPage() {
   const outletContext = useOutletContext() || {};
   const { primarySitePublicId = "", headLoading = false } = outletContext;
+  const { sitePublicId: routeMembersSiteParam } = useParams();
+  const routeMembersSiteId =
+    typeof routeMembersSiteParam === "string" && isUuidString(routeMembersSiteParam.trim())
+      ? routeMembersSiteParam.trim()
+      : "";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [count, setCount] = useState(null);
   const [members, setMembers] = useState([]);
-  // Project-level page: uses the project's primary site as a default scope.
-  // It deliberately does NOT consume a "current site" from query/state/context.
-  const resolvedSitePublicId = (primarySitePublicId || "").trim();
+  // Сайт из пути `/sites/:sitePublicId/members` имеет приоритет; иначе — основной сайт проекта (маршрут `/members`).
+  const resolvedSitePublicId =
+    routeMembersSiteId || (typeof primarySitePublicId === "string" ? primarySitePublicId.trim() : "");
 
   const load = useCallback(async () => {
     if (!resolvedSitePublicId) {

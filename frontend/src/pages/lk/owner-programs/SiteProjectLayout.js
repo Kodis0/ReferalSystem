@@ -186,6 +186,37 @@ export default function SiteProjectLayout() {
     [numericProjectId],
   );
 
+  /** Текущий сайт из пути — только для вкладок уровня сервиса (`/sites/:sitePublicId/...`). */
+  const shellScopedSitePublicIdForNav = useMemo(() => {
+    if (routeSitePublicId) return routeSitePublicId;
+    return "";
+  }, [routeSitePublicId]);
+
+  /** Вкладка «Виджет» на маршруте конкретного сайта. */
+  const widgetSiteNavPath = useMemo(() => {
+    if (!hasProjectId) return "/lk/partner";
+    if (shellScopedSitePublicIdForNav) return buildScopedProjectSitePath(shellScopedSitePublicIdForNav);
+    return buildScopedProjectPath("sites");
+  }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
+
+  /** Вкладка «Пользователи» на маршруте конкретного сайта. */
+  const membersSiteNavPath = useMemo(() => {
+    if (!hasProjectId) return "/lk/partner";
+    if (shellScopedSitePublicIdForNav) return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/members`;
+    return buildScopedProjectPath("sites");
+  }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
+
+  /** Вкладка «Настройки» только на маршруте конкретного сайта (в проекте вкладки нет). */
+  const settingsSiteNavPath = useMemo(() => {
+    if (!hasProjectId) return "/lk/partner";
+    if (shellScopedSitePublicIdForNav) return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/settings`;
+    return buildScopedProjectPath("sites");
+  }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
+
+  const projectServicesNavPath = useMemo(() => buildScopedProjectPath("sites"), [buildScopedProjectPath]);
+  const projectOverviewNavPath = useMemo(() => buildScopedProjectPath("overview"), [buildScopedProjectPath]);
+  const projectMembersNavPath = useMemo(() => buildScopedProjectPath("members"), [buildScopedProjectPath]);
+
   useEffect(() => {
     function handlePointerDown(event) {
       if (!createMenuRef.current || createMenuRef.current.contains(event.target)) return;
@@ -565,6 +596,20 @@ export default function SiteProjectLayout() {
 
   const projectComment =
     (typeof projectEntry?.project?.description === "string" ? projectEntry.project.description.trim() : "") || headComment;
+  const isSiteRouteShell = Boolean(routeSitePublicId);
+  const siteRowForShell = useMemo(() => {
+    if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
+    return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
+  }, [projectEntry, routeSitePublicId]);
+  const shellTitleText = isSiteRouteShell
+    ? headLoading && !siteRowForShell
+      ? "Сайт…"
+      : (typeof siteRowForShell?.display_name === "string" ? siteRowForShell.display_name.trim() : "") || "Сайт"
+    : headLoading
+      ? "Проект…"
+      : headTitle;
+  const siteShellOrigin =
+    typeof siteRowForShell?.primary_origin === "string" ? siteRowForShell.primary_origin.trim() : "";
   const isDefaultProject = Boolean(
     projectEntry?.project?.is_default || projectEntry?.is_default || headTitle === "Общий проект",
   );
@@ -641,55 +686,73 @@ export default function SiteProjectLayout() {
         <>
           <header className="owner-programs__shell-header">
             <div className="owner-programs__shell-header-main">
-              <label
-                className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
-              >
-                <input
-                  type="file"
-                  accept="image/gif, image/jpeg, image/png, image/webp"
-                  className="owner-programs__shell-avatar-input"
-                  onChange={handleAvatarChange}
-                  disabled={avatarSaveState === "saving" || !hasProjectId}
-                />
-                {avatarDataUrl ? (
-                  <>
-                    <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото проекта" />
-                    <button
-                      type="button"
-                      className="owner-programs__shell-avatar-remove"
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                      onClick={handleAvatarRemove}
-                      disabled={avatarSaveState === "saving"}
-                      aria-label="Удалить фото проекта"
-                    >
-                      <ProjectAvatarRemoveIcon />
-                    </button>
-                  </>
-                ) : (
-                  <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
+              {isSiteRouteShell ? (
+                <div className="owner-programs__shell-avatar" aria-hidden="true">
+                  <span className="owner-programs__shell-avatar-placeholder">
                     <ProjectShellAvatarIcon />
                   </span>
-                )}
-              </label>
+                </div>
+              ) : (
+                <label
+                  className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
+                >
+                  <input
+                    type="file"
+                    accept="image/gif, image/jpeg, image/png, image/webp"
+                    className="owner-programs__shell-avatar-input"
+                    onChange={handleAvatarChange}
+                    disabled={avatarSaveState === "saving" || !hasProjectId}
+                  />
+                  {avatarDataUrl ? (
+                    <>
+                      <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото проекта" />
+                      <button
+                        type="button"
+                        className="owner-programs__shell-avatar-remove"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={handleAvatarRemove}
+                        disabled={avatarSaveState === "saving"}
+                        aria-label="Удалить фото проекта"
+                      >
+                        <ProjectAvatarRemoveIcon />
+                      </button>
+                    </>
+                  ) : (
+                    <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
+                      <ProjectShellAvatarIcon />
+                    </span>
+                  )}
+                </label>
+              )}
               <div
-                className="owner-programs__shell-header-copy owner-programs__shell-header-copy_clickable"
-                role="button"
-                tabIndex={0}
-                onClick={openProjectInfo}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    openProjectInfo();
-                  }
-                }}
+                className={`owner-programs__shell-header-copy${
+                  isSiteRouteShell ? "" : " owner-programs__shell-header-copy_clickable"
+                }`}
+                role={isSiteRouteShell ? undefined : "button"}
+                tabIndex={isSiteRouteShell ? undefined : 0}
+                onClick={isSiteRouteShell ? undefined : openProjectInfo}
+                onKeyDown={
+                  isSiteRouteShell
+                    ? undefined
+                    : (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openProjectInfo();
+                        }
+                      }
+                }
               >
-                <h1 className="owner-programs__shell-title">{headLoading ? "Проект…" : headTitle}</h1>
+                <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
                 <p className="owner-programs__shell-sub">
-                  {headLoading ? (
+                  {headLoading && !isSiteRouteShell ? (
                     <span className="lk-partner__muted">Загрузка…</span>
+                  ) : headLoading && isSiteRouteShell && !siteRowForShell ? (
+                    <span className="lk-partner__muted">Загрузка…</span>
+                  ) : isSiteRouteShell ? (
+                    siteShellOrigin || "Адрес сайта не указан"
                   ) : projectComment ? (
                     projectComment
                   ) : (
@@ -745,13 +808,40 @@ export default function SiteProjectLayout() {
             </div>
           </header>
 
-          <nav className="owner-programs__tabs" aria-label="Разделы проекта">
-            <NavLink to={buildScopedProjectPath("sites")} state={{ projectViewMode: "overview" }} className={tabClass}>
-              Сайты
-            </NavLink>
-            <NavLink to={buildScopedProjectPath("members")} className={tabClass}>
-              Пользователи
-            </NavLink>
+          <nav
+            className="owner-programs__tabs"
+            aria-label={isSiteRouteShell ? "Виджет, настройки и пользователи сайта" : "Сервисы и пользователи проекта"}
+          >
+            {isSiteRouteShell ? (
+              <>
+                <NavLink to={widgetSiteNavPath} end className={tabClass}>
+                  Виджет
+                </NavLink>
+                <NavLink to={settingsSiteNavPath} end className={tabClass}>
+                  Настройки
+                </NavLink>
+                <NavLink to={membersSiteNavPath} end className={tabClass}>
+                  Пользователи
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink
+                  to={projectServicesNavPath}
+                  end
+                  className={({ isActive }) =>
+                    tabClass({
+                      isActive: isActive || location.pathname === projectOverviewNavPath,
+                    })
+                  }
+                >
+                  Сервисы
+                </NavLink>
+                <NavLink to={projectMembersNavPath} end className={tabClass}>
+                  Пользователи
+                </NavLink>
+              </>
+            )}
           </nav>
         </>
       ) : null}

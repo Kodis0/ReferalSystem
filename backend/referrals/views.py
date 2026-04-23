@@ -32,6 +32,7 @@ from .services import (
     create_project_for_site,
     ensure_project_avatar_data_url,
     ensure_partner_profile,
+    persist_project_avatar_if_empty,
     generate_publishable_key,
     partner_dashboard_payload,
     referral_capture_origin_allowed,
@@ -140,7 +141,7 @@ def _owner_project_payload(*, project: Project | None, sites: list[Site]) -> dic
             "id": project.id,
             "name": project.name.strip(),
             "description": project.description.strip(),
-            "avatar_data_url": project.avatar_data_url.strip(),
+            "avatar_data_url": persist_project_avatar_if_empty(project),
             "is_default": bool(project.is_default),
         }
     elif primary_site is not None:

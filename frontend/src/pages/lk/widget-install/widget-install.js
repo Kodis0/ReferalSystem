@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/light";
 import xml from "react-syntax-highlighter/dist/cjs/languages/hljs/xml";
 import { atomOneDarkReasonable } from "react-syntax-highlighter/dist/cjs/styles/hljs";
@@ -187,6 +187,22 @@ function syncSelectedSiteInUrl(sitePublicId, { skip = false } = {}) {
   } catch {}
 }
 
+/** Canonical «Виджет» tab for a site inside the project shell. */
+function buildProjectSiteWidgetPath(integrationPayload, selectedSitePublicId, projectBasePathState, projectIdFromRoute) {
+  const siteId = String(integrationPayload?.public_id || selectedSitePublicId || "").trim();
+  if (!siteId) return "";
+  const fromPayload =
+    integrationPayload?.project && typeof integrationPayload.project.id === "number"
+      ? `/lk/partner/project/${integrationPayload.project.id}`
+      : "";
+  const base =
+    fromPayload ||
+    (projectBasePathState && String(projectBasePathState).trim()) ||
+    (projectIdFromRoute ? `/lk/partner/project/${projectIdFromRoute}` : "");
+  if (!base) return "";
+  return `${base}/sites/${encodeURIComponent(siteId)}`;
+}
+
 function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyHint, steps = null, compact = false }) {
   const copied = copyHint === "Скопировано";
   const sectionClass = compact
@@ -336,6 +352,7 @@ function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView 
 function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", focused = false, presentation = "default" } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
+  const params = useParams();
   const routeSitePublicIdRaw = (routeSitePublicIdProp || "").trim();
   const routeSitePublicId = isUuidString(routeSitePublicIdRaw) ? routeSitePublicIdRaw : "";
   const inProjectShell = Boolean(routeSitePublicId);
@@ -374,6 +391,18 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const loadGenerationRef = useRef(0);
   const locationRef = useRef(location);
   locationRef.current = location;
+
+  const projectIdFromRoute = useMemo(() => {
+    const raw = String(params?.projectId ?? "").trim();
+    return /^\d+$/.test(raw) ? raw : "";
+  }, [params?.projectId]);
+
+  /** API may omit numeric `project.id`; under `/lk/partner/project/:projectId/...` the path is authoritative. */
+  const effectiveProjectBasePath = useMemo(() => {
+    if (projectBasePath) return projectBasePath;
+    if (projectIdFromRoute) return `/lk/partner/project/${projectIdFromRoute}`;
+    return "";
+  }, [projectBasePath, projectIdFromRoute]);
 
   const load = useCallback(async (sitePublicIdOverride) => {
     const generation = ++loadGenerationRef.current;
@@ -485,21 +514,15 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     load();
   }, [load, location.search]);
 
-  const goToProjectSitePage = useCallback(() => {
-    if (!projectBasePath || !selectedSitePublicId) return;
-    navigate(`${projectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}`, { replace: true });
-  }, [navigate, projectBasePath, selectedSitePublicId]);
-
   const siteManagementPath = useMemo(() => {
-    if (!projectBasePath || !selectedSitePublicId) return "";
-    return `${projectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}`;
-  }, [projectBasePath, selectedSitePublicId]);
+    if (!effectiveProjectBasePath || !selectedSitePublicId) return "";
+    return `${effectiveProjectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}`;
+  }, [effectiveProjectBasePath, selectedSitePublicId]);
 
   useEffect(() => {
     if (!focusedConnectView || loading || !data || !siteManagementPath) return;
     const cc = diag?.connection_check;
-    const life = diag?.site_status || data?.status;
-    if (cc?.status === "found" && (life === "verified" || life === "active")) {
+    if (cc?.status === "found") {
       navigate(siteManagementPath, { replace: true });
     }
   }, [focusedConnectView, loading, data, diag, siteManagementPath, navigate]);
@@ -656,7 +679,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         setDiagError("");
       }
       if (focusedConnectView) {
-        goToProjectSitePage();
+        const widgetPath = buildProjectSiteWidgetPath(
+          payload,
+          selectedSitePublicId,
+          effectiveProjectBasePath,
+          projectIdFromRoute,
+        );
+        if (widgetPath) navigate(widgetPath, { replace: true });
       }
     } catch (e) {
       console.error(e);
@@ -685,7 +714,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       setData(payload);
       await load();
       if (focusedConnectView) {
-        goToProjectSitePage();
+        const widgetPath = buildProjectSiteWidgetPath(
+          payload,
+          selectedSitePublicId,
+          effectiveProjectBasePath,
+          projectIdFromRoute,
+        );
+        if (widgetPath) navigate(widgetPath, { replace: true });
       }
     } catch (e) {
       console.error(e);

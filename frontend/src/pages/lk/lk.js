@@ -547,6 +547,8 @@ function LK() {
                 <Route index element={<Navigate to="sites" replace relative="path" />} />
                 <Route path="overview" element={<ProjectOverviewPage />} />
                 <Route path="sites" element={<ProjectOverviewPage />} />
+                <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
+                <Route path="sites/:sitePublicId/settings" element={<ProjectSettingsPage />} />
                 <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
                 <Route path="info" element={<ProjectInfoPage />} />
                 <Route path="site" element={<ProjectSiteManagementScreen legacyTabRoute />} />

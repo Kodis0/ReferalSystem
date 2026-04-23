@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -55,15 +55,25 @@ export default function ProjectSettingsPage() {
     primarySitePublicId = "",
     projectId = null,
     buildProjectPath,
+    buildProjectSitePath,
   } = outletContext;
-  // Project-level page: scoped to the project's primary site only.
-  const id = (primarySitePublicId || "").trim();
-  const overviewPath =
-    typeof buildProjectPath === "function"
-      ? buildProjectPath("sites")
-      : typeof projectId === "number"
-        ? `/lk/partner/project/${projectId}/sites`
-        : "/lk/partner";
+  const { sitePublicId: routeSettingsSiteParam } = useParams();
+  const routeSettingsSiteId =
+    typeof routeSettingsSiteParam === "string" && isUuidString(routeSettingsSiteParam.trim())
+      ? routeSettingsSiteParam.trim()
+      : "";
+  // Сайт из пути `/sites/:sitePublicId/settings` имеет приоритет; иначе — основной сайт (`/settings`).
+  const id =
+    routeSettingsSiteId ||
+    (typeof primarySitePublicId === "string" ? primarySitePublicId.trim() : "");
+  const overviewPath = useMemo(() => {
+    if (typeof buildProjectSitePath === "function" && isUuidString(id)) {
+      return buildProjectSitePath(id);
+    }
+    if (typeof buildProjectPath === "function") return buildProjectPath("sites");
+    if (typeof projectId === "number") return `/lk/partner/project/${projectId}/sites`;
+    return "/lk/partner";
+  }, [buildProjectPath, buildProjectSitePath, id, projectId]);
 
   const [loadState, setLoadState] = useState("loading");
   const [loadError, setLoadError] = useState("");
@@ -182,7 +192,7 @@ export default function ProjectSettingsPage() {
       }
       navigate(
         typeof buildProjectPath === "function"
-          ? buildProjectPath("sites", "")
+          ? buildProjectPath("sites")
           : typeof projectId === "number"
             ? `/lk/partner/project/${projectId}/sites`
             : "/lk/partner",
@@ -204,7 +214,7 @@ export default function ProjectSettingsPage() {
       <h2 className="owner-programs__overview-title">Настройки</h2>
       <div className="page__returnButton" style={{ marginBottom: 12 }}>
         <button type="button" className="tw-link link_primary link_s" onClick={() => navigate(overviewPath)}>
-          Назад к сервисам
+          {routeSettingsSiteId ? "Назад к сайту" : "Назад к сервисам"}
         </button>
       </div>
       <p className="owner-programs__muted" style={{ margin: "6px 0 20px", maxWidth: 560 }}>

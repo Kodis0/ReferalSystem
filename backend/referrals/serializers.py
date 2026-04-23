@@ -4,7 +4,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from .models import Site
-from .services import site_capture_config_dict, site_owner_display_name
+from .services import persist_project_avatar_if_empty, site_capture_config_dict, site_owner_display_name
 
 
 def normalize_owner_site_origin(value: str) -> str:
@@ -66,7 +66,7 @@ def serialize_owner_project_metadata(site: Site) -> dict[str, object]:
         "id": project.id,
         "name": project.name.strip(),
         "description": project.description.strip(),
-        "avatar_data_url": project.avatar_data_url.strip(),
+        "avatar_data_url": persist_project_avatar_if_empty(project),
         "is_default": bool(project.is_default),
     }
 

@@ -200,6 +200,17 @@ def ensure_project_avatar_data_url(value: Any) -> str:
     return raw or generate_project_avatar_data_url()
 
 
+def persist_project_avatar_if_empty(project: Project) -> str:
+    """Return stored avatar URL; if empty, assign a generated SVG and persist (legacy default projects)."""
+    raw = project.avatar_data_url.strip() if isinstance(project.avatar_data_url, str) else ""
+    if raw:
+        return raw
+    next_url = ensure_project_avatar_data_url("")
+    Project.objects.filter(pk=project.pk).update(avatar_data_url=next_url)
+    project.avatar_data_url = next_url
+    return next_url
+
+
 def ensure_default_owner_project(user) -> Tuple[Project, bool]:
     project, created = Project.objects.get_or_create(
         owner=user,

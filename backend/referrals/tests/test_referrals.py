@@ -752,6 +752,23 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(row["primary_site_public_id"], "")
         self.assertEqual(row["sites"], [])
 
+    def test_owner_sites_list_persists_generated_avatar_when_project_avatar_empty(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name="Legacy empty avatar",
+            description="",
+            avatar_data_url="",
+        )
+        self.assertEqual(project.avatar_data_url, "")
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        row = next(p for p in r.data["projects"] if p["id"] == project.id)
+        url = row["project"]["avatar_data_url"]
+        self.assertTrue(url.startswith("data:image/svg+xml;base64,"))
+        project.refresh_from_db()
+        self.assertEqual(project.avatar_data_url, url)
+
     def test_owner_sites_list_returns_all_ordered_newest_first(self):
         older_project = Project.objects.create(
             owner=self.owner,

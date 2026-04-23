@@ -36,9 +36,9 @@ function buildCanonicalTargetPath(projectId, section, sitePublicId) {
     case "widget":
       return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
     case "members":
-      return `${projectBase}/members`;
+      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}/members`;
     case "settings":
-      return `${projectBase}/settings`;
+      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}/settings`;
     case "info":
       return `${projectBase}/info`;
     case "sites":
