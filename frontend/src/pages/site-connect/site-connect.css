@@ -1,0 +1,11 @@
+/* Full-viewport shell for /site-connect — no LK sidebar or cabinet chrome */
+.site-connect-root {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 24px 16px 48px;
+}
+
+.site-connect-root .lk-dashboard {
+  max-width: 720px;
+  margin: 0 auto;
+}

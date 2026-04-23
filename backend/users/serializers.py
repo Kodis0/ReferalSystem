@@ -1,6 +1,9 @@
-from rest_framework import serializers
-from .models import CustomUser
 from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+from referrals.services import ensure_default_owner_project
+
+from .models import CustomUser
 
 User = get_user_model()
 
@@ -32,6 +35,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = CustomUser(username=username, email=email, **validated_data)
         user.set_password(password)
         user.save()
+        ensure_default_owner_project(user)
         return user
 
 # ------------------- Логин -------------------
@@ -67,4 +71,4 @@ class SiteCtaJoinSerializer(serializers.Serializer):
 class CurrentUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']  # любые поля для фронта
+        fields = ['id', 'public_id', 'username', 'email', 'first_name', 'last_name']  # любые поля для фронта

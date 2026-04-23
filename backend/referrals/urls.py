@@ -3,6 +3,9 @@ from django.urls import path
 from .views import (
     PartnerDashboardView,
     PartnerOnboardView,
+    ProjectOwnerCreateView,
+    ProjectOwnerDetailView,
+    ProjectSiteOwnerCreateView,
     ReferralCaptureView,
     SiteOwnerCreateView,
     SiteOwnerIntegrationActivateView,
@@ -11,12 +14,28 @@ from .views import (
     SiteOwnerIntegrationView,
     SiteOwnerIntegrationVerifyView,
     SiteOwnerSiteMembersListView,
+    SiteOwnerSitesListView,
 )
 
 urlpatterns = [
     path("capture/", ReferralCaptureView.as_view(), name="referral-capture"),
     path("partner/onboard/", PartnerOnboardView.as_view(), name="partner-onboard"),
     path("partner/me/", PartnerDashboardView.as_view(), name="partner-dashboard"),
+    path(
+        "project/create/",
+        ProjectOwnerCreateView.as_view(),
+        name="project-owner-create",
+    ),
+    path(
+        "project/<int:project_id>/",
+        ProjectOwnerDetailView.as_view(),
+        name="project-owner-detail",
+    ),
+    path(
+        "project/<int:project_id>/site/create/",
+        ProjectSiteOwnerCreateView.as_view(),
+        name="project-site-owner-create",
+    ),
     path(
         "site/bootstrap/",
         SiteOwnerBootstrapView.as_view(),
@@ -26,6 +45,11 @@ urlpatterns = [
         "site/create/",
         SiteOwnerCreateView.as_view(),
         name="site-owner-create",
+    ),
+    path(
+        "site/owner-sites/",
+        SiteOwnerSitesListView.as_view(),
+        name="site-owner-sites-list",
     ),
     path(
         "site/integration/",

@@ -6,7 +6,11 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+    # Use fast test settings (password hasher, etc.) for the Django test runner only.
+    if len(sys.argv) >= 2 and sys.argv[1] == "test":
+        os.environ["DJANGO_SETTINGS_MODULE"] = "core.test_settings"
+    else:
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

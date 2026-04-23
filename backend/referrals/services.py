@@ -3,6 +3,7 @@ Referral domain services — explicit entry points (no Django signals).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -25,6 +26,7 @@ from .models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    Project,
     ReferralLeadEvent,
     ReferralVisit,
     Site,
@@ -35,6 +37,29 @@ logger = logging.getLogger(__name__)
 
 # Unambiguous ref alphabet (no O/0/I/1 confusion).
 _REF_ALPHABET = string.ascii_uppercase.replace("O", "").replace("I", "") + "23456789"
+
+_PROJECT_AVATAR_PALETTES = (
+    ("#0F172A", "#1D4ED8", "#1E3A8A", "#1D4ED8"),
+    ("#172554", "#1D4ED8", "#1E40AF", "#2563EB"),
+    ("#1E1B4B", "#1E40AF", "#1E3A8A", "#3B82F6"),
+    ("#082F49", "#1D4ED8", "#0F3D91", "#2563EB"),
+)
+DEFAULT_OWNER_PROJECT_NAME = "Общий проект"
+SITE_DISPLAY_NAME_CONFIG_KEY = "site_display_name"
+SITE_CAPTURE_CONFIG_KEY = "capture_config"
+SITE_CAPTURE_CONFIG_VERSION = 1
+SITE_CAPTURE_REQUIRED_FIELDS = ("ref", "page_url", "form_id")
+SITE_CAPTURE_OPTIONAL_FIELDS = ("name", "email", "phone", "amount", "currency", "product_name")
+SITE_CAPTURE_RECOMMENDED_FIELDS = ("name", "email", "phone")
+_PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
+    {
+        "display_name",
+        "description",
+        "avatar_data_url",
+        SITE_DISPLAY_NAME_CONFIG_KEY,
+        SITE_CAPTURE_CONFIG_KEY,
+    }
+)
 
 
 def _ttl_delta():
@@ -102,6 +127,89 @@ def generate_ref_code(length: int = 10) -> str:
         if not PartnerProfileModel.objects.filter(ref_code__iexact=code).exists():
             return code
     raise RuntimeError("Could not allocate a unique ref_code")
+
+
+def generate_project_avatar_data_url() -> str:
+    """Generate a blue geometric SVG avatar for a newly created owner project."""
+    seed = secrets.token_hex(12)
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    bg_start, bg_end, shape_a, shape_b = _PROJECT_AVATAR_PALETTES[
+        digest[0] % len(_PROJECT_AVATAR_PALETTES)
+    ]
+    accent = "#FFFFFF"
+
+    orb_1_x = 16 + digest[1] % 20
+    orb_1_y = 16 + digest[2] % 20
+    orb_1_r = 12 + digest[3] % 8
+    orb_2_x = 40 + digest[4] % 18
+    orb_2_y = 38 + digest[5] % 18
+    orb_2_r = 11 + digest[6] % 9
+
+    diamond_cx = 24 + digest[7] % 24
+    diamond_cy = 24 + digest[8] % 24
+    diamond_r = 10 + digest[9] % 9
+
+    rect_x = 10 + digest[10] % 18
+    rect_y = 30 + digest[11] % 16
+    rect_w = 28 + digest[12] % 18
+    rect_h = 12 + digest[13] % 10
+    rect_rot = -24 + digest[14] % 49
+
+    triangle_x1 = 8 + digest[15] % 18
+    triangle_y1 = 40 + digest[16] % 16
+    triangle_x2 = 28 + digest[17] % 18
+    triangle_y2 = 12 + digest[18] % 18
+    triangle_x3 = 50 + digest[19] % 14
+    triangle_y3 = 44 + digest[20] % 16
+
+    highlight_x = 34 + digest[21] % 18
+    highlight_y = 8 + digest[22] % 16
+    highlight_r = 8 + digest[23] % 7
+
+    svg = f"""
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" fill="none">
+  <defs>
+    <linearGradient id="bg-{seed}" x1="10" y1="6" x2="62" y2="66" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="{bg_start}"/>
+      <stop offset="1" stop-color="{bg_end}"/>
+    </linearGradient>
+    <clipPath id="clip-{seed}">
+      <circle cx="36" cy="36" r="36"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip-{seed})">
+    <circle cx="36" cy="36" r="36" fill="url(#bg-{seed})"/>
+    <circle cx="{orb_1_x}" cy="{orb_1_y}" r="{orb_1_r}" fill="{shape_a}" opacity="0.85"/>
+    <circle cx="{orb_2_x}" cy="{orb_2_y}" r="{orb_2_r}" fill="{shape_b}" opacity="0.72"/>
+    <rect x="{rect_x}" y="{rect_y}" width="{rect_w}" height="{rect_h}" rx="{max(6, rect_h // 2)}"
+      fill="{accent}" opacity="0.18" transform="rotate({rect_rot} 36 36)"/>
+    <path d="M{diamond_cx} {diamond_cy - diamond_r} L{diamond_cx + diamond_r} {diamond_cy} L{diamond_cx} {diamond_cy + diamond_r} L{diamond_cx - diamond_r} {diamond_cy} Z"
+      fill="{accent}" opacity="0.28"/>
+    <path d="M{triangle_x1} {triangle_y1} L{triangle_x2} {triangle_y2} L{triangle_x3} {triangle_y3} Z"
+      fill="{shape_b}" opacity="0.34"/>
+    <circle cx="{highlight_x}" cy="{highlight_y}" r="{highlight_r}" fill="{accent}" opacity="0.12"/>
+  </g>
+</svg>
+""".strip()
+    encoded_svg = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded_svg}"
+
+
+def ensure_project_avatar_data_url(value: Any) -> str:
+    raw = value.strip() if isinstance(value, str) else ""
+    return raw or generate_project_avatar_data_url()
+
+
+def ensure_default_owner_project(user) -> Tuple[Project, bool]:
+    project, created = Project.objects.get_or_create(
+        owner=user,
+        is_default=True,
+        defaults={
+            "name": DEFAULT_OWNER_PROJECT_NAME,
+            "avatar_data_url": generate_project_avatar_data_url(),
+        },
+    )
+    return project, created
 
 
 def get_active_partner_by_ref_code(ref_code: str) -> Optional[PartnerProfile]:
@@ -234,10 +342,94 @@ def link_session_attributions_to_user(
     ).update(customer_user=user)
 
 
+def owner_project_metadata_from_site(site: Site) -> dict[str, str]:
+    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
+    name = cfg.get("display_name")
+    description = cfg.get("description")
+    avatar_data_url = cfg.get("avatar_data_url")
+    return {
+        "name": name.strip() if isinstance(name, str) else "",
+        "description": description.strip() if isinstance(description, str) else "",
+        "avatar_data_url": avatar_data_url.strip()
+        if isinstance(avatar_data_url, str)
+        else "",
+    }
+
+
+def site_owner_display_name(site: Site) -> str:
+    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
+    raw = cfg.get(SITE_DISPLAY_NAME_CONFIG_KEY)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()[:200]
+    project = getattr(site, "project", None)
+    if project is not None and isinstance(project.name, str) and project.name.strip():
+        return project.name.strip()[:200]
+    origins = site.allowed_origins if isinstance(site.allowed_origins, list) else []
+    for origin in origins:
+        if not isinstance(origin, str) or not origin.strip():
+            continue
+        try:
+            parsed = urlparse(origin.strip() if "://" in origin else f"https://{origin.strip()}")
+        except Exception:
+            parsed = None
+        host = parsed.hostname if parsed is not None else ""
+        if host:
+            return host[:200]
+    return ""
+
+
+def sanitize_site_capture_config(raw: Any) -> dict[str, Any]:
+    allowed = set(SITE_CAPTURE_OPTIONAL_FIELDS)
+    values = raw if isinstance(raw, Mapping) else {}
+    enabled_raw = values.get("enabled_optional_fields")
+    enabled_items = enabled_raw if isinstance(enabled_raw, list) else []
+    enabled_seen: set[str] = set()
+    enabled: list[str] = []
+    for item in enabled_items:
+        key = str(item or "").strip()
+        if key in allowed and key not in enabled_seen:
+            enabled_seen.add(key)
+            enabled.append(key)
+    return {
+        "version": SITE_CAPTURE_CONFIG_VERSION,
+        "enabled_optional_fields": enabled,
+    }
+
+
+def site_capture_config_dict(site: Site) -> dict[str, Any]:
+    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
+    has_capture_config = SITE_CAPTURE_CONFIG_KEY in cfg
+    raw = cfg.get(SITE_CAPTURE_CONFIG_KEY)
+    normalized = sanitize_site_capture_config(raw)
+    if not has_capture_config:
+        normalized["enabled_optional_fields"] = list(SITE_CAPTURE_OPTIONAL_FIELDS)
+    return {
+        **normalized,
+        "required_fields": list(SITE_CAPTURE_REQUIRED_FIELDS),
+        "recommended_fields": list(SITE_CAPTURE_RECOMMENDED_FIELDS),
+    }
+
+
+def create_project_for_site(site: Site) -> Project:
+    if site.project_id:
+        if getattr(site, "project", None) is not None:
+            return site.project
+        return Project.objects.get(pk=site.project_id)
+
+    project_meta = owner_project_metadata_from_site(site)
+    project_meta["avatar_data_url"] = ensure_project_avatar_data_url(
+        project_meta.get("avatar_data_url")
+    )
+    project = Project.objects.create(owner=site.owner, **project_meta)
+    Site.objects.filter(pk=site.pk).update(project=project)
+    site.project = project
+    return project
+
+
 def get_site_by_public_id(public_id) -> Optional[Site]:
     if not public_id:
         return None
-    return Site.objects.filter(public_id=public_id).first()
+    return Site.objects.select_related("project").filter(public_id=public_id).first()
 
 
 def site_allows_cta_signup_membership(site: Site) -> bool:
@@ -1469,11 +1661,22 @@ def _widget_lead_selector_keys(cfg: dict[str, Any]) -> dict[str, str]:
     return out
 
 
+def public_widget_runtime_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in cfg.items():
+        if key in _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS:
+            continue
+        out[key] = value
+    return out
+
+
 def public_widget_config_dict(*, request, site: Site) -> dict[str, Any]:
     site_uuid = str(site.public_id)
     ingest = request.build_absolute_uri(f"/public/v1/events/leads?site={site_uuid}")
     cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    public_cfg = public_widget_runtime_config(cfg)
     selector_keys = _widget_lead_selector_keys(cfg)
+    capture_cfg = site_capture_config_dict(site)
 
     def _truthy_config(key: str) -> bool:
         v = cfg.get(key)
@@ -1489,8 +1692,32 @@ def public_widget_config_dict(*, request, site: Site) -> dict[str, Any]:
         "lead_ingest_url": ingest,
         "storage_key": f"rs_ref_v1_{site_uuid}",
         "report_observed_outcome": _truthy_config("report_observed_outcome"),
-        "config": dict(cfg),
+        "capture_config": {
+            "version": capture_cfg["version"],
+            "enabled_optional_fields": list(capture_cfg["enabled_optional_fields"]),
+        },
+        "config": public_cfg,
         **selector_keys,
+    }
+
+
+def record_site_widget_seen(*, site: Site, origin: str) -> None:
+    updates: dict[str, Any] = {"last_widget_seen_at": timezone.now()}
+    if isinstance(origin, str) and origin.strip():
+        updates["last_widget_seen_origin"] = origin.strip()[:255]
+    Site.objects.filter(pk=site.pk).update(**updates)
+    site.last_widget_seen_at = updates["last_widget_seen_at"]
+    if "last_widget_seen_origin" in updates:
+        site.last_widget_seen_origin = updates["last_widget_seen_origin"]
+
+
+def build_site_connection_check(site: Site) -> dict[str, Any]:
+    seen_at = getattr(site, "last_widget_seen_at", None)
+    seen_origin = (getattr(site, "last_widget_seen_origin", "") or "").strip()
+    return {
+        "status": "found" if seen_at else "not_found",
+        "last_seen_at": seen_at.isoformat() if seen_at else None,
+        "last_seen_origin": seen_origin,
     }
 
 

@@ -1,11 +1,14 @@
-import { useParams } from "react-router-dom";
+import { useLocation, useOutletContext, useParams } from "react-router-dom";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import WidgetInstallScreen from "./widget-install";
 
-/** Renders widget install UI bound to `/lk/partner/:sitePublicId/widget`. */
+/** Renders widget install UI inside the project shell using selected site context. */
 export default function ProjectWidgetInstallScreen() {
+  const location = useLocation();
   const { sitePublicId } = useParams();
-  const raw = (sitePublicId || "").trim();
+  const outletContext = useOutletContext() || {};
+  const raw = (outletContext.selectedSitePublicId || sitePublicId || "").trim();
   const id = isUuidString(raw) ? raw : "";
-  return <WidgetInstallScreen routeSitePublicId={id} />;
+  const focused = location.state?.projectViewMode === "connect-site";
+  return <WidgetInstallScreen routeSitePublicId={id} focused={focused} />;
 }

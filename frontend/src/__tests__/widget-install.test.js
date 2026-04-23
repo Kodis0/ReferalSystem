@@ -7,7 +7,16 @@
 import "@testing-library/jest-dom";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import WidgetInstallScreen from "../pages/lk/widget-install/widget-install";
+
+function renderWithLkRouter(ui) {
+  return render(<MemoryRouter initialEntries={["/lk/widget-install"]}>{ui}</MemoryRouter>);
+}
+
+function renderFocusedWidgetInstall(ui) {
+  return render(<MemoryRouter initialEntries={["/lk/partner/project/1/widget"]}>{ui}</MemoryRouter>);
+}
 
 describe("WidgetInstallScreen", () => {
   beforeEach(() => {
@@ -22,6 +31,7 @@ describe("WidgetInstallScreen", () => {
   function mockIntegrationPayload(overrides = {}) {
     return {
       public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      site_display_name: "Demo shop",
       publishable_key: "pk_test_widget",
       allowed_origins: ["https://shop.example"],
       platform_preset: "tilda",
@@ -30,6 +40,11 @@ describe("WidgetInstallScreen", () => {
       activated_at: null,
       widget_enabled: true,
       config_json: { amount_selector: ".js-price" },
+      capture_config: {
+        required_fields: ["ref", "page_url", "form_id"],
+        recommended_fields: ["name", "email", "phone"],
+        enabled_optional_fields: ["name", "email", "phone", "amount", "currency", "product_name"],
+      },
       widget_embed_snippet:
         '<script src="https://app.example/widgets/referral-widget.v1.js"\n' +
         '  data-rs-api="https://api.example"\n' +
@@ -55,6 +70,11 @@ describe("WidgetInstallScreen", () => {
         widget_enabled: true,
         publishable_key_present: true,
         public_id_present: true,
+      },
+      connection_check: {
+        status: "not_found",
+        last_seen_at: null,
+        last_seen_origin: "",
       },
       widget_runtime: {
         observe_success: true,
@@ -137,10 +157,10 @@ describe("WidgetInstallScreen", () => {
     });
   }
 
-  it("loads integration and shows snippet and ids", async () => {
+  it("loads integration and shows main snippet onboarding block", async () => {
     const fetchMock = mockFetchIntegrationAndDiagnostics();
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -157,24 +177,33 @@ describe("WidgetInstallScreen", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("pk_test_widget")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Установите код на сайт/i })).toBeInTheDocument();
     });
+    expect(screen.getByTestId("widget-install-snippet-block")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Скопировать код/i })).toBeInTheDocument();
+    expect(screen.getByText(/Вставьте код на сайт, опубликуйте изменения/i)).toBeInTheDocument();
+    expect(screen.getByText("Вставьте код на сайт")).toBeInTheDocument();
+    expect(screen.getByText("Опубликуйте изменения")).toBeInTheDocument();
+    expect(screen.getByText("Откройте страницу сайта")).toBeInTheDocument();
+    expect(screen.getByText(/Вернитесь и нажмите «Проверить подключение»/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Что подключается/i })).toBeInTheDocument();
+    expect(screen.getByText("Demo shop")).toBeInTheDocument();
     expect(screen.getByText(/referral-widget\.v1\.js/)).toBeInTheDocument();
-    expect(screen.getAllByText("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("https://shop.example").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows diagnostics health section", async () => {
+  it("shows onboarding sections and technical disclosures", async () => {
     mockFetchIntegrationAndDiagnostics();
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Состояние интеграции/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Установите код на сайт/i })).toBeInTheDocument();
     });
-    expect(screen.getByText("В норме")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Участники по CTA/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Наблюдаемые итоги/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Качество публичного ingest/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Какие данные отправлять/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Проверка и запуск/i })).toBeInTheDocument();
+    expect(screen.getByText("Техническая диагностика")).toBeInTheDocument();
+    expect(screen.getByText("Технические метрики")).toBeInTheDocument();
   });
 
   it("shows membership count and recent joins from diagnostics", async () => {
@@ -206,7 +235,7 @@ describe("WidgetInstallScreen", () => {
       });
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     const ctaHeading = await screen.findByRole("heading", { name: /Участники по CTA/i });
     const ctaSection = ctaHeading.closest("section");
@@ -256,7 +285,7 @@ describe("WidgetInstallScreen", () => {
       });
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
       expect(screen.getByText("/order")).toBeInTheDocument();
@@ -272,7 +301,7 @@ describe("WidgetInstallScreen", () => {
       json: async () => ({ detail: "site_missing" }),
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
       expect(screen.getByText(/ещё не подключён сайт/i)).toBeInTheDocument();
@@ -311,7 +340,7 @@ describe("WidgetInstallScreen", () => {
       });
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Подключить сайт/i })).toBeInTheDocument();
@@ -349,7 +378,7 @@ describe("WidgetInstallScreen", () => {
       });
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Подключить сайт/i })).toBeInTheDocument();
@@ -368,16 +397,85 @@ describe("WidgetInstallScreen", () => {
 
     mockFetchIntegrationAndDiagnostics();
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Копировать сниппет/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Скопировать код/i })).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: /Копировать сниппет/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Скопировать код/i }));
 
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining("data-rs-key="));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Код скопирован" })).toBeInTheDocument();
+    });
+  });
+
+  it("renders required and optional capture fields", async () => {
+    mockFetchIntegrationAndDiagnostics();
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /Какие данные отправлять/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("capture-required-fields")).toHaveTextContent("ref");
+    expect(screen.getByTestId("capture-required-fields")).toHaveTextContent("URL страницы");
+    expect(screen.getByTestId("capture-optional-fields")).toHaveTextContent("Имя");
+    expect(screen.getByTestId("capture-optional-fields")).toHaveTextContent("Email");
+    expect(screen.getByTestId("capture-optional-fields")).toHaveTextContent("Телефон");
+    expect(screen.getByText(/Будут отправляться:/i)).toBeInTheDocument();
+  });
+
+  it("saves capture field config via integration settings", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && options.method === "PATCH") {
+        const body = JSON.parse(options.body);
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              allowed_origins: body.allowed_origins,
+              platform_preset: body.platform_preset,
+              widget_enabled: body.widget_enabled,
+              config_json: body.config_json,
+              capture_config: {
+                required_fields: ["ref", "page_url", "form_id"],
+                recommended_fields: ["name", "email", "phone"],
+                enabled_optional_fields: body.capture_config.enabled_optional_fields,
+              },
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    const phoneCheckbox = await screen.findByLabelText(/Телефон/i);
+    await userEvent.click(phoneCheckbox);
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить настройки/i }));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        ([url, options]) => String(url).includes("/referrals/site/integration/") && options?.method === "PATCH"
+      );
+      expect(patchCall).toBeTruthy();
+      const body = JSON.parse(patchCall[1].body);
+      expect(body.capture_config.enabled_optional_fields).toEqual(["name", "email", "amount", "currency", "product_name"]);
     });
   });
 
@@ -400,13 +498,13 @@ describe("WidgetInstallScreen", () => {
       }),
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
       expect(screen.getByText(/Выберите проект/i)).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /site-one · Черновик/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /site-two · Активен/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /site-two · Активно/i })).toBeInTheDocument();
   });
 
   it("verify and activate buttons call lifecycle endpoints", async () => {
@@ -447,13 +545,13 @@ describe("WidgetInstallScreen", () => {
       });
     });
 
-    render(<WidgetInstallScreen />);
+    renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Подтвердить проверку/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Проверить подключение/i })).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: /Подтвердить проверку/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Проверить подключение/i }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("/referrals/site/integration/verify/"),
@@ -468,5 +566,141 @@ describe("WidgetInstallScreen", () => {
         expect.objectContaining({ method: "POST" })
       );
     });
+  });
+
+  it("renders focused connection check button and idle status", async () => {
+    mockFetchIntegrationAndDiagnostics();
+
+    renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /Проверка подключения/i })).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /Проверить подключение/i })).toBeInTheDocument();
+    expect(screen.getByText("Ещё не проверяли")).toBeInTheDocument();
+  });
+
+  it("shows focused connection check loading state", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
+        return new Promise(() => {});
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
+
+    expect(screen.getByRole("button", { name: /Проверяем/i })).toBeInTheDocument();
+    expect(screen.getByText("Идёт проверка")).toBeInTheDocument();
+  });
+
+  it("shows focused connection check success state", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              status: "verified",
+              verified_at: "2026-01-15T12:00:00+00:00",
+              connection_check: {
+                status: "found",
+                last_seen_at: "2026-01-15T11:59:00+00:00",
+                last_seen_origin: "https://shop.example",
+              },
+            }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockDiagnosticsPayload({
+              connection_check: {
+                status: "found",
+                last_seen_at: "2026-01-15T11:59:00+00:00",
+                last_seen_origin: "https://shop.example",
+              },
+              site_status: "verified",
+              verified_at: "2026-01-15T12:00:00+00:00",
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Подключение найдено")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Подключение найдено. Сайт подключён.")).toBeInTheDocument();
+  });
+
+  it("shows focused connection check failure state", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          json: async () => ({
+            detail: "site_connection_not_found",
+            connection_check: {
+              status: "not_found",
+              last_seen_at: null,
+              last_seen_origin: "",
+            },
+          }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Подключение не найдено")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(/Проверьте установку, публикацию сайта и откройте страницу ещё раз/i)
+    ).toBeInTheDocument();
   });
 });

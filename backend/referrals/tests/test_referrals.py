@@ -13,6 +13,7 @@ from referrals.models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    Project,
     PublicLeadIngestAudit,
     ReferralLeadEvent,
     ReferralVisit,
@@ -21,6 +22,7 @@ from referrals.models import (
 )
 from referrals.public_ingest_contract import CODE_CREATED, CODE_RATE_LIMITED
 from referrals.services import (
+    DEFAULT_OWNER_PROJECT_NAME,
     attach_attribution_to_order,
     ensure_partner_profile,
     generate_ref_code,
@@ -680,12 +682,19 @@ class SiteOwnerIntegrationApiTests(TestCase):
         PUBLIC_API_BASE="https://api.example.com",
     )
     def test_get_integration_includes_snippet(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name="Canonical project",
+            description="Canonical description",
+            avatar_data_url="data:image/png;base64,AAA",
+        )
         site = Site.objects.create(
             owner=self.owner,
+            project=project,
             publishable_key="pk_integration_test",
             allowed_origins=["https://shop.example"],
             platform_preset=Site.PlatformPreset.TILDA,
-            config_json={"amount_selector": ".price"},
+            config_json={"amount_selector": ".price", "display_name": "Legacy site name"},
         )
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/integration/")
@@ -693,7 +702,17 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["publishable_key"], "pk_integration_test")
         self.assertEqual(r.data["allowed_origins"], ["https://shop.example"])
         self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.TILDA)
-        self.assertEqual(r.data["config_json"], {"amount_selector": ".price"})
+        self.assertEqual(r.data["config_json"], {"amount_selector": ".price", "display_name": "Legacy site name"})
+        self.assertEqual(
+            r.data["project"],
+            {
+                "id": project.id,
+                "name": "Canonical project",
+                "description": "Canonical description",
+                "avatar_data_url": "data:image/png;base64,AAA",
+                "is_default": False,
+            },
+        )
         self.assertTrue(r.data["widget_enabled"])
         snippet = r.data["widget_embed_snippet"]
         self.assertIn("https://app.example.com/widgets/referral-widget.v1.js", snippet)
@@ -704,6 +723,81 @@ class SiteOwnerIntegrationApiTests(TestCase):
     def test_get_requires_auth(self):
         r = self.api.get("/referrals/site/integration/")
         self.assertEqual(r.status_code, 401)
+
+    def test_owner_sites_list_requires_auth(self):
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_owner_sites_list_empty(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["projects"], [])
+        self.assertEqual(r.data["sites"], [])
+
+    def test_owner_sites_list_includes_empty_projects(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name="Empty project",
+            description="No sites yet",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data["projects"]), 1)
+        row = r.data["projects"][0]
+        self.assertEqual(row["id"], project.id)
+        self.assertEqual(row["project"]["name"], "Empty project")
+        self.assertEqual(row["sites_count"], 0)
+        self.assertEqual(row["primary_site_public_id"], "")
+        self.assertEqual(row["sites"], [])
+
+    def test_owner_sites_list_returns_all_ordered_newest_first(self):
+        older_project = Project.objects.create(
+            owner=self.owner,
+            name="Older project",
+            description="Older description",
+        )
+        older = Site.objects.create(
+            owner=self.owner,
+            project=older_project,
+            publishable_key="pk_older_" + uuid.uuid4().hex,
+            allowed_origins=["https://older.example"],
+            config_json={"display_name": "Legacy older"},
+        )
+        newer_project = Project.objects.create(
+            owner=self.owner,
+            name="Newer project",
+            description="Newer description",
+        )
+        newer = Site.objects.create(
+            owner=self.owner,
+            project=newer_project,
+            publishable_key="pk_newer_" + uuid.uuid4().hex,
+            allowed_origins=["https://newer.example"],
+            config_json={"display_name": "Legacy newer"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data["projects"]), 2)
+        self.assertEqual(r.data["projects"][0]["primary_site_public_id"], str(newer.public_id))
+        self.assertEqual(r.data["projects"][1]["primary_site_public_id"], str(older.public_id))
+        self.assertEqual(r.data["projects"][0]["project"]["name"], "Newer project")
+        self.assertEqual(r.data["projects"][1]["project"]["name"], "Older project")
+        ids = [row["public_id"] for row in r.data["sites"]]
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(ids[0], str(newer.public_id))
+        self.assertEqual(ids[1], str(older.public_id))
+        names = {row["public_id"]: row["display_name"] for row in r.data["sites"]}
+        self.assertEqual(names[str(older.public_id)], "Older project")
+        self.assertEqual(names[str(newer.public_id)], "Newer project")
+        projects = {row["public_id"]: row["project"] for row in r.data["sites"]}
+        self.assertEqual(projects[str(older.public_id)]["description"], "Older description")
+        self.assertEqual(projects[str(newer.public_id)]["description"], "Newer description")
+        for row in r.data["sites"]:
+            self.assertIn("description", row)
+            self.assertIn("project", row)
 
     def test_bootstrap_requires_auth(self):
         r = self.api.post("/referrals/site/bootstrap/")
@@ -722,13 +816,20 @@ class SiteOwnerIntegrationApiTests(TestCase):
     def test_bootstrap_creates_first_site(self):
         self.api.force_authenticate(self.owner)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 0)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 0)
         r = self.api.post("/referrals/site/bootstrap/")
         self.assertEqual(r.status_code, 201)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
         self.assertIn("publishable_key", r.data)
         self.assertIn("widget_embed_snippet", r.data)
-        site = Site.objects.get(owner=self.owner)
+        site = Site.objects.select_related("project").get(owner=self.owner)
         self.assertEqual(r.data["publishable_key"], site.publishable_key)
+        self.assertIsNotNone(site.project)
+        self.assertEqual(site.project.owner_id, self.owner.id)
+        self.assertEqual(site.project.name, "")
+        self.assertEqual(site.project.description, "")
+        self.assertTrue(site.project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
 
     def test_bootstrap_idempotent_no_second_site(self):
         self.api.force_authenticate(self.owner)
@@ -764,30 +865,193 @@ class SiteOwnerIntegrationApiTests(TestCase):
         FRONTEND_URL="https://app.example.com",
         PUBLIC_API_BASE="https://api.example.com",
     )
-    def test_owner_can_create_second_site_via_create_endpoint(self):
-        Site.objects.create(
-            owner=self.owner,
-            publishable_key="pk_first_" + uuid.uuid4().hex,
-            allowed_origins=["https://first.example"],
-        )
+    def test_owner_can_create_first_site_via_create_endpoint(self):
         self.api.force_authenticate(self.owner)
-        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
         r = self.api.post(
             "/referrals/site/create/",
             data={
-                "display_name": "Second shop",
-                "origin": "second.example",
+                "display_name": "First shop",
+                "description": "First description",
+                "origin": "first.example",
                 "platform_preset": Site.PlatformPreset.TILDA,
             },
             format="json",
         )
         self.assertEqual(r.status_code, 201)
-        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 2)
-        newest = Site.objects.filter(owner=self.owner).order_by("-created_at", "-id").first()
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        newest = (
+            Site.objects.select_related("project")
+            .filter(owner=self.owner)
+            .order_by("-created_at", "-id")
+            .first()
+        )
         self.assertEqual(r.data["public_id"], str(newest.public_id))
-        self.assertEqual(newest.allowed_origins, ["https://second.example"])
-        self.assertEqual(newest.config_json.get("display_name"), "Second shop")
+        self.assertEqual(newest.allowed_origins, ["https://first.example"])
+        self.assertEqual(newest.config_json.get("display_name"), "First shop")
+        self.assertEqual(newest.config_json.get("description"), "First description")
         self.assertEqual(newest.platform_preset, Site.PlatformPreset.TILDA)
+        self.assertIsNotNone(newest.project)
+        self.assertEqual(newest.project.owner_id, self.owner.id)
+        self.assertEqual(newest.project.name, "First shop")
+        self.assertEqual(newest.project.description, "First description")
+        self.assertTrue(newest.project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
+
+    def test_owner_can_create_project_without_creating_site(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            "/referrals/project/create/",
+            data={
+                "display_name": "Standalone project",
+                "description": "Only project",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 0)
+        project = Project.objects.get(owner=self.owner)
+        self.assertEqual(project.name, "Standalone project")
+        self.assertEqual(project.description, "Only project")
+        self.assertTrue(project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(r.data["id"], project.id)
+        self.assertEqual(r.data["sites_count"], 0)
+        self.assertEqual(r.data["primary_site_public_id"], "")
+
+    def test_owner_can_get_and_patch_project_without_site(self):
+        project = Project.objects.create(owner=self.owner, name="Before", description="Before description")
+        self.api.force_authenticate(self.owner)
+        r_get = self.api.get(f"/referrals/project/{project.id}/")
+        self.assertEqual(r_get.status_code, 200)
+        self.assertEqual(r_get.data["project"]["name"], "Before")
+        self.assertEqual(r_get.data["sites_count"], 0)
+        r_patch = self.api.patch(
+            f"/referrals/project/{project.id}/",
+            data={"display_name": "After", "description": "After description"},
+            format="json",
+        )
+        self.assertEqual(r_patch.status_code, 200)
+        project.refresh_from_db()
+        self.assertEqual(project.name, "After")
+        self.assertEqual(project.description, "After description")
+
+    def test_owner_can_delete_empty_project(self):
+        project = Project.objects.create(owner=self.owner, name="Disposable project")
+        self.api.force_authenticate(self.owner)
+        r = self.api.delete(f"/referrals/project/{project.id}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "deleted")
+        self.assertFalse(Project.objects.filter(pk=project.id).exists())
+
+    def test_owner_cannot_delete_default_project(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name=DEFAULT_OWNER_PROJECT_NAME,
+            is_default=True,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.delete(f"/referrals/project/{project.id}/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "project_default_locked")
+        self.assertTrue(Project.objects.filter(pk=project.id).exists())
+
+    def test_owner_cannot_delete_non_empty_project(self):
+        project = Project.objects.create(owner=self.owner, name="Project with site")
+        Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_delete_blocked_" + uuid.uuid4().hex,
+            allowed_origins=["https://keep.example"],
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.delete(f"/referrals/project/{project.id}/")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "project_not_empty")
+        self.assertTrue(Project.objects.filter(pk=project.id).exists())
+
+    def test_add_site_to_existing_project_creates_second_site_under_same_project(self):
+        project = Project.objects.create(owner=self.owner, name="Shared project")
+        existing = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_existing_" + uuid.uuid4().hex,
+            allowed_origins=["https://old.example"],
+            platform_preset=Site.PlatformPreset.TILDA,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/project/{project.id}/site/create/",
+            data={
+                "site_display_name": "Landing beta",
+                "origin": "https://new.example",
+                "platform_preset": Site.PlatformPreset.GENERIC,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Site.objects.filter(owner=self.owner).count(), 2)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        created = Site.objects.exclude(id=existing.id).get(owner=self.owner)
+        self.assertEqual(created.project_id, project.id)
+        self.assertEqual(created.allowed_origins, ["https://new.example"])
+        self.assertEqual(created.platform_preset, Site.PlatformPreset.GENERIC)
+        self.assertEqual(created.config_json.get("site_display_name"), "Landing beta")
+        self.assertEqual(r.data["public_id"], str(created.public_id))
+        self.assertEqual(r.data["project"]["id"], project.id)
+        self.assertEqual(r.data["project"]["name"], "Shared project")
+        self.assertEqual(r.data["site_display_name"], "Landing beta")
+
+    def test_other_owner_cannot_add_site_into_foreign_project(self):
+        project = Project.objects.create(owner=self.owner, name="Foreign project")
+        self.api.force_authenticate(self.stranger)
+        r = self.api.post(
+            f"/referrals/project/{project.id}/site/create/",
+            data={"origin": "https://intrude.example"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data["detail"], "project_missing")
+        self.assertEqual(Site.objects.filter(project=project).count(), 0)
+
+    def test_owner_sites_list_groups_multiple_sites_under_one_project(self):
+        project = Project.objects.create(owner=self.owner, name="Grouped project", description="One card")
+        older = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_group_old_" + uuid.uuid4().hex,
+            allowed_origins=["https://old.example"],
+        )
+        newer = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_group_new_" + uuid.uuid4().hex,
+            allowed_origins=["https://new.example"],
+            platform_preset=Site.PlatformPreset.GENERIC,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data["projects"]), 1)
+        project_row = r.data["projects"][0]
+        self.assertEqual(project_row["id"], project.id)
+        self.assertEqual(project_row["project"]["name"], "Grouped project")
+        self.assertEqual(project_row["sites_count"], 2)
+        self.assertEqual(project_row["primary_site_public_id"], str(newer.public_id))
+        child_ids = [row["public_id"] for row in project_row["sites"]]
+        self.assertEqual(child_ids, [str(newer.public_id), str(older.public_id)])
+        self.assertEqual(project_row["sites"][0]["platform_preset"], Site.PlatformPreset.GENERIC)
+
+    def test_site_create_without_origin_uses_empty_allowed_origins(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            "/referrals/site/create/",
+            data={"display_name": "No domain yet"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        site = Site.objects.get(public_id=r.data["public_id"])
+        self.assertEqual(site.allowed_origins, [])
+        self.assertEqual(site.config_json.get("display_name"), "No domain yet")
 
     def test_site_create_assigns_owner_to_authenticated_user_only(self):
         Site.objects.create(
@@ -807,23 +1071,27 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(Site.objects.filter(owner=self.stranger).count(), 1)
 
     def test_site_list_payload_includes_display_name_when_multiple_sites(self):
+        project_a = Project.objects.create(owner=self.owner, name="Alpha project")
         Site.objects.create(
             owner=self.owner,
+            project=project_a,
             publishable_key="pk_a_" + uuid.uuid4().hex,
             allowed_origins=["https://a.example"],
-            config_json={"display_name": "Alpha"},
+            config_json={"display_name": "Legacy alpha"},
         )
+        project_b = Project.objects.create(owner=self.owner, name="Beta project")
         Site.objects.create(
             owner=self.owner,
+            project=project_b,
             publishable_key="pk_b_" + uuid.uuid4().hex,
             allowed_origins=["https://b.example"],
-            config_json={"display_name": "Beta"},
+            config_json={"display_name": "Legacy beta"},
         )
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/integration/")
         self.assertEqual(r.status_code, 409)
         names = {row["display_name"] for row in r.data["sites"]}
-        self.assertEqual(names, {"Alpha", "Beta"})
+        self.assertEqual(names, {"Alpha project", "Beta project"})
 
     @override_settings(
         FRONTEND_URL="https://app.example.com",
@@ -898,7 +1166,12 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["allowed_origins"], ["https://b.example", "https://c.example"])
         self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.GENERIC)
         self.assertFalse(r.data["widget_enabled"])
-        self.assertEqual(r.data["config_json"], {"currency": "RUB"})
+        self.assertEqual(r.data["config_json"]["currency"], "RUB")
+        self.assertTrue(
+            r.data["config_json"]["avatar_data_url"].startswith(
+                "data:image/svg+xml;base64,"
+            )
+        )
 
     def test_patch_demotes_verified_site_to_draft_when_embed_not_ready(self):
         site = Site.objects.create(
@@ -928,6 +1201,8 @@ class SiteOwnerIntegrationApiTests(TestCase):
             publishable_key="pk_verify_" + uuid.uuid4().hex,
             allowed_origins=["https://verify.example"],
             widget_enabled=True,
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://verify.example",
         )
         self.api.force_authenticate(self.owner)
         r = self.api.post(
@@ -940,6 +1215,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         site.refresh_from_db()
         self.assertEqual(site.status, Site.Status.VERIFIED)
         self.assertIsNotNone(site.verified_at)
+        self.assertEqual(r.data["connection_check"]["status"], "found")
 
     def test_verify_rejects_incomplete_site(self):
         site = Site.objects.create(
@@ -956,6 +1232,24 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.data["detail"], "site_not_ready_for_verify")
         self.assertFalse(r.data["embed_readiness"]["origins_configured"])
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.DRAFT)
+
+    def test_verify_reports_not_found_when_widget_signal_absent(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_verify_missing_" + uuid.uuid4().hex,
+            allowed_origins=["https://verify.example"],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["detail"], "site_connection_not_found")
+        self.assertEqual(r.data["connection_check"]["status"], "not_found")
         site.refresh_from_db()
         self.assertEqual(site.status, Site.Status.DRAFT)
 
@@ -997,18 +1291,21 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIsNotNone(site.activated_at)
 
     def test_patch_display_name_and_origin_scoped_by_site_public_id(self):
+        project = Project.objects.create(owner=self.owner, name="Old", description="Old description")
         site = Site.objects.create(
             owner=self.owner,
+            project=project,
             publishable_key="pk_settings_" + uuid.uuid4().hex,
             allowed_origins=["https://old.example"],
             platform_preset=Site.PlatformPreset.TILDA,
-            config_json={"display_name": "Old", "amount_selector": ".x"},
+            config_json={"display_name": "Old", "description": "Old description", "amount_selector": ".x"},
         )
         self.api.force_authenticate(self.owner)
         r = self.api.patch(
             f"/referrals/site/integration/?site_public_id={site.public_id}",
             data={
                 "display_name": "New title",
+                "description": "New description",
                 "origin": "https://new.example",
                 "platform_preset": Site.PlatformPreset.GENERIC,
             },
@@ -1018,10 +1315,82 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["allowed_origins"], ["https://new.example"])
         self.assertEqual(r.data["platform_preset"], Site.PlatformPreset.GENERIC)
         self.assertEqual(r.data["config_json"].get("display_name"), "New title")
+        self.assertEqual(r.data["config_json"].get("description"), "New description")
         self.assertEqual(r.data["config_json"].get("amount_selector"), ".x")
+        self.assertEqual(r.data["project"]["name"], "New title")
+        self.assertEqual(r.data["project"]["description"], "New description")
         site.refresh_from_db()
+        site.project.refresh_from_db()
         self.assertEqual(site.config_json.get("display_name"), "New title")
+        self.assertEqual(site.config_json.get("description"), "New description")
         self.assertEqual(site.config_json.get("amount_selector"), ".x")
+        self.assertEqual(site.project.name, "New title")
+        self.assertEqual(site.project.description, "New description")
+
+    def test_patch_config_json_avatar_updates_project_and_preserves_runtime_keys(self):
+        project = Project.objects.create(owner=self.owner, name="Avatar project")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_avatar_patch_" + uuid.uuid4().hex,
+            allowed_origins=["https://avatar.example"],
+            config_json={"amount_selector": ".price"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={
+                "config_json": {
+                    "amount_selector": ".price",
+                    "avatar_data_url": "data:image/png;base64,BBB",
+                }
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["config_json"].get("amount_selector"), ".price")
+        self.assertEqual(r.data["config_json"].get("avatar_data_url"), "data:image/png;base64,BBB")
+        self.assertEqual(r.data["project"]["avatar_data_url"], "data:image/png;base64,BBB")
+        site.refresh_from_db()
+        site.project.refresh_from_db()
+        self.assertEqual(site.config_json.get("amount_selector"), ".price")
+        self.assertEqual(site.config_json.get("avatar_data_url"), "data:image/png;base64,BBB")
+        self.assertEqual(site.project.avatar_data_url, "data:image/png;base64,BBB")
+
+    def test_patch_capture_config_persists_nested_site_payload_rules(self):
+        project = Project.objects.create(owner=self.owner, name="Payload project")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_capture_patch_" + uuid.uuid4().hex,
+            allowed_origins=["https://capture.example"],
+            config_json={"amount_selector": ".price"},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={
+                "capture_config": {
+                    "enabled_optional_fields": ["email", "phone", "email", "unknown"],
+                }
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["capture_config"]["required_fields"], ["ref", "page_url", "form_id"])
+        self.assertEqual(r.data["capture_config"]["recommended_fields"], ["name", "email", "phone"])
+        self.assertEqual(r.data["capture_config"]["enabled_optional_fields"], ["email", "phone"])
+        self.assertEqual(r.data["config_json"]["capture_config"]["version"], 1)
+        self.assertEqual(
+            r.data["config_json"]["capture_config"]["enabled_optional_fields"],
+            ["email", "phone"],
+        )
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("amount_selector"), ".price")
+        self.assertEqual(
+            site.config_json.get("capture_config", {}).get("enabled_optional_fields"),
+            ["email", "phone"],
+        )
 
     def test_stranger_cannot_patch_other_owner_site(self):
         site = Site.objects.create(
@@ -1039,6 +1408,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["detail"], "site_missing")
         site.refresh_from_db()
         self.assertNotIn("display_name", site.config_json)
+        self.assertEqual(site.project_id, None)
 
     def test_delete_requires_site_public_id(self):
         Site.objects.create(
@@ -1081,6 +1451,30 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(SiteMembership.objects.filter(site_id=site.id).count(), 0)
         self.assertEqual(ReferralLeadEvent.objects.filter(site_id=site.id).count(), 0)
         self.assertEqual(PublicLeadIngestAudit.objects.filter(site_id=site.id).count(), 0)
+
+    def test_owner_can_delete_single_project_child_site_without_deleting_project(self):
+        project = Project.objects.create(owner=self.owner, name="Project delete child")
+        first_site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_project_child_a_" + uuid.uuid4().hex,
+        )
+        second_site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_project_child_b_" + uuid.uuid4().hex,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.delete(
+            f"/referrals/project/{project.id}/site/create/",
+            data={"site_public_id": str(first_site.public_id)},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "deleted")
+        self.assertFalse(Site.objects.filter(id=first_site.id).exists())
+        self.assertTrue(Site.objects.filter(id=second_site.id).exists())
+        self.assertTrue(Project.objects.filter(id=project.id).exists())
 
     def test_stranger_cannot_delete_other_owner_site(self):
         site = Site.objects.create(
@@ -1523,6 +1917,23 @@ class SiteSignupJoinTests(TestCase):
             str(self.site.public_id),
         )
         self.assertEqual(r.data.get("cta_join", {}).get("site_display_label"), "")
+
+    def test_register_creates_default_owner_project(self):
+        email = "default-project@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        project = Project.objects.get(owner=user, is_default=True)
+        self.assertEqual(project.name, DEFAULT_OWNER_PROJECT_NAME)
+        self.assertEqual(project.description, "")
+        self.assertTrue(project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
 
     def test_register_cta_join_includes_site_display_label_from_config(self):
         self.site.config_json = {"display_name": "Магазин Омега"}

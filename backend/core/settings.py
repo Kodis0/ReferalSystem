@@ -148,11 +148,22 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DB_ENGINE = os.getenv("DB_ENGINE", "django.db.backends.sqlite3")
+
+
+def _sqlite_db_path() -> Path:
+    """Resolve SQLite file path relative to BASE_DIR so cwd (repo root vs backend/) does not split DBs."""
+    raw = os.getenv("DB_NAME", "").strip()
+    if not raw:
+        return BASE_DIR / "db.sqlite3"
+    p = Path(raw)
+    return p if p.is_absolute() else (BASE_DIR / p)
+
+
 if DB_ENGINE == "django.db.backends.sqlite3":
     DATABASES = {
         "default": {
             "ENGINE": DB_ENGINE,
-            "NAME": os.getenv("DB_NAME", BASE_DIR / "db.sqlite3"),
+            "NAME": _sqlite_db_path(),
         }
     }
 else:

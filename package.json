@@ -5,9 +5,12 @@
     "install:frontend": "npm --prefix frontend install",
     "install:backend": "python -m pip install -r backend/requirements.txt",
     "install:all": "npm run install:frontend && npm run install:backend",
-    "dev:frontend": "npm --prefix frontend start",
-    "dev:backend": "python backend/manage.py runserver",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend:raw": "npm --prefix frontend start",
+    "dev:backend:raw": "python backend/manage.py runserver",
+    "dev:raw": "concurrently \"npm run dev:backend:raw\" \"npm run dev:frontend:raw\"",
+    "dev:frontend": "node scripts/run-single-instance.js --name=dev-frontend --conflicts=dev,dev-frontend -- npm --prefix frontend start",
+    "dev:backend": "node scripts/run-single-instance.js --name=dev-backend --conflicts=dev,dev-backend -- python backend/manage.py runserver",
+    "dev": "node scripts/run-single-instance.js --name=dev --conflicts=dev,dev-frontend,dev-backend -- npm run dev:raw",
     "build:frontend": "npm --prefix frontend run build"
   },
   "devDependencies": {

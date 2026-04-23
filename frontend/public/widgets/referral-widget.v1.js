@@ -394,6 +394,67 @@
     store[name] = cur + ", " + v;
   }
 
+  var OPTIONAL_CAPTURE_KEYS = {
+    name: true,
+    email: true,
+    phone: true,
+    amount: true,
+    currency: true,
+    product_name: true,
+  };
+
+  function enabledOptionalCaptureFields(cfg) {
+    var capture = cfg && cfg.capture_config && typeof cfg.capture_config === "object" ? cfg.capture_config : null;
+    var hasExplicitList =
+      !!capture &&
+      Object.prototype.hasOwnProperty.call(capture, "enabled_optional_fields") &&
+      Array.isArray(capture.enabled_optional_fields);
+    var raw = hasExplicitList ? capture.enabled_optional_fields : null;
+    if (!hasExplicitList) {
+      return {
+        name: true,
+        email: true,
+        phone: true,
+        amount: true,
+        currency: true,
+        product_name: true,
+      };
+    }
+    var out = {};
+    for (var i = 0; i < raw.length; i++) {
+      var key = trimStr(raw[i]);
+      if (OPTIONAL_CAPTURE_KEYS[key]) out[key] = true;
+    }
+    return out;
+  }
+
+  function optionalCaptureEnabled(cfg, key) {
+    return !!enabledOptionalCaptureFields(cfg)[key];
+  }
+
+  function fieldBlockedByCaptureConfig(name, allowed) {
+    var key = String(name || "").trim().toLowerCase().replace(/-/g, "_");
+    if (!key) return false;
+    if (!allowed.email && /email|e_mail|mail/.test(key)) return true;
+    if (!allowed.phone && /phone|tel|mobile|telephone/.test(key)) return true;
+    if (!allowed.name && /(^name$|fullname|full_name|customer_name|first_name|last_name)/.test(key)) return true;
+    if (!allowed.amount && /(^amount$|lead_amount)/.test(key)) return true;
+    if (!allowed.currency && key === "currency") return true;
+    if (!allowed.product_name && /(^product$|^product_name$)/.test(key)) return true;
+    return false;
+  }
+
+  function filterFieldsByCaptureConfig(fields, cfg) {
+    var allowed = enabledOptionalCaptureFields(cfg);
+    var out = {};
+    for (var key in fields) {
+      if (!Object.prototype.hasOwnProperty.call(fields, key)) continue;
+      if (fieldBlockedByCaptureConfig(key, allowed)) continue;
+      out[key] = fields[key];
+    }
+    return out;
+  }
+
   /**
    * Collect scalar string fields only (backend normalizes dict fields to flat strings;
    * arrays/objects would be dropped server-side).
@@ -896,7 +957,7 @@
     pushTrace(OUTCOME.SUBMIT_ATTEMPT_DETECTED, { formId: fid });
     dbg(STAGE.SUBMIT_ATTEMPT, { formId: fid });
     var selCfg = siteLeadSelectors(lastResolvedWidgetConfig);
-    var fields = collectFormFields(form);
+    var fields = filterFieldsByCaptureConfig(collectFormFields(form), lastResolvedWidgetConfig);
     dbg(STAGE.PAYLOAD_BUILT, { fieldCount: Object.keys(fields).length });
 
     var payload = {
@@ -904,16 +965,23 @@
       ref: ref,
       page_url: window.location.href,
       form_id: form.id || form.getAttribute("name") || form.getAttribute("data-formid") || "",
-      email: inferEmail(form, fields),
-      name: inferName(form, fields),
-      phone: inferPhone(form, fields),
+      email: optionalCaptureEnabled(lastResolvedWidgetConfig, "email") ? inferEmail(form, fields) : "",
+      name: optionalCaptureEnabled(lastResolvedWidgetConfig, "name") ? inferName(form, fields) : "",
+      phone: optionalCaptureEnabled(lastResolvedWidgetConfig, "phone") ? inferPhone(form, fields) : "",
       fields: fields,
     };
-    var cur = (selCfg.currency && String(selCfg.currency).trim()) || "";
+    var cur =
+      optionalCaptureEnabled(lastResolvedWidgetConfig, "currency")
+        ? (selCfg.currency && String(selCfg.currency).trim()) || ""
+        : "";
     if (cur) payload.currency = cur;
-    var amt = readDomBySelectorInContext(selCfg.amountSelector, form, adapter);
+    var amt = optionalCaptureEnabled(lastResolvedWidgetConfig, "amount")
+      ? readDomBySelectorInContext(selCfg.amountSelector, form, adapter)
+      : "";
     if (amt) payload.amount = amt;
-    var pn = readDomBySelectorInContext(selCfg.productNameSelector, form, adapter);
+    var pn = optionalCaptureEnabled(lastResolvedWidgetConfig, "product_name")
+      ? readDomBySelectorInContext(selCfg.productNameSelector, form, adapter)
+      : "";
     if (pn) payload.product_name = pn;
 
     pushTrace(OUTCOME.INGEST_REQUESTED, { url: ingestUrl });

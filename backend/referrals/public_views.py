@@ -43,6 +43,7 @@ from .services import (
     normalize_lead_event_payload,
     page_key_from_page_url,
     public_widget_config_dict,
+    record_site_widget_seen,
     request_browser_origin,
     site_origin_is_allowed,
     validate_lead_submitted_optional_client_outcome,
@@ -97,6 +98,7 @@ class PublicWidgetConfigView(APIView):
             return Response(err[1], status=err[0], headers=_cors_headers(request=request, site=site) if site else {})
         assert site is not None
         body = public_widget_config_dict(request=request, site=site)
+        record_site_widget_seen(site=site, origin=origin)
         return Response(body, status=status.HTTP_200_OK, headers=_cors_headers(request=request, site=site))
 
 

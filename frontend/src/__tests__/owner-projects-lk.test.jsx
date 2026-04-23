@@ -5,19 +5,83 @@
  */
 
 import "@testing-library/jest-dom";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LkSidebar from "../pages/lk/LkSidebar";
 import CreateOwnerProjectPage from "../pages/lk/owner-programs/CreateOwnerProjectPage";
 import OwnerSitesListPage from "../pages/lk/owner-programs/OwnerSitesListPage";
+import ProjectInfoPage from "../pages/lk/owner-programs/ProjectInfoPage";
 import ProjectOverviewPage from "../pages/lk/owner-programs/ProjectOverviewPage";
 import ProjectMembersPage from "../pages/lk/owner-programs/ProjectMembersPage";
 import ProjectSettingsPage from "../pages/lk/owner-programs/ProjectSettingsPage";
 import SiteProjectLayout from "../pages/lk/owner-programs/SiteProjectLayout";
+import ProjectWidgetInstallScreen from "../pages/lk/widget-install/ProjectWidgetInstallScreen";
+import WidgetInstallScreen from "../pages/lk/widget-install/widget-install";
+
+function makeSite({
+  public_id,
+  project_id = 1,
+  status = "draft",
+  widget_enabled = true,
+  allowed_origins_count = 1,
+  primary_origin = "",
+  platform_preset = "tilda",
+  project = {},
+} = {}) {
+  return {
+    public_id,
+    project_id,
+    status,
+    widget_enabled,
+    allowed_origins_count,
+    primary_origin,
+    platform_preset,
+    display_name: typeof project.name === "string" ? project.name : "",
+    description: typeof project.description === "string" ? project.description : "",
+    project: {
+      id: project_id,
+      name: project.name || "",
+      description: project.description || "",
+      avatar_data_url: project.avatar_data_url || "",
+    },
+  };
+}
+
+function makeProject({ id, name, description = "", sites = [], isDefault = false }) {
+  return {
+    id,
+    is_default: isDefault,
+    primary_site_public_id: sites[0]?.public_id || "",
+    sites_count: sites.length,
+    project: { id, name, description, avatar_data_url: "", is_default: isDefault },
+    sites,
+  };
+}
+
+function makeOwnerProjectsPayload(projects) {
+  return {
+    projects,
+    sites: projects.flatMap((project) => project.sites),
+  };
+}
 
 describe("LkSidebar owner IA", () => {
-  it('shows "Проекты" and omits referral-program entry', () => {
+  beforeEach(() => {
+    localStorage.setItem("access_token", "test-token");
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ projects: [], sites: [] }),
+    });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    jest.restoreAllMocks();
+  });
+
+  it('shows "Проекты" and omits referral-program entry', async () => {
     render(
       <MemoryRouter initialEntries={["/lk/partner"]}>
         <LkSidebar />
@@ -28,6 +92,180 @@ describe("LkSidebar owner IA", () => {
     expect(screen.queryByText("Реферальная программа")).not.toBeInTheDocument();
     expect(screen.getByText("Агентские программы")).toBeInTheDocument();
     expect(screen.queryByText("Виджет")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/site/owner-sites/"),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("reorders sidebar projects dynamically while dragging from handle", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        makeOwnerProjectsPayload([
+          makeProject({
+            id: 101,
+            name: "Alpha",
+            sites: [makeSite({ public_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", project_id: 101, primary_origin: "https://alpha.example", project: { name: "Alpha" } })],
+          }),
+          makeProject({
+            id: 102,
+            name: "Beta",
+            sites: [makeSite({ public_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", project_id: 102, primary_origin: "https://beta.example", project: { name: "Beta" } })],
+          }),
+          makeProject({
+            id: 103,
+            name: "Gamma",
+            sites: [makeSite({ public_id: "cccccccc-cccc-cccc-cccc-cccccccccccc", project_id: 103, primary_origin: "https://gamma.example", project: { name: "Gamma" } })],
+          }),
+        ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner"]}>
+        <LkSidebar />
+      </MemoryRouter>
+    );
+
+    const sourceId = "project-101";
+    const middleId = "project-102";
+    const targetId = "project-103";
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`sidebar-project-${sourceId}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`sidebar-project-${targetId}`)).toBeInTheDocument();
+    });
+
+    const projectsBlock = document.getElementById("lk-sidebar-projects-block");
+    const sourceRow = screen.getByTestId(`sidebar-project-${sourceId}`);
+    const middleRow = screen.getByTestId(`sidebar-project-${middleId}`);
+    const targetRow = screen.getByTestId(`sidebar-project-${targetId}`);
+    const sourceHandle = sourceRow.querySelector("[data-projects-drag-handle='true']");
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: jest.fn(),
+      setDragImage: jest.fn(),
+      getData: jest.fn(() => sourceId),
+    };
+
+    expect(projectsBlock).not.toBeNull();
+    expect(sourceHandle).not.toBeNull();
+
+    middleRow.getBoundingClientRect = () => ({
+      top: 100,
+      bottom: 140,
+      height: 40,
+      left: 0,
+      right: 240,
+      width: 240,
+    });
+    targetRow.getBoundingClientRect = () => ({
+      top: 140,
+      bottom: 180,
+      height: 40,
+      left: 0,
+      right: 240,
+      width: 240,
+    });
+
+    fireEvent.mouseDown(sourceHandle);
+    fireEvent.dragStart(sourceHandle, { dataTransfer });
+
+    await waitFor(() => {
+      expect(sourceRow).toHaveClass("lk-sidebar__project--dragging");
+    });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(sourceRow, expect.any(Number), expect.any(Number));
+
+    fireEvent.dragOver(middleRow, { dataTransfer, clientY: 135 });
+    await waitFor(() => {
+      expect(
+        Array.from(projectsBlock.querySelectorAll("[data-testid^='sidebar-project-']")).map((node) =>
+          node.getAttribute("data-id"),
+        ),
+      ).toEqual([middleId, sourceId, targetId]);
+    });
+
+    fireEvent.dragOver(targetRow, { dataTransfer, clientY: 175 });
+    await waitFor(() => {
+      expect(
+        Array.from(projectsBlock.querySelectorAll("[data-testid^='sidebar-project-']")).map((node) =>
+          node.getAttribute("data-id"),
+        ),
+      ).toEqual([middleId, targetId, sourceId]);
+    });
+
+    fireEvent.dragOver(middleRow, { dataTransfer, clientY: 105 });
+    await waitFor(() => {
+      expect(
+        Array.from(projectsBlock.querySelectorAll("[data-testid^='sidebar-project-']")).map((node) =>
+          node.getAttribute("data-id"),
+        ),
+      ).toEqual([sourceId, middleId, targetId]);
+    });
+
+    fireEvent.drop(targetRow, { dataTransfer });
+    fireEvent.dragEnd(sourceHandle, { dataTransfer });
+  });
+
+  it("links project without sites to services overview", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        makeOwnerProjectsPayload([
+          makeProject({
+            id: 104,
+            name: "No Sites Yet",
+            sites: [],
+          }),
+        ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner"]}>
+        <LkSidebar />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /No Sites Yet/i })).toHaveAttribute(
+        "href",
+        "/lk/partner/project/104/overview",
+      );
+    });
+  });
+
+  it("links project with sites to canonical project route", async () => {
+    const siteId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        makeOwnerProjectsPayload([
+          makeProject({
+            id: 105,
+            name: "With Site",
+            sites: [makeSite({ public_id: siteId, project_id: 105, primary_origin: "https://with-site.example", project: { name: "With Site" } })],
+          }),
+        ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner"]}>
+        <LkSidebar />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /With Site/i })).toHaveAttribute(
+        "href",
+        `/lk/partner/project/105/overview?site_public_id=${siteId}`,
+      );
+    });
   });
 });
 
@@ -43,9 +281,9 @@ describe("OwnerSitesListPage → create flow", () => {
 
   it("opens /lk/partner/new from create button", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
-      ok: false,
-      status: 404,
-      json: async () => ({ detail: "site_missing" }),
+      ok: true,
+      status: 200,
+      json: async () => ({ projects: [], sites: [] }),
     });
 
     render(
@@ -62,13 +300,212 @@ describe("OwnerSitesListPage → create flow", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Создать проект" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Создать" })).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Создать проект" }));
+    await userEvent.click(screen.getByRole("link", { name: "Создать" }));
     await waitFor(() => {
       expect(screen.getByTestId("create-flow")).toBeInTheDocument();
     });
+  });
+
+  it("renders one project card for a project with multiple sites", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        makeOwnerProjectsPayload([
+          makeProject({
+            id: 201,
+            name: "Shop A",
+            sites: [
+              makeSite({
+                public_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                project_id: 201,
+                status: "draft",
+                primary_origin: "https://shop.example",
+                project: { name: "Shop A" },
+              }),
+              makeSite({
+                public_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                project_id: 201,
+                status: "active",
+                widget_enabled: false,
+                allowed_origins_count: 0,
+                primary_origin: "https://store.example",
+                project: { name: "Shop A" },
+              }),
+            ],
+          }),
+        ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner"]}>
+        <Routes>
+          <Route path="/lk/partner" element={<OwnerSitesListPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("projects-cards")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("link", { name: /Shop A/i })).toHaveAttribute(
+      "href",
+      "/lk/partner/project/201/overview?site_public_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    );
+    expect(screen.getByTestId("project-card-sites-project-201")).toHaveTextContent("Сервисов: 2");
+  });
+
+  it("opens project overview for project without sites", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        makeOwnerProjectsPayload([
+          makeProject({
+            id: 202,
+            name: "Empty project",
+            sites: [],
+          }),
+        ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner"]}>
+        <Routes>
+          <Route path="/lk/partner" element={<OwnerSitesListPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /Empty project/i })).toHaveAttribute(
+        "href",
+        "/lk/partner/project/202/overview",
+      );
+    });
+  });
+
+  it("reorders project cards dynamically while dragging", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () =>
+        makeOwnerProjectsPayload([
+          makeProject({
+            id: 301,
+            name: "Alpha",
+            sites: [makeSite({ public_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", project_id: 301, primary_origin: "https://alpha.example", project: { name: "Alpha" } })],
+          }),
+          makeProject({
+            id: 302,
+            name: "Beta",
+            sites: [makeSite({ public_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", project_id: 302, primary_origin: "https://beta.example", project: { name: "Beta" } })],
+          }),
+          makeProject({
+            id: 303,
+            name: "Gamma",
+            sites: [makeSite({ public_id: "cccccccc-cccc-cccc-cccc-cccccccccccc", project_id: 303, primary_origin: "https://gamma.example", project: { name: "Gamma" } })],
+          }),
+        ]),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner"]}>
+        <Routes>
+          <Route path="/lk/partner" element={<OwnerSitesListPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("projects-cards")).toBeInTheDocument();
+    });
+
+    const list = screen.getByTestId("projects-cards");
+    const sourceId = "project-301";
+    const targetId = "project-303";
+    const sourceCard = screen.getByTestId(`project-card-${sourceId}`);
+    const middleId = "project-302";
+    const middleCard = screen.getByTestId(`project-card-${middleId}`);
+    const targetCard = screen.getByTestId(`project-card-${targetId}`);
+    const sourceHandle = sourceCard.querySelector("[data-projects-drag-handle='true']");
+    const sourceLink = sourceCard.querySelector("a");
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: jest.fn(),
+      setDragImage: jest.fn(),
+      getData: jest.fn(() => sourceId),
+    };
+
+    expect(sourceHandle).not.toBeNull();
+    expect(sourceLink).not.toBeNull();
+
+    middleCard.getBoundingClientRect = () => ({
+      top: 182,
+      bottom: 344,
+      height: 162,
+      left: 760,
+      right: 1056,
+      width: 296,
+    });
+    targetCard.getBoundingClientRect = () => ({
+      top: 360,
+      bottom: 522,
+      height: 162,
+      left: 444,
+      right: 740,
+      width: 296,
+    });
+    sourceCard.getBoundingClientRect = () => ({
+      top: 182,
+      bottom: 344,
+      height: 162,
+      left: 444,
+      right: 740,
+      width: 296,
+    });
+
+    fireEvent.mouseDown(sourceHandle);
+    fireEvent.dragStart(sourceLink, { dataTransfer });
+
+    await waitFor(() => {
+      expect(sourceCard).toHaveClass("owner-programs__project-card-container--dragging");
+    });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(sourceCard, expect.any(Number), expect.any(Number));
+
+    fireEvent.dragOver(middleCard, { dataTransfer, clientX: 1030, clientY: 240 });
+    await waitFor(() => {
+      expect(Array.from(list.children).map((node) => node.getAttribute("data-id"))).toEqual([
+        middleId,
+        sourceId,
+        targetId,
+      ]);
+    });
+
+    fireEvent.dragOver(targetCard, { dataTransfer, clientX: 592, clientY: 500 });
+    await waitFor(() => {
+      expect(Array.from(list.children).map((node) => node.getAttribute("data-id"))).toEqual([
+        middleId,
+        targetId,
+        sourceId,
+      ]);
+    });
+
+    fireEvent.dragOver(middleCard, { dataTransfer, clientX: 780, clientY: 240 });
+    await waitFor(() => {
+      expect(Array.from(list.children).map((node) => node.getAttribute("data-id"))).toEqual([
+        sourceId,
+        middleId,
+        targetId,
+      ]);
+    });
+
+    fireEvent.drop(targetCard, { dataTransfer });
+    fireEvent.dragEnd(sourceLink, { dataTransfer });
   });
 });
 
@@ -82,24 +519,22 @@ describe("CreateOwnerProjectPage", () => {
     jest.restoreAllMocks();
   });
 
-  function setup(newPublicId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb") {
+  function setup() {
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
-      if (String(url).includes("/referrals/site/create/") && opts?.method === "POST") {
+      if (String(url).includes("/referrals/project/create/") && opts?.method === "POST") {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            public_id: newPublicId,
-            publishable_key: "pk_new",
-            allowed_origins: ["https://new.example"],
-            platform_preset: "tilda",
-            status: "draft",
-            verified_at: null,
-            activated_at: null,
-            widget_enabled: true,
-            config_json: { display_name: "From API" },
-            widget_embed_snippet: "",
-            public_api_base: "https://api.example",
-            widget_script_base: "https://app.example",
+            id: 901,
+            primary_site_public_id: "",
+            sites_count: 0,
+            project: {
+              id: 901,
+              name: "From API",
+              description: "",
+              avatar_data_url: "",
+            },
+            sites: [],
           }),
         });
       }
@@ -108,24 +543,33 @@ describe("CreateOwnerProjectPage", () => {
     return fetchMock;
   }
 
-  it("submits create and redirects to new project overview", async () => {
-    setup();
+  it("submits create and redirects to projects list", async () => {
+    const fetchMock = setup();
     render(
       <MemoryRouter initialEntries={["/lk/partner/new"]}>
         <Routes>
           <Route path="/lk/partner/new" element={<CreateOwnerProjectPage />} />
-          <Route path="/lk/partner/:sitePublicId/overview" element={<div data-testid="overview">overview</div>} />
+          <Route
+            path="/lk/partner/project/:projectId/overview"
+            element={<div data-testid="project-services">project-services</div>}
+          />
         </Routes>
       </MemoryRouter>
     );
 
     await userEvent.type(screen.getByLabelText(/Название проекта/i), "Мой магазин");
-    await userEvent.type(screen.getByLabelText(/Домен/i), "shop.example");
-    await userEvent.click(screen.getByRole("button", { name: /Создать проект/i }));
+    await userEvent.click(screen.getByTestId("submit-form-btn"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("overview")).toBeInTheDocument();
+      expect(screen.getByTestId("project-services")).toBeInTheDocument();
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/referrals/project/create/"),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringMatching(/"avatar_data_url":"data:image\/svg\+xml;base64,/),
+      }),
+    );
   });
 });
 
@@ -139,30 +583,33 @@ describe("ProjectOverviewPage", () => {
     jest.restoreAllMocks();
   });
 
-  it("shows product summary, hides raw warning codes, maps diagnostics copy", async () => {
+  it("shows services tab content with search and layout switch", async () => {
     const siteId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 401,
+                name: "Магазин",
+                sites: [makeSite({ public_id: siteId, project_id: 401, primary_origin: "https://shop.ru", project: { name: "Магазин" } })],
+              }),
+            ]),
+        });
+      }
       if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
             public_id: siteId,
-            allowed_origins: ["https://shop.example"],
+            allowed_origins: ["https://shop.ru"],
             platform_preset: "tilda",
             status: "active",
-            config_json: { display_name: "Магазин" },
-          }),
-        });
-      }
-      if (u.includes("diagnostics")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            integration_status: "healthy",
-            integration_warnings: ["observe_success_off"],
-            site_membership: { count: 3 },
-            windows: { "7d": { submit_attempt_count: 5 } },
+            config_json: { display_name: "Legacy магазин" },
+            project: { id: 401, name: "Магазин", description: "", avatar_data_url: "" },
           }),
         });
       }
@@ -170,9 +617,9 @@ describe("ProjectOverviewPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/overview`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/401/overview?site_public_id=${siteId}`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId" element={<SiteProjectLayout />}>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="overview" element={<ProjectOverviewPage />} />
           </Route>
         </Routes>
@@ -183,12 +630,1041 @@ describe("ProjectOverviewPage", () => {
       expect(screen.getByRole("heading", { level: 1, name: "Магазин" })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { level: 2, name: "Обзор" })).toBeInTheDocument();
-    expect(screen.getByText(/shop\.example/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Настройки виджета/i })).toHaveAttribute("href", `/lk/partner/${siteId}/widget`);
-    expect(screen.queryByText("observe_success_off")).not.toBeInTheDocument();
-    expect(screen.getByText(/Страница успеха может не отслеживаться/i)).toBeInTheDocument();
+    expect(screen.getByTestId("project-services-search")).toBeInTheDocument();
+    expect(screen.getByTestId("project-services-layout-cards")).toBeInTheDocument();
+    expect(screen.getByTestId(`project-child-site-${siteId}`)).toBeInTheDocument();
+    expect(screen.getByLabelText("Флаг страны RU")).toBeInTheDocument();
   });
+});
+
+describe("SiteProjectLayout child sites", () => {
+  beforeEach(() => {
+    localStorage.setItem("access_token", "test-token");
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    jest.restoreAllMocks();
+  });
+
+  it("opens create dropdown with site item", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [makeSite({ public_id: siteA, project_id: 501, status: "draft", primary_origin: "https://alpha.example", project: { name: "Shared project" } })],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            allowed_origins: ["https://alpha.example"],
+            platform_preset: "tilda",
+            status: "draft",
+            config_json: {},
+            widget_enabled: true,
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/overview?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-create-menu-trigger")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId("project-create-menu-trigger"));
+
+    expect(screen.getByTestId("project-create-menu-dropdown")).toBeInTheDocument();
+    expect(screen.getByTestId("project-create-menu-site")).toHaveTextContent("Сайт");
+  });
+
+  it("opens empty project on overview without auto-opening site form", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 502,
+                name: "Empty shared project",
+                sites: [],
+              }),
+            ]),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/502/overview"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-services-page")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("project-services-empty")).toHaveTextContent("У проекта пока нет сервисов.");
+    expect(screen.getByTestId("project-delete-empty-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-add-site-origin")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Пользователи" })).toBeInTheDocument();
+  });
+
+  it("hides delete action for default empty project", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 503,
+                name: "Общий проект",
+                sites: [],
+                isDefault: true,
+              }),
+            ]),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/503/overview"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-services-page")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("project-delete-empty-button")).not.toBeInTheDocument();
+  });
+
+  it("deletes empty project from header action and redirects to project list", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 502,
+                name: "Empty shared project",
+                sites: [],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/project/502/") && opts?.method === "DELETE") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: "deleted" }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/502/overview"]}>
+        <Routes>
+          <Route path="/lk/partner" element={<div data-testid="partner-list">Список</div>} />
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-delete-empty-button")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId("project-delete-empty-button"));
+    expect(screen.getByTestId("project-delete-dialog")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("project-delete-dialog-confirm"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/project/502/"),
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("partner-list")).toBeInTheDocument();
+    });
+  });
+
+  it("removes project avatar from project header", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            projects: [
+              {
+                id: 503,
+                primary_site_public_id: "",
+                sites_count: 0,
+                sites: [],
+                project: {
+                  id: 503,
+                  name: "Avatar project",
+                  description: "",
+                  avatar_data_url: "data:image/png;base64,AAA",
+                },
+              },
+            ],
+            sites: [],
+          }),
+        });
+      }
+      if (u.includes("/referrals/project/503/") && opts?.method === "PATCH") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 503,
+            primary_site_public_id: "",
+            sites_count: 0,
+            sites: [],
+            project: { id: 503, name: "Avatar project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/503/overview"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByAltText("Фото проекта")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить фото проекта" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/project/503/"),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ avatar_data_url: "" }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByAltText("Фото проекта")).not.toBeInTheDocument();
+    });
+    expect(document.querySelector(".owner-programs__shell-avatar-input")).not.toBeDisabled();
+  });
+
+  it("shows child sites list on services tab and opens site by card click", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const siteB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [
+                  makeSite({ public_id: siteA, project_id: 501, status: "draft", primary_origin: "https://alpha.example", project: { name: "Shared project" } }),
+                  makeSite({ public_id: siteB, project_id: 501, status: "active", primary_origin: "https://beta.example", project: { name: "Shared project" }, platform_preset: "generic" }),
+                ],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        const selectedSite = u.includes(siteB) ? siteB : siteA;
+        const origin = selectedSite === siteB ? "https://beta.example" : "https://alpha.example";
+        const status = selectedSite === siteB ? "active" : "draft";
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: selectedSite,
+            allowed_origins: [origin],
+            platform_preset: selectedSite === siteB ? "generic" : "tilda",
+            status,
+            config_json: {},
+            widget_enabled: true,
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/overview?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-child-sites-list")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId(`project-child-site-${siteA}`)).toHaveTextContent("текущий");
+    expect(screen.getByTestId(`project-child-site-${siteB}`)).toHaveTextContent("beta.example");
+
+    await userEvent.click(screen.getByTestId(`project-child-site-${siteB}`));
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`project-child-site-${siteB}`)).toHaveTextContent("текущий");
+    });
+  });
+
+  it("hides shell header and tabs on project info page", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [
+                  makeSite({
+                    public_id: siteA,
+                    project_id: 501,
+                    status: "draft",
+                    primary_origin: "https://alpha.example",
+                    project: { name: "Shared project", description: "" },
+                  }),
+                ],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        if (opts?.method === "PATCH") {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              public_id: siteA,
+              allowed_origins: ["https://alpha.example"],
+              project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            allowed_origins: ["https://alpha.example"],
+            platform_preset: "tilda",
+            status: "draft",
+            config_json: {},
+            widget_enabled: true,
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/info?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="info" element={<ProjectInfoPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-info-page")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Комментарий к проекту не указан")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-create-menu-trigger")).not.toBeInTheDocument();
+  });
+
+  it("returns to project overview after saving project info", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    let currentProjectName = "Shared project";
+    let currentProjectDescription = "old comment";
+    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: currentProjectName,
+                description: currentProjectDescription,
+                sites: [
+                  makeSite({
+                    public_id: siteA,
+                    project_id: 501,
+                    status: "draft",
+                    primary_origin: "https://alpha.example",
+                    project: { name: currentProjectName, description: currentProjectDescription },
+                  }),
+                ],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/project/501/")) {
+        if (opts?.method === "PATCH") {
+          currentProjectName = "Updated project";
+          currentProjectDescription = "new comment";
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              id: 501,
+              project: { id: 501, name: currentProjectName, description: currentProjectDescription, avatar_data_url: "" },
+              primary_site_public_id: siteA,
+              sites_count: 1,
+              sites: [
+                makeSite({
+                  public_id: siteA,
+                  project_id: 501,
+                  status: "draft",
+                  primary_origin: "https://alpha.example",
+                  project: { name: currentProjectName, description: currentProjectDescription },
+                }),
+              ],
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 501,
+            project: { id: 501, name: currentProjectName, description: currentProjectDescription, avatar_data_url: "" },
+            primary_site_public_id: siteA,
+            sites_count: 1,
+            sites: [
+              makeSite({
+                public_id: siteA,
+                project_id: 501,
+                status: "draft",
+                primary_origin: "https://alpha.example",
+                project: { name: currentProjectName, description: currentProjectDescription },
+              }),
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/info?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="info" element={<ProjectInfoPage />} />
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-info-page")).toBeInTheDocument();
+    });
+
+    await userEvent.clear(screen.getByRole("textbox", { name: "Название" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Название" }), "Updated project");
+    await userEvent.clear(screen.getByRole("textbox", { name: "Комментарий" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Комментарий" }), "new comment");
+    await userEvent.click(screen.getByTestId("submit-form-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: "Updated project" })).toBeInTheDocument();
+    });
+    expect(screen.getByText("new comment")).toBeInTheDocument();
+  });
+
+  it("shows users tab for project and loads members from primary site", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [makeSite({ public_id: siteA, project_id: 501, primary_origin: "https://alpha.example", project: { name: "Shared project" } })],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/site/integration/members/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            count: 1,
+            members: [{ identity_masked: "u***@example.com", joined_at: "2026-01-10T12:00:00Z", ref_code: "ABC" }],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/501/members"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Пользователи" })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("members-list")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/ABC/)).toBeInTheDocument();
+  });
+
+  it("shows empty users state for project without sites", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 502,
+                name: "Empty project",
+                sites: [],
+              }),
+            ]),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/502/members"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("members-empty")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Пользователи" })).toBeInTheDocument();
+    expect(screen.getByText(/У вас нет добавленных пользователей/i)).toBeInTheDocument();
+    expect(screen.getByTestId("members-add-button")).toHaveTextContent("Добавить");
+  });
+
+  it("hides shell chrome while create-site form is open", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [makeSite({ public_id: siteA, project_id: 501, status: "draft", primary_origin: "https://alpha.example", project: { name: "Shared project" } })],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            allowed_origins: ["https://alpha.example"],
+            platform_preset: "tilda",
+            status: "draft",
+            config_json: {},
+            widget_enabled: true,
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/overview?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-create-menu-trigger")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId("project-create-menu-trigger"));
+    await userEvent.click(screen.getByTestId("project-create-menu-site"));
+    expect(screen.getByTestId("project-add-site-origin")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-create-menu-trigger")).not.toBeInTheDocument();
+  });
+
+  it("creates site and opens project-scoped focused connect screen", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const siteB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const widgetSnippet =
+      '<script src="https://app.example/widgets/referral-widget.v1.js"\n' +
+      '  data-rs-api="https://api.example"\n' +
+      `  data-rs-site="${siteB}"\n` +
+      '  data-rs-key="pk_site_b"\n' +
+      "  async></script>";
+    jest.spyOn(global, "fetch").mockImplementation((url, opts = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [
+                  makeSite({ public_id: siteA, project_id: 501, status: "draft", primary_origin: "https://alpha.example", project: { name: "Shared project" } }),
+                  makeSite({ public_id: siteB, project_id: 501, status: "draft", primary_origin: "https://beta.example", display_name: "Landing beta", project: { name: "Shared project" } }),
+                ],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/project/501/site/create/") && opts.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteB,
+            allowed_origins: ["https://beta.example"],
+            platform_preset: "generic",
+            status: "draft",
+            site_display_name: "Landing beta",
+            config_json: { site_display_name: "Landing beta" },
+            widget_enabled: true,
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        const selectedSite = u.includes(siteB) ? siteB : siteA;
+        const origin = selectedSite === siteB ? "https://beta.example" : "https://alpha.example";
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: selectedSite,
+            allowed_origins: [origin],
+            platform_preset: selectedSite === siteB ? "generic" : "tilda",
+            status: "draft",
+            site_display_name: selectedSite === siteB ? "Landing beta" : "Shared project",
+            capture_config: {
+              required_fields: ["ref", "page_url", "form_id"],
+              recommended_fields: ["name", "email", "phone"],
+              enabled_optional_fields: ["name", "email", "phone", "amount", "currency", "product_name"],
+            },
+            config_json: {},
+            widget_enabled: true,
+            widget_embed_snippet:
+              selectedSite === siteB
+                ? widgetSnippet
+                : '<script src="https://app.example/widgets/referral-widget.v1.js" data-rs-site="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"></script>',
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/overview?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="widget" element={<ProjectWidgetInstallScreen />} />
+          </Route>
+          <Route path="/lk/widget-install" element={<WidgetInstallScreen />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-create-menu-trigger")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId("project-create-menu-trigger"));
+    await userEvent.click(screen.getByTestId("project-create-menu-site"));
+    await userEvent.type(screen.getByTestId("project-add-site-name"), "Landing beta");
+    expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-create-menu-trigger")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByTestId("project-add-site-origin"), "https://beta.example");
+    await userEvent.click(screen.getByTestId("project-add-site-platform"));
+    await userEvent.click(screen.getByRole("option", { name: "Generic" }));
+    await userEvent.click(screen.getByTestId("project-add-site-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-site-connect-page")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Подключите сайт" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Скопировать код" })).toBeInTheDocument();
+    });
+    expect(screen.getByText(new RegExp(`data-rs-site="${siteB}"`))).toBeInTheDocument();
+    expect(screen.getByText(/data-rs-key="pk_site_b"/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Видеоинструкция" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/501");
+    expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Shared project")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-services-page")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Проверить подключение/i })).not.toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/referrals/project/501/site/create/"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          site_display_name: "Landing beta",
+          origin: "https://beta.example",
+          platform_preset: "generic",
+        }),
+      }),
+    );
+  });
+
+  it("creates first site and opens the same focused connect screen inside project shell", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const widgetSnippet =
+      '<script src="https://app.example/widgets/referral-widget.v1.js"\n' +
+      '  data-rs-api="https://api.example"\n' +
+      `  data-rs-site="${siteA}"\n` +
+      '  data-rs-key="pk_site_a"\n' +
+      "  async></script>";
+    let ownerSitesCalls = 0;
+    jest.spyOn(global, "fetch").mockImplementation((url, opts = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        ownerSitesCalls += 1;
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 502,
+                name: "Empty project",
+                sites:
+                  ownerSitesCalls === 1
+                    ? []
+                    : [makeSite({ public_id: siteA, project_id: 502, status: "draft", primary_origin: "https://alpha.example", project: { name: "Empty project" } })],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/project/502/site/create/") && opts.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            site_display_name: "Landing alpha",
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            allowed_origins: ["https://alpha.example"],
+            platform_preset: "tilda",
+            status: "draft",
+            site_display_name: "Landing alpha",
+            capture_config: {
+              required_fields: ["ref", "page_url", "form_id"],
+              recommended_fields: ["name", "email", "phone"],
+              enabled_optional_fields: ["name", "email", "phone"],
+            },
+            config_json: {},
+            widget_enabled: true,
+            widget_embed_snippet: widgetSnippet,
+            project: { id: 502, name: "Empty project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/502/overview"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="widget" element={<ProjectWidgetInstallScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-create-menu-trigger")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId("project-create-menu-trigger"));
+    await userEvent.click(screen.getByTestId("project-create-menu-site"));
+    await userEvent.type(screen.getByTestId("project-add-site-name"), "Landing alpha");
+    await userEvent.type(screen.getByTestId("project-add-site-origin"), "https://alpha.example");
+    await userEvent.click(screen.getByTestId("project-add-site-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-site-connect-page")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Подключите сайт" })).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`data-rs-site="${siteA}"`))).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Скопировать код" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Видеоинструкция" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/502");
+    expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("project-services-page")).not.toBeInTheDocument();
+  });
+
+  it("removes site card immediately while delete is in progress", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const siteB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    let ownerSitesCalls = 0;
+    let resolveDeleteRequest;
+    const deleteRequest = new Promise((resolve) => {
+      resolveDeleteRequest = resolve;
+    });
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        ownerSitesCalls += 1;
+        const projects =
+          ownerSitesCalls === 1
+            ? [
+                makeProject({
+                  id: 501,
+                  name: "Shared project",
+                  sites: [
+                    makeSite({ public_id: siteA, project_id: 501, status: "draft", primary_origin: "https://alpha.example", project: { name: "Shared project" } }),
+                    makeSite({ public_id: siteB, project_id: 501, status: "active", primary_origin: "https://beta.ru", project: { name: "Shared project" }, platform_preset: "generic" }),
+                  ],
+                }),
+              ]
+            : [
+                makeProject({
+                  id: 501,
+                  name: "Shared project",
+                  sites: [makeSite({ public_id: siteA, project_id: 501, status: "draft", primary_origin: "https://alpha.example", project: { name: "Shared project" } })],
+                }),
+              ];
+        return Promise.resolve({ ok: true, json: async () => makeOwnerProjectsPayload(projects) });
+      }
+      if (u.includes("/referrals/project/501/site/create/") && opts?.method === "DELETE") {
+        return deleteRequest;
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            allowed_origins: ["https://alpha.example"],
+            platform_preset: "tilda",
+            status: "draft",
+            config_json: {},
+            widget_enabled: true,
+            project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    jest.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/overview?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`project-child-site-${siteB}`)).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId(`project-child-site-menu-trigger-${siteB}`));
+    await userEvent.click(screen.getByTestId(`project-child-site-delete-${siteB}`));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId(`project-child-site-${siteB}`)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Сервисов: 1")).toBeInTheDocument();
+
+    resolveDeleteRequest({
+      ok: true,
+      json: async () => ({ status: "deleted" }),
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/project/501/site/create/"),
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId(`project-child-site-${siteB}`)).not.toBeInTheDocument();
+    });
+  });
+
+  it("removes current single site without page refresh", async () => {
+    const siteA = "0f002d23-37f0-46c3-a797-a3d2fb34ce94";
+    let ownerSitesCalls = 0;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        ownerSitesCalls += 1;
+        const projects =
+          ownerSitesCalls === 1
+            ? [
+                makeProject({
+                  id: 701,
+                  name: "Тест project",
+                  sites: [
+                    makeSite({
+                      public_id: siteA,
+                      project_id: 701,
+                      status: "draft",
+                      primary_origin: "https://project17993236.tilda.ws",
+                      project: { name: "Тест project" },
+                    }),
+                  ],
+                }),
+              ]
+            : [makeProject({ id: 701, name: "Тест project", sites: [] })];
+        return Promise.resolve({ ok: true, json: async () => makeOwnerProjectsPayload(projects) });
+      }
+      if (u.includes("/referrals/project/701/site/create/") && opts?.method === "DELETE") {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "deleted" }) });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteA,
+            allowed_origins: ["https://project17993236.tilda.ws"],
+            platform_preset: "tilda",
+            status: "draft",
+            config_json: {},
+            widget_enabled: true,
+            project: { id: 701, name: "Тест project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    jest.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/701/overview?site_public_id=${siteA}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="overview" element={<ProjectOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`project-child-site-${siteA}`)).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId(`project-child-site-menu-trigger-${siteA}`));
+    await userEvent.click(screen.getByTestId(`project-child-site-delete-${siteA}`));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId(`project-child-site-${siteA}`)).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("project-services-empty")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/referrals/project/701/site/create/"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
 });
 
 describe("ProjectMembersPage", () => {
@@ -220,7 +1696,9 @@ describe("ProjectMembersPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("members-empty")).toBeInTheDocument();
     });
-    expect(screen.getByText(/Пока нет участников/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Пользователи" })).toBeInTheDocument();
+    expect(screen.getByText(/У вас нет добавленных пользователей/i)).toBeInTheDocument();
+    expect(screen.getByTestId("members-add-button")).toHaveTextContent("Добавить");
   });
 
   it("renders member rows from API", async () => {
@@ -285,6 +1763,57 @@ describe("ProjectSettingsPage", () => {
 
   const siteId = "dddddddd-dddd-dddd-dddd-dddddddddddd";
 
+  it("loads settings under canonical project route with selected site query", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 601,
+                name: "Canonical project",
+                sites: [makeSite({ public_id: siteId, project_id: 601, primary_origin: "https://shop.example", project: { name: "Canonical project" } })],
+              }),
+            ]),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://shop.example"],
+            platform_preset: "tilda",
+            project: { id: 601, name: "Canonical project", description: "Описание", avatar_data_url: "" },
+            config_json: { display_name: "legacy" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/601/settings?site_public_id=${siteId}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(`site_public_id=${siteId}`),
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("renders loaded display name, origin and platform", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
       const u = String(url);
@@ -295,7 +1824,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://shop.example"],
             platform_preset: "tilda",
-            config_json: { display_name: "Магазин" },
+            project: { name: "Магазин", description: "Описание", avatar_data_url: "" },
+            config_json: { display_name: "legacy" },
             widget_enabled: true,
           }),
         });
@@ -315,12 +1845,13 @@ describe("ProjectSettingsPage", () => {
       expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/Название проекта/i)).toHaveValue("Магазин");
+    expect(screen.getByLabelText(/Описание проекта/i)).toHaveValue("Описание");
     expect(screen.getByLabelText(/Домен или origin/i)).toHaveValue("https://shop.example");
     expect(screen.getByLabelText(/Платформа/i)).toHaveValue("tilda");
   });
 
   it("save sends PATCH and shows success", async () => {
-    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
       const u = String(url);
       if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
         return Promise.resolve({
@@ -329,6 +1860,7 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
             config_json: { display_name: "A" },
             widget_enabled: true,
           }),
@@ -341,7 +1873,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://b.example"],
             platform_preset: "generic",
-            config_json: { display_name: "B" },
+            project: { name: "B", description: "New desc", avatar_data_url: "" },
+            config_json: { display_name: "B", description: "New desc" },
             widget_enabled: true,
           }),
         });
@@ -362,6 +1895,8 @@ describe("ProjectSettingsPage", () => {
     });
     await userEvent.clear(screen.getByLabelText(/Название проекта/i));
     await userEvent.type(screen.getByLabelText(/Название проекта/i), "B");
+    await userEvent.clear(screen.getByLabelText(/Описание проекта/i));
+    await userEvent.type(screen.getByLabelText(/Описание проекта/i), "New desc");
     await userEvent.clear(screen.getByLabelText(/Домен или origin/i));
     await userEvent.type(screen.getByLabelText(/Домен или origin/i), "https://b.example");
     await userEvent.selectOptions(screen.getByLabelText(/Платформа/i), "generic");
@@ -369,6 +1904,13 @@ describe("ProjectSettingsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-save-success")).toBeInTheDocument();
+    });
+    const patchCall = fetchMock.mock.calls.find(([, opts]) => opts?.method === "PATCH");
+    expect(JSON.parse(patchCall[1].body)).toEqual({
+      display_name: "B",
+      description: "New desc",
+      origin: "https://b.example",
+      platform_preset: "generic",
     });
   });
 
@@ -382,6 +1924,7 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            project: { name: "", description: "", avatar_data_url: "" },
             config_json: {},
             widget_enabled: true,
           }),
@@ -424,6 +1967,7 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            project: { name: "X", description: "", avatar_data_url: "" },
             config_json: { display_name: "X" },
             widget_enabled: true,
           }),
@@ -468,6 +2012,7 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            project: { name: "", description: "", avatar_data_url: "" },
             config_json: {},
             widget_enabled: true,
           }),

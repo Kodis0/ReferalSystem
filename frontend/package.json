@@ -12,13 +12,18 @@
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2",
     "react-scripts": "5.0.1",
+    "react-syntax-highlighter": "^16.1.1",
+    "referal-system-monorepo": "file:..",
     "three": "^0.183.2",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
+    "test:raw": "react-scripts test --watchAll=false",
+    "test:watch:raw": "react-scripts test",
+    "test": "node ../scripts/run-single-instance.js --name=frontend-test --conflicts=frontend-test -- react-scripts test --watchAll=false",
+    "test:watch": "node ../scripts/run-single-instance.js --name=frontend-test --conflicts=frontend-test -- react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

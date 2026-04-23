@@ -46,6 +46,27 @@ class PartnerProfile(models.Model):
         return f"{self.ref_code} ({self.user_id})"
 
 
+class Project(models.Model):
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="referral_projects",
+    )
+    is_default = models.BooleanField(default=False, db_index=True)
+    name = models.CharField(max_length=200, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    avatar_data_url = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        label = self.name.strip() or str(self.pk)
+        return f"Project {label} (owner={self.owner_id})"
+
+
 class Site(models.Model):
     """
     First-class integration target (multi-site / embed widget + optional webhook).
@@ -66,6 +87,13 @@ class Site(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="referral_sites",
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="sites",
+        null=True,
+        blank=True,
     )
     public_id = models.UUIDField(
         default=uuid.uuid4,
@@ -104,6 +132,8 @@ class Site(models.Model):
     )
     verified_at = models.DateTimeField(null=True, blank=True)
     activated_at = models.DateTimeField(null=True, blank=True)
+    last_widget_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_widget_seen_origin = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

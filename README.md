@@ -41,6 +41,8 @@ python manage.py migrate
 npm run dev
 ```
 
+Повторный запуск `npm run dev` теперь блокируется, если этот же локальный dev уже запущен для текущего репозитория.
+
 После запуска:
 - frontend: `http://localhost:3000`
 - backend: `http://localhost:8000`
@@ -49,6 +51,10 @@ npm run dev
 
 - Только frontend: `npm run dev:frontend`
 - Только backend: `npm run dev:backend`
+
+Повторный запуск `npm run dev:frontend` или `npm run dev:backend` тоже блокируется, чтобы локальные процессы не дублировались.
+
+Во `frontend/` команды `npm test` и `npm run test:watch` тоже запускаются в одном экземпляре, чтобы не накапливать несколько `react-scripts test` одновременно.
 
 ## Переменные окружения
 

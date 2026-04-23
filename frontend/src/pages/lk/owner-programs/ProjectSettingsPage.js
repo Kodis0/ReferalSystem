@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -40,15 +40,36 @@ function primaryOriginFromPayload(payload) {
   return typeof first === "string" ? first : "";
 }
 
+function projectMetaFromPayload(payload) {
+  const project = payload?.project && typeof payload.project === "object" ? payload.project : {};
+  return {
+    name: typeof project.name === "string" ? project.name : "",
+    description: typeof project.description === "string" ? project.description : "",
+  };
+}
+
 export default function ProjectSettingsPage() {
   const { sitePublicId } = useParams();
   const navigate = useNavigate();
-  const id = (sitePublicId || "").trim();
+  const outletContext = useOutletContext() || {};
+  const {
+    selectedSitePublicId = "",
+    projectId = null,
+    buildProjectPath,
+  } = outletContext;
+  const id = (selectedSitePublicId || sitePublicId || "").trim();
+  const overviewPath =
+    typeof buildProjectPath === "function"
+      ? buildProjectPath("overview", id)
+      : typeof projectId === "number"
+        ? `/lk/partner/project/${projectId}/overview${id ? `?site_public_id=${id}` : ""}`
+        : "/lk/partner";
 
   const [loadState, setLoadState] = useState("loading");
   const [loadError, setLoadError] = useState("");
 
   const [displayName, setDisplayName] = useState("");
+  const [description, setDescription] = useState("");
   const [origin, setOrigin] = useState("");
   const [platformPreset, setPlatformPreset] = useState("tilda");
 
@@ -78,9 +99,9 @@ export default function ProjectSettingsPage() {
         setLoadState("error");
         return;
       }
-      const cfg = payload.config_json && typeof payload.config_json === "object" ? payload.config_json : {};
-      const dn = typeof cfg.display_name === "string" ? cfg.display_name : "";
-      setDisplayName(dn);
+      const project = projectMetaFromPayload(payload);
+      setDisplayName(project.name);
+      setDescription(project.description);
       setOrigin(primaryOriginFromPayload(payload));
       setPlatformPreset(
         payload.platform_preset === "generic" || payload.platform_preset === "tilda"
@@ -111,6 +132,7 @@ export default function ProjectSettingsPage() {
         credentials: "include",
         body: JSON.stringify({
           display_name: displayName.trim(),
+          description: description.trim(),
           origin: origin.trim(),
           platform_preset: platformPreset,
         }),
@@ -124,9 +146,9 @@ export default function ProjectSettingsPage() {
         setSaveState("error");
         return;
       }
-      const cfg = payload.config_json && typeof payload.config_json === "object" ? payload.config_json : {};
-      const dn = typeof cfg.display_name === "string" ? cfg.display_name : "";
-      setDisplayName(dn);
+      const project = projectMetaFromPayload(payload);
+      setDisplayName(project.name);
+      setDescription(project.description);
       setOrigin(primaryOriginFromPayload(payload));
       setSaveState("success");
       setTimeout(() => setSaveState("idle"), 2500);
@@ -158,7 +180,14 @@ export default function ProjectSettingsPage() {
         setDeleteState("error");
         return;
       }
-      navigate("/lk/partner", { replace: true });
+      navigate(
+        typeof buildProjectPath === "function"
+          ? buildProjectPath("overview", "")
+          : typeof projectId === "number"
+            ? `/lk/partner/project/${projectId}/overview`
+            : "/lk/partner",
+        { replace: true },
+      );
     } catch (err) {
       console.error(err);
       setDeleteError("Сетевая ошибка");
@@ -173,8 +202,13 @@ export default function ProjectSettingsPage() {
   return (
     <div className="owner-programs__page" data-testid="project-settings-page">
       <h2 className="owner-programs__overview-title">Настройки</h2>
+      <div className="page__returnButton" style={{ marginBottom: 12 }}>
+        <button type="button" className="tw-link link_primary link_s" onClick={() => navigate(overviewPath)}>
+          Назад к сервисам
+        </button>
+      </div>
       <p className="owner-programs__muted" style={{ margin: "6px 0 20px", maxWidth: 560 }}>
-        Название, адрес сайта и платформа используются виджетом и проверками готовности.
+        Название и описание относятся к проекту, а домен и платформа управляют интеграцией текущего сайта.
       </p>
 
       {loadState === "loading" && <p className="lk-partner__muted">Загрузка…</p>}
@@ -193,6 +227,19 @@ export default function ProjectSettingsPage() {
               onChange={(e) => setDisplayName(e.target.value)}
               maxLength={200}
               autoComplete="off"
+            />
+          </div>
+          <div className="owner-programs__field">
+            <label className="owner-programs__label" htmlFor="proj-settings-description">
+              Описание проекта
+            </label>
+            <textarea
+              id="proj-settings-description"
+              className="owner-programs__input"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={2000}
+              rows={4}
             />
           </div>
           <div className="owner-programs__field">
@@ -247,7 +294,7 @@ export default function ProjectSettingsPage() {
             Опасная зона
           </h3>
           <p className="owner-programs__muted" style={{ marginBottom: 12, maxWidth: 560 }}>
-            Удаление необратимо: участники, лиды и связанные данные этого проекта будут удалены.
+            Удаление необратимо: будут удалены участники, лиды и связанные данные только текущего сайта.
           </p>
           <label className="owner-programs__label" htmlFor="proj-delete-confirm">
             Введите «{DELETE_CONFIRM_PHRASE}», чтобы включить кнопку удаления
@@ -270,7 +317,7 @@ export default function ProjectSettingsPage() {
               onClick={onDelete}
               data-testid="delete-project-button"
             >
-              {deleteState === "deleting" ? "Удаление…" : "Удалить проект навсегда"}
+              {deleteState === "deleting" ? "Удаление…" : "Удалить текущий сайт"}
             </button>
           </div>
         </section>

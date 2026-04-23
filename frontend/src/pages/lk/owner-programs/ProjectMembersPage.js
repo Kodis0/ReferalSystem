@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
@@ -35,17 +35,31 @@ function formatJoinedAt(iso) {
 
 export default function ProjectMembersPage() {
   const { sitePublicId } = useParams();
+  const outletContext = useOutletContext() || {};
+  const { membersSitePublicId = "", selectedSitePublicId = "", headLoading = false } = outletContext;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [count, setCount] = useState(null);
   const [members, setMembers] = useState([]);
+  const resolvedSitePublicId = (selectedSitePublicId || sitePublicId || membersSitePublicId || "").trim();
 
   const load = useCallback(async () => {
-    if (!sitePublicId) return;
+    if (!resolvedSitePublicId) {
+      if (headLoading) {
+        setLoading(true);
+        return;
+      }
+      setCount(0);
+      setMembers([]);
+      setError("");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationMembers, sitePublicId), {
+      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationMembers, resolvedSitePublicId), {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
@@ -70,7 +84,7 @@ export default function ProjectMembersPage() {
     } finally {
       setLoading(false);
     }
-  }, [sitePublicId]);
+  }, [headLoading, resolvedSitePublicId]);
 
   useEffect(() => {
     load();
@@ -79,10 +93,7 @@ export default function ProjectMembersPage() {
   return (
     <div className="owner-programs__page" data-testid="project-members-page">
       <header className="owner-programs__members-head">
-        <h2 className="owner-programs__overview-title">Участники</h2>
-        <p className="owner-programs__muted" style={{ margin: "6px 0 0" }}>
-          Регистрации и вступления по виджету этого проекта.
-        </p>
+        <h2 className="owner-programs__overview-title">Пользователи</h2>
       </header>
 
       {loading && <p className="lk-partner__muted">Загрузка…</p>}
@@ -90,9 +101,11 @@ export default function ProjectMembersPage() {
 
       {!loading && !error && (
         <>
-          <p className="owner-programs__members-count" aria-live="polite">
-            Участников: <strong>{count ?? 0}</strong>
-          </p>
+          {count > 0 ? (
+            <p className="owner-programs__members-count" aria-live="polite">
+              Участников: <strong>{count ?? 0}</strong>
+            </p>
+          ) : null}
 
           {count > 0 && count > members.length ? (
             <p className="owner-programs__muted" style={{ margin: "0 0 12px" }}>
@@ -102,12 +115,14 @@ export default function ProjectMembersPage() {
 
           {count === 0 ? (
             <div className="owner-programs__members-empty" data-testid="members-empty">
-              <p className="owner-programs__overview-title" style={{ fontSize: "16px", marginBottom: "8px" }}>
-                Пока нет участников
+              <p className="owner-programs__muted" style={{ margin: 0, color: "#ffffff", opacity: 1 }}>
+                У вас нет добавленных пользователей
               </p>
-              <p className="owner-programs__muted">
-                После регистрации или действия по виджету записи появятся в этом списке.
-              </p>
+              <div className="owner-programs__actions" style={{ marginTop: 16 }}>
+                <button type="button" className="owner-programs__projects-create-btn" data-testid="members-add-button">
+                  Добавить
+                </button>
+              </div>
             </div>
           ) : (
             <ul className="owner-programs__members-list" data-testid="members-list">

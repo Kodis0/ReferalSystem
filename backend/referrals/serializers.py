@@ -4,6 +4,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 from .models import Site
+from .services import site_capture_config_dict, site_owner_display_name
 
 
 def normalize_owner_site_origin(value: str) -> str:
@@ -51,12 +52,34 @@ def build_widget_embed_snippet(
     )
 
 
+def serialize_owner_project_metadata(site: Site) -> dict[str, object]:
+    project = getattr(site, "project", None)
+    if project is None:
+        return {
+            "id": None,
+            "name": "",
+            "description": "",
+            "avatar_data_url": "",
+            "is_default": False,
+        }
+    return {
+        "id": project.id,
+        "name": project.name.strip(),
+        "description": project.description.strip(),
+        "avatar_data_url": project.avatar_data_url.strip(),
+        "is_default": bool(project.is_default),
+    }
+
+
 class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
     """Owner-facing read model for widget install (no Django admin)."""
 
+    project = serializers.SerializerMethodField()
     widget_embed_snippet = serializers.SerializerMethodField()
     public_api_base = serializers.SerializerMethodField()
     widget_script_base = serializers.SerializerMethodField()
+    site_display_name = serializers.SerializerMethodField()
+    capture_config = serializers.SerializerMethodField()
 
     class Meta:
         model = Site
@@ -70,11 +93,23 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "activated_at",
             "widget_enabled",
             "config_json",
+            "site_display_name",
+            "capture_config",
+            "project",
             "widget_embed_snippet",
             "public_api_base",
             "widget_script_base",
         )
         read_only_fields = fields
+
+    def get_project(self, obj: Site) -> dict[str, object]:
+        return serialize_owner_project_metadata(obj)
+
+    def get_site_display_name(self, obj: Site) -> str:
+        return site_owner_display_name(obj)
+
+    def get_capture_config(self, obj: Site) -> dict[str, object]:
+        return site_capture_config_dict(obj)
 
     def get_widget_script_base(self, obj: Site) -> str:
         return (getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
@@ -106,11 +141,15 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     )
     origin = serializers.CharField(max_length=512, trim_whitespace=True, required=False, allow_blank=True)
     display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
+    site_display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
+    description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
+    avatar_data_url = serializers.CharField(required=False, allow_blank=True)
     platform_preset = serializers.ChoiceField(
         choices=Site.PlatformPreset.choices,
         required=False,
     )
     config_json = serializers.JSONField(required=False)
+    capture_config = serializers.JSONField(required=False)
     widget_enabled = serializers.BooleanField(required=False)
 
     def validate_origin(self, value: str) -> str:
@@ -123,11 +162,48 @@ class SiteOwnerCreateSerializer(serializers.Serializer):
     """Explicit create of a new Site (multi-site); not idempotent like bootstrap."""
 
     display_name = serializers.CharField(max_length=200, trim_whitespace=True)
-    origin = serializers.CharField(max_length=512, trim_whitespace=True)
+    description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
+    origin = serializers.CharField(max_length=512, trim_whitespace=True, required=False, allow_blank=True)
     platform_preset = serializers.ChoiceField(
         choices=Site.PlatformPreset.choices,
         default=Site.PlatformPreset.TILDA,
     )
 
     def validate_origin(self, value: str) -> str:
+        s = (value or "").strip()
+        if not s:
+            return ""
+        return normalize_owner_site_origin(value)
+
+
+class ProjectOwnerCreateSerializer(serializers.Serializer):
+    """Create an empty owner Project without creating any child Site rows."""
+
+    display_name = serializers.CharField(max_length=200, trim_whitespace=True)
+    description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
+    avatar_data_url = serializers.CharField(required=False, allow_blank=True)
+
+
+class ProjectOwnerUpdateSerializer(serializers.Serializer):
+    """Update owner Project metadata without requiring a child Site."""
+
+    display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
+    description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
+    avatar_data_url = serializers.CharField(required=False, allow_blank=True)
+
+
+class ProjectSiteOwnerCreateSerializer(serializers.Serializer):
+    """Create an additional Site inside an existing owner Project."""
+
+    site_display_name = serializers.CharField(max_length=200, trim_whitespace=True)
+    origin = serializers.CharField(max_length=512, trim_whitespace=True, required=False, allow_blank=True)
+    platform_preset = serializers.ChoiceField(
+        choices=Site.PlatformPreset.choices,
+        default=Site.PlatformPreset.TILDA,
+    )
+
+    def validate_origin(self, value: str) -> str:
+        s = (value or "").strip()
+        if not s:
+            return ""
         return normalize_owner_site_origin(value)

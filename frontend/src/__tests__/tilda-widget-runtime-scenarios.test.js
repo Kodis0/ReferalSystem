@@ -371,4 +371,51 @@ describe("Tilda-like runtime scenarios (fixtures)", () => {
     expect(row).toBeTruthy();
     expect(row.detail.reason).toBe("outcome_heuristics_skipped_non_tilda_adapter");
   });
+
+  it("filters optional fields by public capture_config", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              capture_config: { enabled_optional_fields: ["email"] },
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const form = document.createElement("form");
+    const name = document.createElement("input");
+    name.name = "name";
+    name.value = "Alice";
+    const email = document.createElement("input");
+    email.name = "email";
+    email.value = "alice@example.com";
+    const phone = document.createElement("input");
+    phone.name = "phone";
+    phone.value = "+79001112233";
+    form.appendChild(name);
+    form.appendChild(email);
+    form.appendChild(phone);
+    document.body.appendChild(form);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "generic" }));
+    await flushWidgetReady();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    const leadCall = fetchMock.mock.calls.find((c) => String(c[0]).includes("/events/leads"));
+    const body = JSON.parse(leadCall[1].body);
+    expect(body.email).toBe("alice@example.com");
+    expect(body.name).toBe("");
+    expect(body.phone).toBe("");
+    expect(body.fields).toEqual({ email: "alice@example.com" });
+  });
 });

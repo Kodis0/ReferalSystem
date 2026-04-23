@@ -99,6 +99,47 @@ class PublicWidgetApiTests(TestCase):
         self.assertEqual(data["product_name_selector"], ".product-title")
         self.assertEqual(data["config"]["amount_selector"], "#price")
 
+    def test_widget_config_records_runtime_signal_for_site(self):
+        url = f"/public/v1/sites/{self.site.public_id}/widget-config"
+        before = timezone.now()
+        r = self.client.get(
+            url,
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.site.refresh_from_db()
+        self.assertIsNotNone(self.site.last_widget_seen_at)
+        self.assertGreaterEqual(self.site.last_widget_seen_at, before)
+        self.assertEqual(self.site.last_widget_seen_origin, self.origin)
+
+    def test_widget_config_includes_safe_public_capture_config(self):
+        self.site.config_json = {
+            "capture_config": {
+                "enabled_optional_fields": ["email", "product_name", "unknown"],
+            },
+            "site_display_name": "Owner-only label",
+        }
+        self.site.save(update_fields=["config_json"])
+        url = f"/public/v1/sites/{self.site.public_id}/widget-config"
+        r = self.client.get(
+            url,
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(
+            data["capture_config"],
+            {
+                "version": 1,
+                "enabled_optional_fields": ["email", "product_name"],
+            },
+        )
+        self.assertNotIn("site_display_name", data["config"])
+        self.assertNotIn("capture_config", data["config"])
+        self.assertNotIn("site_display_name", data["capture_config"])
+
     def test_widget_config_rejects_wrong_origin(self):
         url = f"/public/v1/sites/{self.site.public_id}/widget-config"
         r = self.client.get(

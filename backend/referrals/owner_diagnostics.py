@@ -13,6 +13,7 @@ from django.utils import timezone
 from .models import ReferralLeadEvent, Site, SiteMembership
 from .public_ingest_audit import build_ingest_quality_window
 from .services import (
+    build_site_connection_check,
     mask_email_for_partner_dashboard,
     page_path_for_partner_dashboard,
     site_allowed_origins_list,
@@ -334,6 +335,7 @@ def build_site_owner_diagnostics_payload(*, site: Site, recent_limit: int = 50) 
         "integration_status": integration_status,
         "integration_warnings": warnings,
         "embed_readiness": build_embed_readiness(site),
+        "connection_check": build_site_connection_check(site),
         "widget_runtime": flags,
         "platform_preset": site.platform_preset,
         "widget_enabled": site.widget_enabled,

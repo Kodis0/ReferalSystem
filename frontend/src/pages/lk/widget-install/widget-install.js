@@ -1,9 +1,50 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/light";
+import xml from "react-syntax-highlighter/dist/cjs/languages/hljs/xml";
+import { atomOneDarkReasonable } from "react-syntax-highlighter/dist/cjs/styles/hljs";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./widget-install.css";
+
+SyntaxHighlighter.registerLanguage("xml", xml);
+
+function SnippetCopyIcon({ copied = false }) {
+  if (copied) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <path
+          d="M11.67 3.5 5.83 9.33 3.17 6.67"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M5.25 2.33h5.84a.58.58 0 0 1 .58.59v5.83"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.75 4.67H2.92a.58.58 0 0 0-.59.58v5.84c0 .32.26.58.59.58h5.83c.32 0 .58-.26.58-.58V5.25a.58.58 0 0 0-.58-.58Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -21,13 +62,51 @@ function prettyJson(value) {
   }
 }
 
+const REQUIRED_CAPTURE_FIELDS = [
+  { key: "ref", label: "ref" },
+  { key: "page_url", label: "URL страницы" },
+  { key: "form_id", label: "ID формы" },
+];
+
+const OPTIONAL_CAPTURE_FIELDS = [
+  { key: "name", label: "Имя", recommended: true },
+  { key: "email", label: "Email", recommended: true },
+  { key: "phone", label: "Телефон", recommended: true },
+  { key: "amount", label: "Сумма" },
+  { key: "currency", label: "Валюта" },
+  { key: "product_name", label: "Товар / тариф" },
+];
+
+function normalizeCaptureConfig(value) {
+  const hasExplicitEnabledList =
+    value &&
+    typeof value === "object" &&
+    Object.prototype.hasOwnProperty.call(value, "enabled_optional_fields") &&
+    Array.isArray(value.enabled_optional_fields);
+  const raw = hasExplicitEnabledList ? value.enabled_optional_fields : OPTIONAL_CAPTURE_FIELDS.map((field) => field.key);
+  const allowed = new Set(OPTIONAL_CAPTURE_FIELDS.map((field) => field.key));
+  const next = [];
+  raw.forEach((item) => {
+    const key = String(item || "").trim();
+    if (allowed.has(key) && !next.includes(key)) {
+      next.push(key);
+    }
+  });
+  return { enabled_optional_fields: next };
+}
+
+function buildAllowedOrigins(originValue) {
+  const origin = String(originValue || "").trim();
+  return origin ? [origin] : [];
+}
+
 /** Human-readable integration_status for owner UI */
 function integrationStatusLabel(status) {
   const map = {
-    healthy: "В норме",
-    needs_attention: "Нужна проверка",
-    disabled: "Виджет выключен",
-    incomplete: "Настройка не завершена",
+    healthy: "Подключено",
+    needs_attention: "Нужно проверить",
+    disabled: "Отключено",
+    incomplete: "Не завершено",
   };
   return map[status] || status || "—";
 }
@@ -35,30 +114,49 @@ function integrationStatusLabel(status) {
 /** Warning codes from API → short Russian hints */
 function warningDescription(code) {
   const map = {
-    no_allowed_origins: "Не заданы allowed_origins — браузер не сможет отправить события.",
-    widget_disabled: "Виджет выключен (widget_enabled).",
-    publishable_key_missing: "Отсутствует publishable_key.",
-    observe_success_off: "В config_json выключен observe_success — страница успеха может не отслеживаться.",
-    report_observed_outcome_off: "В config_json выключен report_observed_outcome — итог отправки может не попадать в систему.",
-    no_leads_last_7_days: "За 7 дней нет ни одного сохранённого события лида (проверьте установку и трафик).",
-    high_not_observed_ratio_7d: "Много событий с not_observed — проверьте селекторы / страницу «спасибо» (Tilda).",
-    no_outcome_reported_last_24h: "За сутки есть попытки отправки, но клиент не сообщил итог (outcome пустой).",
+    no_allowed_origins: "Не указан домен сайта. Без этого браузер не сможет отправлять события.",
+    widget_disabled: "Сбор заявок выключен. Включите его перед запуском.",
+    publishable_key_missing: "Ключ публикации пока не готов. Обновите экран или сохраните настройки ещё раз.",
+    observe_success_off: "Автопроверка страницы успеха выключена. Проверьте это, если хотите видеть итог отправки.",
+    report_observed_outcome_off: "Сайт не отправляет итог заявки обратно в систему. Проверьте это перед запуском.",
+    no_leads_last_7_days: "За последние 7 дней не было сохранённых заявок. Проверьте код установки и трафик.",
+    high_not_observed_ratio_7d: "Много заявок без подтверждённого итога. Стоит проверить страницу «спасибо» и селекторы.",
+    no_outcome_reported_last_24h: "Есть отправки, но сайт не сообщил итог заявки. Проверьте клиентскую интеграцию.",
   };
-  return map[code] || code;
+  return map[code] || "Есть техническое предупреждение. Откройте диагностику для деталей.";
 }
 
 function lifecycleLabel(status) {
   const map = {
     draft: "Черновик",
-    verified: "Проверен",
-    active: "Активен",
+    verified: "Проверено",
+    active: "Активно",
   };
   return map[status] || status || "—";
 }
 
-function readSelectedSiteFromUrl() {
+function setupStatusDescription(diag, lifecycleStatus) {
+  if (diag?.integration_status === "healthy" && lifecycleStatus === "active") {
+    return "Сайт подключён и уже активен.";
+  }
+  if (diag?.integration_status === "healthy") {
+    return "Подключение выглядит корректно. Можно переходить к активации.";
+  }
+  if (diag?.integration_status === "needs_attention") {
+    return "Подключение почти готово, но перед запуском стоит проверить замечания ниже.";
+  }
+  if (diag?.integration_status === "disabled") {
+    return "Подключение сохранено, но сбор заявок сейчас выключен.";
+  }
+  if (lifecycleStatus === "verified") {
+    return "Проверка уже пройдена. Осталось активировать сайт.";
+  }
+  return "Сначала сохраните настройки, затем проверьте подключение и активируйте сайт.";
+}
+
+function readSelectedSiteFromSearch(search) {
   try {
-    return new URL(window.location.href).searchParams.get("site_public_id") || "";
+    return new URLSearchParams(search || "").get("site_public_id") || "";
   } catch {
     return "";
   }
@@ -83,24 +181,149 @@ function syncSelectedSiteInUrl(sitePublicId) {
   } catch {}
 }
 
+function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyHint, steps = null }) {
+  const copied = copyHint === "Скопировано";
+
+  return (
+    <section className="lk-widget-install__card lk-widget-install__install-hero" data-testid="widget-install-snippet-block">
+      <div className="lk-widget-install__install-copy">
+        <h2 className="lk-partner__section-title lk-widget-install__install-title">{title}</h2>
+        {subtitle ? <p className="lk-widget-install__install-subtitle">{subtitle}</p> : null}
+      </div>
+
+      <div className="lk-widget-install__snippet-card">
+        <div className="lk-widget-install__snippet-card-head">
+          <span className="lk-widget-install__snippet-card-label">HTML</span>
+          <button
+            type="button"
+            aria-label={copied ? "Код скопирован" : "Скопировать код"}
+            className={`lk-widget-install__btn lk-widget-install__install-copy-btn${
+              copied ? " lk-widget-install__install-copy-btn_success" : ""
+            }`}
+            onClick={onCopy}
+          >
+            <SnippetCopyIcon copied={copied} />
+          </button>
+        </div>
+
+        <div className="lk-widget-install__snippet-card-code">
+          <SyntaxHighlighter
+            language="xml"
+            style={atomOneDarkReasonable}
+            wrapLongLines
+            customStyle={{
+              margin: 0,
+              padding: "18px 20px",
+              background: "transparent",
+              fontSize: "14px",
+              lineHeight: "1.65",
+            }}
+            codeTagProps={{ style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" } }}
+          >
+            {snippet || ""}
+          </SyntaxHighlighter>
+        </div>
+      </div>
+
+      {steps ? (
+        <div className="lk-widget-install__install-steps-block">
+          <h3 className="lk-widget-install__install-steps-title">Что сделать дальше</h3>
+          <ol className="lk-widget-install__install-steps">
+            {steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function connectionCheckPresentation(localState, persistedCheck) {
+  const persistedFound = persistedCheck?.status === "found";
+  const persistedOrigin = String(persistedCheck?.last_seen_origin || "").trim();
+
+  if (localState.status === "checking") {
+    return {
+      tone: "pending",
+      title: "Идёт проверка",
+      message: "Проверяем, дошёл ли сигнал от установленного кода.",
+    };
+  }
+  if (localState.status === "found") {
+    return {
+      tone: "ok",
+      title: "Подключение найдено",
+      message: localState.message || "Сайт подключён.",
+    };
+  }
+  if (localState.status === "not_found") {
+    return {
+      tone: "bad",
+      title: "Подключение не найдено",
+      message: localState.message || "Проверьте установку и попробуйте снова после публикации сайта.",
+    };
+  }
+  if (persistedFound) {
+    return {
+      tone: "ok",
+      title: "Подключение найдено",
+      message: persistedOrigin
+        ? `Сигнал от установленного кода уже получен с ${persistedOrigin}.`
+        : "Сайт уже связался с системой.",
+    };
+  }
+  return {
+    tone: "idle",
+    title: "Ещё не проверяли",
+    message: "После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже.",
+  };
+}
+
+function WidgetInstallConnectionCheckCard({ verifyLoading, onVerify, statusView }) {
+  return (
+    <section className="lk-widget-install__card lk-widget-install__connection-check" data-testid="site-connection-check-card">
+      <h2 className="lk-partner__section-title">Проверка подключения</h2>
+      <p className="lk-partner__muted">
+        После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже.
+      </p>
+      <div className="lk-widget-install__connection-check-actions">
+        <button type="button" className="lk-widget-install__btn" disabled={verifyLoading} onClick={onVerify}>
+          {verifyLoading ? "Проверяем…" : "Проверить подключение"}
+        </button>
+      </div>
+      <div
+        className={`lk-widget-install__connection-check-status lk-widget-install__connection-check-status_${statusView.tone}`}
+        role="status"
+        aria-live="polite"
+      >
+        <strong className="lk-widget-install__connection-check-title">{statusView.title}</strong>
+        <p className="lk-widget-install__connection-check-copy">{statusView.message}</p>
+      </div>
+    </section>
+  );
+}
+
 /**
- * @param {{ routeSitePublicId?: string }} [props]
+ * @param {{ routeSitePublicId?: string, focused?: boolean }} [props]
  * When set (UUID), loads integration for that Site — used from `/lk/partner/:sitePublicId/widget`.
  */
-function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } = {}) {
+function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", focused = false } = {}) {
+  const location = useLocation();
   const routeSitePublicIdRaw = (routeSitePublicIdProp || "").trim();
   const routeSitePublicId = isUuidString(routeSitePublicIdRaw) ? routeSitePublicIdRaw : "";
   const inProjectShell = Boolean(routeSitePublicId);
-  const shellTitle = inProjectShell ? "Виджет" : "Виджет на сайт";
-  const shellSubtitle = inProjectShell
-    ? "Код установки, ключи и диагностика подключения"
-    : "Код установки и параметры интеграции";
+  const focusedConnectView = inProjectShell && focused;
+  const shellTitle = focusedConnectView ? "Подключите сайт" : inProjectShell ? "Виджет" : "Виджет на сайт";
+  const shellSubtitle = focusedConnectView
+    ? ""
+    : "Подключите сайт: вставьте код, выберите данные для отправки, проверьте и активируйте интеграцию.";
 
   const [loading, setLoading] = useState(true);
   const [siteMissing, setSiteMissing] = useState(false);
   const [siteSelectionRequired, setSiteSelectionRequired] = useState(false);
   const [siteOptions, setSiteOptions] = useState([]);
-  const [selectedSitePublicId, setSelectedSitePublicId] = useState(() => readSelectedSiteFromUrl());
+  const [selectedSitePublicId, setSelectedSitePublicId] = useState(() => readSelectedSiteFromSearch(location.search));
   const [createSiteLoading, setCreateSiteLoading] = useState(false);
   const [createSiteError, setCreateSiteError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -112,10 +335,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   const [data, setData] = useState(null);
   const [diag, setDiag] = useState(null);
   const [diagError, setDiagError] = useState("");
-  const [allowedText, setAllowedText] = useState("[]");
+  const [originInput, setOriginInput] = useState("");
   const [configText, setConfigText] = useState("{}");
   const [platformPreset, setPlatformPreset] = useState("tilda");
   const [widgetEnabled, setWidgetEnabled] = useState(true);
+  const [captureConfig, setCaptureConfig] = useState(() => normalizeCaptureConfig(null));
+  const [projectBasePath, setProjectBasePath] = useState("");
+  const [connectionCheckUi, setConnectionCheckUi] = useState({ status: "idle", message: "" });
 
   const load = useCallback(async (sitePublicIdOverride) => {
     const effectiveSitePublicId =
@@ -128,6 +354,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     setSaveHint("");
     setCopyHint("");
     setDiagError("");
+    setConnectionCheckUi({ status: "idle", message: "" });
     try {
       const resInt = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, effectiveSitePublicId), {
         method: "GET",
@@ -159,10 +386,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
         return;
       }
       setData(intPayload);
-      setAllowedText(prettyJson(intPayload.allowed_origins));
+      setOriginInput(Array.isArray(intPayload.allowed_origins) ? intPayload.allowed_origins[0] || "" : "");
       setConfigText(prettyJson(intPayload.config_json));
       setPlatformPreset(intPayload.platform_preset || "tilda");
       setWidgetEnabled(Boolean(intPayload.widget_enabled));
+      setCaptureConfig(normalizeCaptureConfig(intPayload.capture_config || intPayload.config_json?.capture_config));
+      const nextProjectId = intPayload?.project && typeof intPayload.project.id === "number" ? intPayload.project.id : null;
+      setProjectBasePath(nextProjectId ? `/lk/partner/project/${nextProjectId}` : "");
       if (intPayload.public_id) {
         setSelectedSitePublicId(intPayload.public_id);
         syncSelectedSiteInUrl(intPayload.public_id);
@@ -197,6 +427,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
       setSelectedSitePublicId(routeSitePublicId);
     }
   }, [routeSitePublicId]);
+
+  useEffect(() => {
+    if (routeSitePublicId) return;
+    const nextSitePublicId = readSelectedSiteFromSearch(location.search);
+    if (!nextSitePublicId || nextSitePublicId === selectedSitePublicId) return;
+    setSelectedSitePublicId(nextSitePublicId);
+  }, [location.search, routeSitePublicId, selectedSitePublicId]);
 
   useEffect(() => {
     load();
@@ -249,23 +486,14 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     setSaving(true);
     setSaveHint("");
     setError("");
-    let allowed_origins;
+    const allowed_origins = buildAllowedOrigins(originInput);
     let config_json;
     try {
-      allowed_origins = JSON.parse(allowedText);
-      if (!Array.isArray(allowed_origins)) {
-        throw new Error("allowed_not_array");
-      }
-      if (!allowed_origins.every((x) => typeof x === "string")) {
-        throw new Error("allowed_not_strings");
-      }
-    } catch {
-      setSaving(false);
-      setSaveHint("allowed_origins: нужен JSON-массив строк, например [\"https://mysite.com\"]");
-      return;
-    }
-    try {
       config_json = JSON.parse(configText || "{}");
+      if (!config_json || typeof config_json !== "object" || Array.isArray(config_json)) {
+        throw new Error("config_not_object");
+      }
+      delete config_json.capture_config;
     } catch {
       setSaving(false);
       setSaveHint("config_json: невалидный JSON");
@@ -280,6 +508,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
           site_public_id: selectedSitePublicId || undefined,
           allowed_origins,
           config_json,
+          capture_config: captureConfig,
           platform_preset: platformPreset,
           widget_enabled: widgetEnabled,
         }),
@@ -318,6 +547,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   const onVerify = async () => {
     setVerifyLoading(true);
     setSaveHint("");
+    setConnectionCheckUi({ status: "checking", message: "" });
     try {
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationVerify, selectedSitePublicId), {
         method: "POST",
@@ -327,13 +557,34 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (payload.detail === "site_connection_not_found") {
+          const nextMessage =
+            "Подключение не найдено. Проверьте установку, публикацию сайта и откройте страницу ещё раз.";
+          setConnectionCheckUi({ status: "not_found", message: nextMessage });
+          if (!focusedConnectView) setSaveHint(nextMessage);
+          return;
+        }
+        setConnectionCheckUi({ status: "idle", message: "" });
         setSaveHint(payload.detail ? String(payload.detail) : `Проверка: ${res.status}`);
         return;
       }
       setData(payload);
-      await load();
+      setConnectionCheckUi({
+        status: "found",
+        message: "Подключение найдено. Сайт подключён.",
+      });
+      const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId), {
+        method: "GET",
+        headers: authHeaders(),
+        credentials: "include",
+      });
+      if (resDiag.ok) {
+        setDiag(await resDiag.json().catch(() => null));
+        setDiagError("");
+      }
     } catch (e) {
       console.error(e);
+      setConnectionCheckUi({ status: "idle", message: "" });
       setSaveHint("Сетевая ошибка при проверке");
     } finally {
       setVerifyLoading(false);
@@ -378,7 +629,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
-        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
+        {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
         <p className="lk-partner__muted">Загрузка…</p>
       </div>
     );
@@ -389,7 +640,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
       return (
         <div className="lk-dashboard lk-partner">
           <h1 className="lk-dashboard__title">{shellTitle}</h1>
-          <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
+          {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
           <p className="lk-partner__muted" style={{ maxWidth: 560 }}>
             Проект не найден или недоступен для этого аккаунта. Вернитесь к списку проектов и откройте нужный.
           </p>
@@ -404,7 +655,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
-        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
+        {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
         <p className="lk-partner__muted" style={{ maxWidth: 560 }}>
           Для вашего аккаунта ещё не подключён сайт для виджета. Создайте его здесь — после этого
           появятся ключи, сниппет и диагностика.
@@ -432,7 +683,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
-        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
+        {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
         <div className="lk-partner__error" style={{ maxWidth: 640 }}>
           Не удалось открыть настройки виджета для этого проекта. Вернитесь к списку проектов и выберите проект снова.
         </div>
@@ -449,7 +700,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
-        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
+        {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
         <p className="lk-partner__muted" style={{ maxWidth: 640 }}>
           Для этого аккаунта несколько проектов. Выберите нужный, чтобы открыть настройки и статус публикации.
         </p>
@@ -477,7 +728,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
     return (
       <div className="lk-dashboard lk-partner">
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
-        <p className="lk-dashboard__subtitle">{shellSubtitle}</p>
+        {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
         <div className="lk-partner__error">
           {error === "network" ? "Сетевая ошибка, попробуйте позже" : error}
         </div>
@@ -491,478 +742,646 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "" } =
   const iq = diag?.ingest_quality;
   const iq24 = iq?.["24h"];
   const iq7 = iq?.["7d"];
+  const lifecycleStatus = diag?.site_status || data?.status;
+  const connectionCheckView = connectionCheckPresentation(connectionCheckUi, diag?.connection_check);
+  const enabledOptionalFields = captureConfig.enabled_optional_fields;
+  const siteName =
+    (typeof data?.site_display_name === "string" && data.site_display_name.trim()) ||
+    (typeof data?.config_json?.site_display_name === "string" && data.config_json.site_display_name.trim()) ||
+    (typeof data?.config_json?.display_name === "string" && data.config_json.display_name.trim()) ||
+    "Сайт без названия";
+  const primaryOrigin = String(originInput || data?.allowed_origins?.[0] || diag?.allowed_origins?.[0] || "").trim();
+  const sendingPreview = [
+    ...REQUIRED_CAPTURE_FIELDS.map((field) => field.label),
+    ...OPTIONAL_CAPTURE_FIELDS.filter((field) => enabledOptionalFields.includes(field.key)).map((field) => field.label),
+  ];
+  const integrationWarnings = (diag?.integration_warnings || []).map((item) => warningDescription(item));
+  const setupStatusText = setupStatusDescription(diag, lifecycleStatus);
+  const installSteps = [
+    "Вставьте код на сайт",
+    "Опубликуйте изменения",
+    "Откройте страницу сайта",
+    "Вернитесь и нажмите «Проверить подключение»",
+  ];
+  const readinessItems = [
+    {
+      label: "Домен сайта",
+      value: primaryOrigin || "Не указан",
+      ok: Boolean(primaryOrigin),
+    },
+    {
+      label: "Проверка подключения",
+      value: lifecycleStatus === "verified" || lifecycleStatus === "active" ? "Пройдена" : "Ещё не запускали",
+      ok: lifecycleStatus === "verified" || lifecycleStatus === "active",
+    },
+    {
+      label: "Статус запуска",
+      value: lifecycleStatus === "active" ? "Сайт активен" : "Ещё не активирован",
+      ok: lifecycleStatus === "active",
+    },
+  ];
+
+  if (focusedConnectView) {
+    return (
+      <div className="lk-dashboard lk-partner lk-widget-install lk-widget-install_focused" data-testid="project-site-connect-page">
+        <div className="page__returnButton">
+          <Link
+            className="tw-link link_primary link_s lk-widget-install__back-link"
+            to={projectBasePath || "/lk/partner"}
+            data-testid="project-site-connect-back"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="7" height="13" fill="none" viewBox="0 0 7 13" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M1 6.99a1 1 0 0 1 .23-.64l4-5a1 1 0 0 1 1.54 1.29L3.29 6.99l3.32 4.35a1 1 0 0 1-.15 1.4A1 1 0 0 1 5 12.62l-3.83-5A1 1 0 0 1 1 7Z"
+              />
+            </svg>
+            Назад
+          </Link>
+        </div>
+        <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        {diagError ? <div className="lk-widget-install__diag-soft">{diagError}</div> : null}
+
+        <WidgetInstallSnippetCard
+          title="Код подключения"
+          snippet={data.widget_embed_snippet}
+          onCopy={onCopySnippet}
+          copyHint={copyHint}
+        />
+
+        <WidgetInstallConnectionCheckCard
+          verifyLoading={verifyLoading}
+          onVerify={onVerify}
+          statusView={connectionCheckView}
+        />
+
+        <section className="lk-widget-install__card lk-widget-install__video-placeholder" aria-labelledby="project-site-connect-video-title">
+          <h2 id="project-site-connect-video-title" className="lk-partner__section-title">
+            Видеоинструкция
+          </h2>
+          <p className="lk-partner__muted">Здесь будет видеоинструкция по подключению.</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="lk-dashboard lk-partner lk-widget-install">
       <h1 className="lk-dashboard__title">{shellTitle}</h1>
-      <p className="lk-dashboard__subtitle">
-        {inProjectShell ? (
-          <>
-            Ключ публикации, разрешённые домены, фрагмент <code className="lk-partner__muted">&lt;script&gt;</code> и
-            диагностика подключения.
-          </>
-        ) : (
-          <>
-            Публичные идентификаторы, allowlist origin для браузера и готовый фрагмент{" "}
-            <code className="lk-partner__muted">&lt;script&gt;</code>. Ниже — диагностика интеграции и
-            последние лиды (операционный обзор).
-          </>
-        )}
-      </p>
+      {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
 
       {diagError ? <div className="lk-widget-install__diag-soft">{diagError}</div> : null}
 
-      {diag ? (
-        <div className="lk-widget-install__diag-grid" style={{ marginTop: 16 }}>
-          <section className="lk-widget-install__card">
-            <h2 className="lk-partner__section-title">Состояние интеграции</h2>
-            <p className="lk-widget-install__status-line">
-              <span className={`lk-widget-install__status-pill ${statusClass}`}>
-                {integrationStatusLabel(diag.integration_status)}
-              </span>
-              <span className="lk-partner__muted" style={{ marginLeft: 10 }}>
-                {diag.site_public_id}
-              </span>
-            </p>
-            <p className="lk-partner__muted" style={{ marginTop: 8 }}>
-              {inProjectShell ? "Статус публикации" : "Lifecycle"}:{" "}
-              <strong>{lifecycleLabel(diag.site_status || data?.status)}</strong>
-            </p>
-            <div className="lk-partner__link-row" style={{ marginTop: 12 }}>
-              <button
-                type="button"
-                className="lk-widget-install__btn"
-                disabled={verifyLoading}
-                onClick={onVerify}
-              >
-                {verifyLoading ? "Проверка…" : "Подтвердить проверку"}
-              </button>
-              <button
-                type="button"
-                className="lk-widget-install__btn lk-widget-install__btn_secondary"
-                disabled={activateLoading}
-                onClick={onActivate}
-              >
-                {activateLoading ? "Активация…" : inProjectShell ? "Активировать проект" : "Активировать сайт"}
-              </button>
-            </div>
-            <ul className="lk-widget-install__warn-list">
-              {(diag.integration_warnings || []).map((w) => (
-                <li key={w}>{warningDescription(w)}</li>
-              ))}
-              {(diag.integration_warnings || []).length === 0 ? (
-                <li className="lk-partner__muted">Нет предупреждений по правилам диагностики.</li>
-              ) : null}
-            </ul>
-            <div className="lk-widget-install__readiness">
-              <div>
-                <span className="lk-widget-install__readiness-k">Готово к embed</span>
-                <span className="lk-widget-install__readiness-v">
-                  {diag.embed_readiness?.origins_configured &&
-                  diag.embed_readiness?.publishable_key_present &&
-                  diag.embed_readiness?.public_id_present
-                    ? "да"
-                    : "нет"}
-                </span>
-              </div>
-              <div>
-                <span className="lk-widget-install__readiness-k">origins</span>
-                <span className="lk-widget-install__readiness-v">
-                  {diag.embed_readiness?.origins_configured ? "заданы" : "не заданы"}
-                </span>
-              </div>
-              <div>
-                <span className="lk-widget-install__readiness-k">виджет</span>
-                <span className="lk-widget-install__readiness-v">
-                  {diag.widget_enabled ? "включён" : "выключен"}
-                </span>
-              </div>
-            </div>
-          </section>
+      <WidgetInstallSnippetCard
+        title="Установите код на сайт"
+        subtitle="Вставьте код на сайт, опубликуйте изменения и затем вернитесь для проверки подключения."
+        snippet={data.widget_embed_snippet}
+        onCopy={onCopySnippet}
+        copyHint={copyHint}
+        steps={installSteps}
+      />
 
-          <section className="lk-widget-install__card">
-            <h2 className="lk-partner__section-title">Участники по CTA</h2>
-            <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
-              {inProjectShell
-                ? "Аккаунты, присоединившиеся к проекту через виджет (регистрация или вход)."
-                : "Аккаунты, присоединившиеся к этому сайту через виджет (регистрация или вход)."}
-            </p>
-            <p className="lk-widget-install__status-line" style={{ marginTop: 0 }}>
-              <span className="lk-widget-install__readiness-k">Всего</span>{" "}
-              <strong>{diag.site_membership?.count ?? "—"}</strong>
-            </p>
-            {(diag.site_membership?.recent_joins || []).length ? (
-              <ul className="lk-widget-install__kv" style={{ marginTop: 8 }}>
-                {diag.site_membership.recent_joins.map((row, i) => (
-                  <li key={`${row.joined_at ?? ""}-${i}`}>
-                    {(row.joined_at || "").replace("T", " ").slice(0, 19) || "—"} ·{" "}
-                    {row.identity_masked || "—"}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="lk-partner__muted" style={{ marginTop: 8 }}>
-                {inProjectShell
-                  ? "Пока нет присоединений через CTA для этого проекта."
-                  : "Пока нет присоединений через CTA для выбранного сайта."}
-              </p>
-            )}
-          </section>
-
-          <section className="lk-widget-install__card">
-            <h2 className="lk-partner__section-title">Настройки виджета (runtime)</h2>
-            <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
-              platform_preset: <strong>{diag.platform_preset}</strong>
-            </p>
-            {wr ? (
-              <ul className="lk-widget-install__kv">
-                <li>
-                  observe_success:{" "}
-                  <span className={wr.observe_success ? "lk-widget-install__on" : "lk-widget-install__off"}>
-                    {wr.observe_success ? "вкл" : "выкл"}
-                  </span>
-                </li>
-                <li>
-                  report_observed_outcome:{" "}
-                  <span
-                    className={
-                      wr.report_observed_outcome ? "lk-widget-install__on" : "lk-widget-install__off"
-                    }
-                  >
-                    {wr.report_observed_outcome ? "вкл" : "выкл"}
-                  </span>
-                </li>
-                <li>amount_selector: {wr.amount_selector || "—"}</li>
-                <li>product_name_selector: {wr.product_name_selector || "—"}</li>
-                <li>currency: {wr.currency || "—"}</li>
-              </ul>
-            ) : null}
-            <p className="lk-partner__muted" style={{ marginTop: 8, fontSize: 12 }}>
-              Флаги читаются из <code>config_json</code> (как и публичный widget-config).
-            </p>
-          </section>
-
-          <section className="lk-widget-install__card lk-widget-install__card_wide">
-            <h2 className="lk-partner__section-title">Наблюдаемые итоги (агрегаты)</h2>
-            <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
-              Счётчики по каноническим строкам лида в БД. Дублирующие submit (duplicate_suppressed)
-              смотрите в блоке «Качество публичного ingest» ниже.
-            </p>
-            <div className="lk-widget-install__windows">
-              <div>
-                <div className="lk-widget-install__windows-title">24 часа</div>
-                <table className="lk-widget-install__mini-table">
-                  <tbody>
-                    <tr>
-                      <td>submit (строки)</td>
-                      <td>{w24?.submit_attempt_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>success_observed</td>
-                      <td>{w24?.success_observed_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>failure_observed</td>
-                      <td>{w24?.failure_observed_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>not_observed</td>
-                      <td>{w24?.not_observed_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>итог не сообщён</td>
-                      <td>{w24?.outcome_unset_count ?? "—"}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div>
-                <div className="lk-widget-install__windows-title">7 дней</div>
-                <table className="lk-widget-install__mini-table">
-                  <tbody>
-                    <tr>
-                      <td>submit (строки)</td>
-                      <td>{w7?.submit_attempt_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>success_observed</td>
-                      <td>{w7?.success_observed_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>failure_observed</td>
-                      <td>{w7?.failure_observed_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>not_observed</td>
-                      <td>{w7?.not_observed_count ?? "—"}</td>
-                    </tr>
-                    <tr>
-                      <td>итог не сообщён</td>
-                      <td>{w7?.outcome_unset_count ?? "—"}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-
-          {iq ? (
-            <section className="lk-widget-install__card lk-widget-install__card_wide">
-              <h2 className="lk-partner__section-title">Качество публичного ingest</h2>
-              <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
-                Технический учёт POST <code>/public/v1/events/leads</code> (источник:{" "}
-                <code>{iq.source}</code>): создано, дубли, отказы, троттлинг, обновления outcome.
-              </p>
-              <div className="lk-widget-install__windows">
-                <div>
-                  <div className="lk-widget-install__windows-title">24 часа</div>
-                  <table className="lk-widget-install__mini-table">
-                    <tbody>
-                      <tr>
-                        <td>Всего запросов</td>
-                        <td>{iq24?.total_requests ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>created</td>
-                        <td>{iq24?.created_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>duplicate_suppressed</td>
-                        <td>{iq24?.duplicate_suppressed_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>outcome_updated</td>
-                        <td>{iq24?.outcome_updated_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>outcome_unchanged</td>
-                        <td>{iq24?.outcome_unchanged_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>rate_limited</td>
-                        <td>{iq24?.rate_limited_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>rejected (прочие ошибки)</td>
-                        <td>{iq24?.rejected_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>доля дублей (к created+dup)</td>
-                        <td>
-                          {iq24?.duplicate_ratio_lead_submitted != null
-                            ? `${(iq24.duplicate_ratio_lead_submitted * 100).toFixed(0)}%`
-                            : "—"}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div>
-                  <div className="lk-widget-install__windows-title">7 дней</div>
-                  <table className="lk-widget-install__mini-table">
-                    <tbody>
-                      <tr>
-                        <td>Всего запросов</td>
-                        <td>{iq7?.total_requests ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>created</td>
-                        <td>{iq7?.created_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>duplicate_suppressed</td>
-                        <td>{iq7?.duplicate_suppressed_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>outcome_updated</td>
-                        <td>{iq7?.outcome_updated_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>outcome_unchanged</td>
-                        <td>{iq7?.outcome_unchanged_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>rate_limited</td>
-                        <td>{iq7?.rate_limited_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>rejected</td>
-                        <td>{iq7?.rejected_count ?? 0}</td>
-                      </tr>
-                      <tr>
-                        <td>success_ratio</td>
-                        <td>
-                          {iq7?.success_ratio != null ? `${(iq7.success_ratio * 100).toFixed(0)}%` : "—"}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </section>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="lk-widget-install__grid" style={{ marginTop: 20 }}>
-        <section>
-          <h2 className="lk-partner__section-title">Идентификаторы</h2>
-          <div className="lk-widget-install__field-label">status</div>
-          <div className="lk-widget-install__mono">{data.status}</div>
-          <div className="lk-widget-install__field-label">public_id</div>
-          <div className="lk-widget-install__mono">{data.public_id}</div>
+      <div className="lk-widget-install__grid lk-widget-install__grid_main" style={{ marginTop: 20 }}>
+        <section className="lk-widget-install__card">
+          <h2 className="lk-partner__section-title">Что подключается</h2>
+          <div className="lk-widget-install__field-label">Сайт</div>
+          <div className="lk-widget-install__summary-value">{siteName}</div>
           <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
-            publishable_key
+            Домен / origin
           </div>
-          <div className="lk-widget-install__mono">{data.publishable_key}</div>
-        </section>
-
-        <section>
-          <h2 className="lk-partner__section-title">Сниппет установки</h2>
-          <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
-            Вставьте перед закрывающим <code>&lt;/body&gt;</code> на страницах, где нужен сбор лидов.
-            Адреса в сниппете берутся из настроек сервера (<code>FRONTEND_URL</code>, опционально{" "}
-            <code>PUBLIC_API_BASE</code>).
+          <div className="lk-widget-install__mono">{primaryOrigin || "Пока не указан"}</div>
+          <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
+            Статус подключения
+          </div>
+          <p className="lk-widget-install__status-line">
+            <span className={`lk-widget-install__status-pill ${statusClass}`}>
+              {integrationStatusLabel(diag?.integration_status)}
+            </span>
+            <span className="lk-partner__muted">
+              {lifecycleLabel(lifecycleStatus)}
+            </span>
           </p>
-          <div className="lk-widget-install__snippet-wrap">
-            <pre className="lk-widget-install__mono lk-widget-install__snippet">{data.widget_embed_snippet}</pre>
-          </div>
-          <div className="lk-partner__link-row" style={{ marginTop: 12 }}>
-            <button type="button" className="lk-partner__copy-btn" onClick={onCopySnippet}>
-              Копировать сниппет
-            </button>
-            {copyHint ? <span className="lk-partner__muted">{copyHint}</span> : null}
-          </div>
+          <p className="lk-widget-install__hint" style={{ marginTop: 0 }}>{setupStatusText}</p>
         </section>
 
-        <section>
-          <h2 className="lk-partner__section-title">Настройки интеграции</h2>
-          <div className="lk-widget-install__field-label">platform_preset</div>
-          <select
-            className="lk-widget-install__select"
-            value={platformPreset}
-            onChange={(e) => setPlatformPreset(e.target.value)}
-            aria-label="platform_preset"
-          >
-            <option value="tilda">tilda</option>
-            <option value="generic">generic</option>
-          </select>
-
+        <section className="lk-widget-install__card">
+          <h2 className="lk-partner__section-title">Какие данные отправлять</h2>
+          <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
+            Системные поля передаются всегда. Дополнительные поля можно включить для этого сайта без
+            изменения публичного контракта.
+          </p>
+          <div className="lk-widget-install__field-label">Системные поля</div>
+          <div className="lk-widget-install__warn-list" data-testid="capture-required-fields">
+            {REQUIRED_CAPTURE_FIELDS.map((field) => (
+              <label key={field.key} className="lk-widget-install__field-label" style={{ display: "block", marginBottom: 8 }}>
+                <input type="checkbox" checked readOnly disabled /> {field.label}
+              </label>
+            ))}
+          </div>
           <div className="lk-widget-install__field-label" style={{ marginTop: 14 }}>
-            allowed_origins (JSON-массив строк)
+            Дополнительные поля
           </div>
-          <textarea
-            className="lk-widget-install__textarea"
-            value={allowedText}
-            onChange={(e) => setAllowedText(e.target.value)}
-            spellCheck={false}
-            aria-label="allowed_origins JSON"
-          />
-
-          <div className="lk-widget-install__field-label" style={{ marginTop: 14 }}>
-            config_json
+          <div className="lk-widget-install__warn-list" data-testid="capture-optional-fields">
+            {OPTIONAL_CAPTURE_FIELDS.map((field) => {
+              const checked = enabledOptionalFields.includes(field.key);
+              return (
+                <label key={field.key} className="lk-widget-install__field-label" style={{ display: "block", marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => {
+                      setCaptureConfig((current) => {
+                        const currentEnabled = current.enabled_optional_fields || [];
+                        const nextEnabled = event.target.checked
+                          ? [...currentEnabled, field.key].filter((value, index, arr) => arr.indexOf(value) === index)
+                          : currentEnabled.filter((value) => value !== field.key);
+                        return { enabled_optional_fields: nextEnabled };
+                      });
+                    }}
+                  />{" "}
+                  {field.label}
+                  {field.recommended ? " · рекомендуем" : ""}
+                </label>
+              );
+            })}
           </div>
-          <textarea
-            className="lk-widget-install__textarea"
-            value={configText}
-            onChange={(e) => setConfigText(e.target.value)}
-            spellCheck={false}
-            aria-label="config_json"
-            style={{ minHeight: 160 }}
-          />
+          <p className="lk-widget-install__hint" style={{ marginTop: 10 }}>
+            Будут отправляться: {sendingPreview.join(", ")}
+          </p>
+        </section>
 
-          <div className="lk-widget-install__row" style={{ marginTop: 14 }}>
-            <label className="lk-widget-install__field-label" style={{ marginBottom: 0 }}>
-              <input
-                type="checkbox"
-                checked={widgetEnabled}
-                onChange={(e) => setWidgetEnabled(e.target.checked)}
-              />{" "}
-              widget_enabled
-            </label>
+        <section className="lk-widget-install__card">
+          <h2 className="lk-partner__section-title">Проверка и запуск</h2>
+          <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
+            После установки кода сохраните настройки, проверьте подключение и затем активируйте сайт.
+          </p>
+          <div className="lk-widget-install__readiness">
+            {readinessItems.map((item) => (
+              <div key={item.label} className="lk-widget-install__readiness-row">
+                <span className="lk-widget-install__readiness-k">{item.label}</span>
+                <span className={item.ok ? "lk-widget-install__on" : "lk-widget-install__off"}>{item.value}</span>
+              </div>
+            ))}
           </div>
-
-          <div className="lk-widget-install__actions">
-            <button type="button" className="lk-widget-install__btn" disabled={saving} onClick={onSave}>
-              {saving ? "Сохранение…" : "Сохранить"}
+          <div className="lk-partner__link-row" style={{ marginTop: 14 }}>
+            <button
+              type="button"
+              className="lk-widget-install__btn"
+              disabled={verifyLoading}
+              onClick={onVerify}
+            >
+              {verifyLoading ? "Проверяем…" : "Проверить подключение"}
             </button>
             <button
               type="button"
               className="lk-widget-install__btn lk-widget-install__btn_secondary"
-              onClick={load}
+              disabled={activateLoading}
+              onClick={onActivate}
             >
-              Обновить с сервера
+              {activateLoading ? "Активируем…" : inProjectShell ? "Активировать проект" : "Активировать сайт"}
             </button>
           </div>
           {saveHint ? <p className="lk-widget-install__hint">{saveHint}</p> : null}
-        </section>
-
-        <section>
-          <h2 className="lk-partner__section-title">Служебно</h2>
-          <p className="lk-partner__muted">
-            widget_script_base:{" "}
-            <span className="lk-widget-install__mono" style={{ display: "inline", padding: "2px 6px" }}>
-              {data.widget_script_base}
-            </span>
-          </p>
-          <p className="lk-partner__muted" style={{ marginTop: 6 }}>
-            public_api_base:{" "}
-            <span className="lk-widget-install__mono" style={{ display: "inline", padding: "2px 6px" }}>
-              {data.public_api_base}
-            </span>
-          </p>
+          <div className="lk-widget-install__message-block" style={{ marginTop: 12 }}>
+            {integrationWarnings.length ? (
+              <>
+                <div className="lk-widget-install__field-label">Что стоит проверить перед запуском</div>
+                <ul className="lk-widget-install__warn-list" style={{ marginBottom: 0 }}>
+                  {integrationWarnings.map((warning, index) => (
+                    <li key={`${warning}-${index}`}>{warning}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="lk-partner__muted" style={{ margin: 0 }}>
+                Подключение выглядит готовым: можно отправить тестовую заявку и активировать сайт.
+              </p>
+            )}
+          </div>
         </section>
       </div>
 
-      {diag && (
-        <section className="lk-widget-install__card lk-widget-install__leads-section" style={{ marginTop: 24 }}>
-          <h2 className="lk-partner__section-title">Последние лиды по сайту</h2>
-          {!diag.has_recent_leads ? (
-            <p className="lk-partner__muted">Пока нет сохранённых событий — отправьте тестовую заявку с сайта.</p>
-          ) : (
-            <div className="lk-widget-install__table-wrap">
-              <table className="lk-widget-install__table">
-                <thead>
-                  <tr>
-                    <th>Время</th>
-                    <th>Страница</th>
-                    <th>Форма</th>
-                    <th>ref</th>
-                    <th>Стадия</th>
-                    <th>Итог (клиент)</th>
-                    <th>Контакт</th>
-                    <th>Сумма</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(diag.recent_leads || []).map((row) => (
-                    <tr key={row.id}>
-                      <td className="lk-widget-install__td-time">{row.created_at?.replace("T", " ").slice(0, 19)}</td>
-                      <td title={row.page_key}>{row.page_path || row.page_key || "—"}</td>
-                      <td>{row.form_id || "—"}</td>
-                      <td className="lk-widget-install__mono">{row.ref_code || "—"}</td>
-                      <td>
-                        <span className={`lk-widget-install__badge lk-widget-install__badge_${row.submission_stage_badge}`}>
-                          {row.submission_stage_label || row.submission_stage}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`lk-widget-install__badge lk-widget-install__badge_${row.client_outcome_badge}`}>
-                          {row.client_outcome_label || row.client_observed_outcome || "—"}
-                        </span>
-                      </td>
-                      <td className="lk-widget-install__mono">
-                        {[row.customer_email_masked, row.customer_phone_masked].filter(Boolean).join(" · ") || "—"}
-                      </td>
-                      <td>
-                        {row.amount != null ? `${row.amount} ${row.currency || ""}`.trim() : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <section className="lk-widget-install__card" style={{ marginTop: 20 }}>
+        <details className="lk-widget-install__details">
+          <summary className="lk-widget-install__details-summary">Расширенные настройки</summary>
+          <div className="lk-widget-install__details-body">
+            <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
+              Здесь можно скорректировать платформу, домен сайта и служебные параметры без изменения
+              публичных контрактов.
+            </p>
+            <div className="lk-widget-install__field-label">Платформа сайта</div>
+            <select
+              className="lk-widget-install__select"
+              value={platformPreset}
+              onChange={(e) => setPlatformPreset(e.target.value)}
+              aria-label="platform_preset"
+            >
+              <option value="tilda">tilda</option>
+              <option value="generic">generic</option>
+            </select>
+
+            <div className="lk-widget-install__field-label" style={{ marginTop: 14 }}>
+              Домен / origin сайта
             </div>
-          )}
+            <input
+              className="lk-widget-install__select"
+              value={originInput}
+              onChange={(e) => setOriginInput(e.target.value)}
+              aria-label="origin"
+              placeholder="https://mysite.tilda.ws"
+            />
+
+            <div className="lk-widget-install__row" style={{ marginTop: 14 }}>
+              <label className="lk-widget-install__field-label" style={{ marginBottom: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={widgetEnabled}
+                  onChange={(e) => setWidgetEnabled(e.target.checked)}
+                />{" "}
+                Включить сбор заявок на сайте
+              </label>
+            </div>
+
+            <details className="lk-widget-install__details lk-widget-install__details_nested">
+              <summary className="lk-widget-install__details-summary">Raw config_json</summary>
+              <div className="lk-widget-install__details-body">
+                <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
+                  Оставили редактор как advanced-опцию, чтобы не ломать существующую настройку runtime.
+                </p>
+                <textarea
+                  className="lk-widget-install__textarea"
+                  value={configText}
+                  onChange={(e) => setConfigText(e.target.value)}
+                  spellCheck={false}
+                  aria-label="config_json"
+                  style={{ minHeight: 160 }}
+                />
+              </div>
+            </details>
+
+            <details className="lk-widget-install__details lk-widget-install__details_nested">
+              <summary className="lk-widget-install__details-summary">Идентификаторы и служебные адреса</summary>
+              <div className="lk-widget-install__details-body">
+                <div className="lk-widget-install__field-label">Статус записи</div>
+                <div className="lk-widget-install__mono">{data.status}</div>
+                <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
+                  public_id
+                </div>
+                <div className="lk-widget-install__mono">{data.public_id}</div>
+                <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
+                  publishable_key
+                </div>
+                <div className="lk-widget-install__mono">{data.publishable_key}</div>
+                <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
+                  widget_script_base
+                </div>
+                <div className="lk-widget-install__mono">{data.widget_script_base}</div>
+                <div className="lk-widget-install__field-label" style={{ marginTop: 12 }}>
+                  public_api_base
+                </div>
+                <div className="lk-widget-install__mono">{data.public_api_base}</div>
+              </div>
+            </details>
+
+            <div className="lk-widget-install__actions">
+              <button type="button" className="lk-widget-install__btn" disabled={saving} onClick={onSave}>
+                {saving ? "Сохраняем…" : "Сохранить настройки"}
+              </button>
+              <button
+                type="button"
+                className="lk-widget-install__btn lk-widget-install__btn_secondary"
+                onClick={load}
+              >
+                Обновить данные
+              </button>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      {diag ? (
+        <section className="lk-widget-install__card" style={{ marginTop: 20 }}>
+          <details className="lk-widget-install__details">
+            <summary className="lk-widget-install__details-summary">Техническая диагностика</summary>
+            <div className="lk-widget-install__details-body">
+              <div className="lk-widget-install__diag-grid">
+                <section className="lk-widget-install__card">
+                  <h2 className="lk-partner__section-title">Состояние интеграции</h2>
+                  <p className="lk-widget-install__status-line">
+                    <span className={`lk-widget-install__status-pill ${statusClass}`}>
+                      {integrationStatusLabel(diag.integration_status)}
+                    </span>
+                    <span className="lk-partner__muted">{diag.site_public_id}</span>
+                  </p>
+                  <p className="lk-partner__muted" style={{ marginTop: 8 }}>
+                    Статус сайта: <strong>{lifecycleLabel(lifecycleStatus)}</strong>
+                  </p>
+                  <div className="lk-widget-install__readiness" style={{ marginTop: 12 }}>
+                    <div className="lk-widget-install__readiness-row">
+                      <span className="lk-widget-install__readiness-k">Готовность к установке</span>
+                      <span className="lk-widget-install__readiness-v">
+                        {diag.embed_readiness?.origins_configured &&
+                        diag.embed_readiness?.publishable_key_present &&
+                        diag.embed_readiness?.public_id_present
+                          ? "Да"
+                          : "Нет"}
+                      </span>
+                    </div>
+                    <div className="lk-widget-install__readiness-row">
+                      <span className="lk-widget-install__readiness-k">Домен указан</span>
+                      <span className="lk-widget-install__readiness-v">
+                        {diag.embed_readiness?.origins_configured ? "Да" : "Нет"}
+                      </span>
+                    </div>
+                    <div className="lk-widget-install__readiness-row">
+                      <span className="lk-widget-install__readiness-k">Сбор заявок</span>
+                      <span className="lk-widget-install__readiness-v">
+                        {diag.widget_enabled ? "Включён" : "Выключен"}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="lk-widget-install__card">
+                  <h2 className="lk-partner__section-title">Участники по CTA</h2>
+                  <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
+                    {inProjectShell
+                      ? "Аккаунты, присоединившиеся к проекту через виджет."
+                      : "Аккаунты, присоединившиеся к этому сайту через виджет."}
+                  </p>
+                  <p className="lk-widget-install__status-line" style={{ marginTop: 0 }}>
+                    <span className="lk-widget-install__readiness-k">Всего</span>
+                    <strong>{diag.site_membership?.count ?? "—"}</strong>
+                  </p>
+                  {(diag.site_membership?.recent_joins || []).length ? (
+                    <ul className="lk-widget-install__kv" style={{ marginTop: 8 }}>
+                      {diag.site_membership.recent_joins.map((row, i) => (
+                        <li key={`${row.joined_at ?? ""}-${i}`}>
+                          {(row.joined_at || "").replace("T", " ").slice(0, 19) || "—"} · {row.identity_masked || "—"}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="lk-partner__muted" style={{ marginTop: 8 }}>
+                      {inProjectShell
+                        ? "Пока нет присоединений через CTA для этого проекта."
+                        : "Пока нет присоединений через CTA для выбранного сайта."}
+                    </p>
+                  )}
+                </section>
+
+                <section className="lk-widget-install__card">
+                  <h2 className="lk-partner__section-title">Runtime и platform preset</h2>
+                  <p className="lk-partner__muted" style={{ marginBottom: 8 }}>
+                    platform_preset: <strong>{diag.platform_preset}</strong>
+                  </p>
+                  {wr ? (
+                    <ul className="lk-widget-install__kv">
+                      <li>
+                        observe_success:{" "}
+                        <span className={wr.observe_success ? "lk-widget-install__on" : "lk-widget-install__off"}>
+                          {wr.observe_success ? "вкл" : "выкл"}
+                        </span>
+                      </li>
+                      <li>
+                        report_observed_outcome:{" "}
+                        <span
+                          className={wr.report_observed_outcome ? "lk-widget-install__on" : "lk-widget-install__off"}
+                        >
+                          {wr.report_observed_outcome ? "вкл" : "выкл"}
+                        </span>
+                      </li>
+                      <li>amount_selector: {wr.amount_selector || "—"}</li>
+                      <li>product_name_selector: {wr.product_name_selector || "—"}</li>
+                      <li>currency: {wr.currency || "—"}</li>
+                    </ul>
+                  ) : null}
+                </section>
+              </div>
+            </div>
+          </details>
+        </section>
+      ) : null}
+
+      {diag ? (
+        <section className="lk-widget-install__card" style={{ marginTop: 20 }}>
+          <details className="lk-widget-install__details">
+            <summary className="lk-widget-install__details-summary">Технические метрики</summary>
+            <div className="lk-widget-install__details-body">
+              <div className="lk-widget-install__diag-grid">
+                <section className="lk-widget-install__card lk-widget-install__card_wide">
+                  <h2 className="lk-partner__section-title">Наблюдаемые итоги</h2>
+                  <div className="lk-widget-install__windows">
+                    <div>
+                      <div className="lk-widget-install__windows-title">24 часа</div>
+                      <table className="lk-widget-install__mini-table">
+                        <tbody>
+                          <tr>
+                            <td>submit</td>
+                            <td>{w24?.submit_attempt_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>success_observed</td>
+                            <td>{w24?.success_observed_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>failure_observed</td>
+                            <td>{w24?.failure_observed_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>not_observed</td>
+                            <td>{w24?.not_observed_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>outcome unset</td>
+                            <td>{w24?.outcome_unset_count ?? "—"}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div>
+                      <div className="lk-widget-install__windows-title">7 дней</div>
+                      <table className="lk-widget-install__mini-table">
+                        <tbody>
+                          <tr>
+                            <td>submit</td>
+                            <td>{w7?.submit_attempt_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>success_observed</td>
+                            <td>{w7?.success_observed_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>failure_observed</td>
+                            <td>{w7?.failure_observed_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>not_observed</td>
+                            <td>{w7?.not_observed_count ?? "—"}</td>
+                          </tr>
+                          <tr>
+                            <td>outcome unset</td>
+                            <td>{w7?.outcome_unset_count ?? "—"}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+
+                {iq ? (
+                  <section className="lk-widget-install__card lk-widget-install__card_wide">
+                    <h2 className="lk-partner__section-title">Качество публичного ingest</h2>
+                    <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
+                      Источник: <code>{iq.source}</code>
+                    </p>
+                    <div className="lk-widget-install__windows">
+                      <div>
+                        <div className="lk-widget-install__windows-title">24 часа</div>
+                        <table className="lk-widget-install__mini-table">
+                          <tbody>
+                            <tr>
+                              <td>Всего запросов</td>
+                              <td>{iq24?.total_requests ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>created</td>
+                              <td>{iq24?.created_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>duplicate_suppressed</td>
+                              <td>{iq24?.duplicate_suppressed_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>outcome_updated</td>
+                              <td>{iq24?.outcome_updated_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>outcome_unchanged</td>
+                              <td>{iq24?.outcome_unchanged_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>rate_limited</td>
+                              <td>{iq24?.rate_limited_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>rejected</td>
+                              <td>{iq24?.rejected_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>Доля дублей</td>
+                              <td>
+                                {iq24?.duplicate_ratio_lead_submitted != null
+                                  ? `${(iq24.duplicate_ratio_lead_submitted * 100).toFixed(0)}%`
+                                  : "—"}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div>
+                        <div className="lk-widget-install__windows-title">7 дней</div>
+                        <table className="lk-widget-install__mini-table">
+                          <tbody>
+                            <tr>
+                              <td>Всего запросов</td>
+                              <td>{iq7?.total_requests ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>created</td>
+                              <td>{iq7?.created_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>duplicate_suppressed</td>
+                              <td>{iq7?.duplicate_suppressed_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>outcome_updated</td>
+                              <td>{iq7?.outcome_updated_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>outcome_unchanged</td>
+                              <td>{iq7?.outcome_unchanged_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>rate_limited</td>
+                              <td>{iq7?.rate_limited_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>rejected</td>
+                              <td>{iq7?.rejected_count ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <td>success_ratio</td>
+                              <td>
+                                {iq7?.success_ratio != null ? `${(iq7.success_ratio * 100).toFixed(0)}%` : "—"}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            </div>
+          </details>
+        </section>
+      ) : null}
+
+      {diag && (
+        <section className="lk-widget-install__card" style={{ marginTop: 20 }}>
+          <details className="lk-widget-install__details">
+            <summary className="lk-widget-install__details-summary">Последние лиды</summary>
+            <div className="lk-widget-install__details-body">
+              {!diag.has_recent_leads ? (
+                <p className="lk-partner__muted">Пока нет сохранённых событий. Отправьте тестовую заявку с сайта.</p>
+              ) : (
+                <div className="lk-widget-install__table-wrap">
+                  <table className="lk-widget-install__table">
+                    <thead>
+                      <tr>
+                        <th>Время</th>
+                        <th>Страница</th>
+                        <th>Форма</th>
+                        <th>ref</th>
+                        <th>Стадия</th>
+                        <th>Итог (клиент)</th>
+                        <th>Контакт</th>
+                        <th>Сумма</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(diag.recent_leads || []).map((row) => (
+                        <tr key={row.id}>
+                          <td className="lk-widget-install__td-time">{row.created_at?.replace("T", " ").slice(0, 19)}</td>
+                          <td title={row.page_key}>{row.page_path || row.page_key || "—"}</td>
+                          <td>{row.form_id || "—"}</td>
+                          <td className="lk-widget-install__mono">{row.ref_code || "—"}</td>
+                          <td>
+                            <span className={`lk-widget-install__badge lk-widget-install__badge_${row.submission_stage_badge}`}>
+                              {row.submission_stage_label || row.submission_stage}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`lk-widget-install__badge lk-widget-install__badge_${row.client_outcome_badge}`}>
+                              {row.client_outcome_label || row.client_observed_outcome || "—"}
+                            </span>
+                          </td>
+                          <td className="lk-widget-install__mono">
+                            {[row.customer_email_masked, row.customer_phone_masked].filter(Boolean).join(" · ") || "—"}
+                          </td>
+                          <td>
+                            {row.amount != null ? `${row.amount} ${row.currency || ""}`.trim() : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </details>
         </section>
       )}
     </div>
