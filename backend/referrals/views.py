@@ -27,19 +27,22 @@ from .serializers import (
     serialize_owner_project_metadata,
 )
 from .services import (
+    SITE_SHELL_AVATAR_CONFIG_KEY,
+    SITE_CAPTURE_CONFIG_KEY,
+    SITE_DISPLAY_NAME_CONFIG_KEY,
     build_site_connection_check,
     capture_referral_attribution,
     create_project_for_site,
     ensure_project_avatar_data_url,
     ensure_partner_profile,
-    persist_project_avatar_if_empty,
     generate_publishable_key,
     partner_dashboard_payload,
+    persist_project_avatar_if_empty,
+    owner_site_list_origin_display,
     referral_capture_origin_allowed,
     sanitize_site_capture_config,
     site_owner_display_name,
-    SITE_CAPTURE_CONFIG_KEY,
-    SITE_DISPLAY_NAME_CONFIG_KEY,
+    site_shell_avatar_data_url,
 )
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -111,12 +114,7 @@ def _owner_site_options(user):
 
 
 def _owner_site_option_payload(site: Site) -> dict:
-    origins = site.allowed_origins or []
-    primary_origin = ""
-    if isinstance(origins, list) and origins:
-        first = origins[0]
-        if isinstance(first, str):
-            primary_origin = first.strip()
+    primary_origin, primary_origin_label = owner_site_list_origin_display(site)
     project_meta = serialize_owner_project_metadata(site)
     return {
         "public_id": str(site.public_id),
@@ -127,9 +125,11 @@ def _owner_site_option_payload(site: Site) -> dict:
         "widget_enabled": bool(site.widget_enabled),
         "allowed_origins_count": len(site.allowed_origins or []),
         "primary_origin": primary_origin,
+        "primary_origin_label": primary_origin_label,
         "platform_preset": site.platform_preset,
         "display_name": site_owner_display_name(site),
         "description": project_meta["description"],
+        "avatar_data_url": site_shell_avatar_data_url(site),
         "project": project_meta,
     }
 
@@ -512,6 +512,12 @@ class SiteOwnerIntegrationView(APIView):
             cfg[SITE_CAPTURE_CONFIG_KEY] = sanitize_site_capture_config(data.get("capture_config"))
         elif "config_json" in data and SITE_CAPTURE_CONFIG_KEY in cfg:
             cfg[SITE_CAPTURE_CONFIG_KEY] = sanitize_site_capture_config(cfg.get(SITE_CAPTURE_CONFIG_KEY))
+        if "site_avatar_data_url" in data:
+            site_avatar = (data.get("site_avatar_data_url") or "").strip()
+            if site_avatar:
+                cfg[SITE_SHELL_AVATAR_CONFIG_KEY] = site_avatar
+            else:
+                cfg.pop(SITE_SHELL_AVATAR_CONFIG_KEY, None)
         project_updates = _project_metadata_updates_from_owner_payload(data, cfg)
         project = None
         if project_updates or "config_json" in data:
@@ -535,6 +541,8 @@ class SiteOwnerIntegrationView(APIView):
                 project_description=project_description,
                 avatar_data_url=project_avatar_data_url,
             )
+            site.config_json = cfg
+        elif "site_avatar_data_url" in data:
             site.config_json = cfg
         if "widget_enabled" in data:
             site.widget_enabled = data["widget_enabled"]

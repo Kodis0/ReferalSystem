@@ -4,7 +4,12 @@ from django.conf import settings
 from rest_framework import serializers
 
 from .models import Site
-from .services import persist_project_avatar_if_empty, site_capture_config_dict, site_owner_display_name
+from .services import (
+    persist_project_avatar_if_empty,
+    site_capture_config_dict,
+    site_owner_display_name,
+    site_shell_avatar_data_url,
+)
 
 
 def normalize_owner_site_origin(value: str) -> str:
@@ -79,6 +84,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
     public_api_base = serializers.SerializerMethodField()
     widget_script_base = serializers.SerializerMethodField()
     site_display_name = serializers.SerializerMethodField()
+    site_avatar_data_url = serializers.SerializerMethodField()
     capture_config = serializers.SerializerMethodField()
 
     class Meta:
@@ -94,6 +100,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "widget_enabled",
             "config_json",
             "site_display_name",
+            "site_avatar_data_url",
             "capture_config",
             "project",
             "widget_embed_snippet",
@@ -107,6 +114,9 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
 
     def get_site_display_name(self, obj: Site) -> str:
         return site_owner_display_name(obj)
+
+    def get_site_avatar_data_url(self, obj: Site) -> str:
+        return site_shell_avatar_data_url(obj)
 
     def get_capture_config(self, obj: Site) -> dict[str, object]:
         return site_capture_config_dict(obj)
@@ -144,6 +154,7 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     site_display_name = serializers.CharField(max_length=200, trim_whitespace=True, required=False, allow_blank=True)
     description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
     avatar_data_url = serializers.CharField(required=False, allow_blank=True)
+    site_avatar_data_url = serializers.CharField(required=False, allow_blank=True)
     platform_preset = serializers.ChoiceField(
         choices=Site.PlatformPreset.choices,
         required=False,

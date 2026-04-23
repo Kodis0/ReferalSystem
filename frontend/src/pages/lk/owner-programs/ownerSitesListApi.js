@@ -22,8 +22,10 @@ export function normalizeOwnerSiteListRow(row) {
     widget_enabled: Boolean(row.widget_enabled),
     allowed_origins_count: typeof row.allowed_origins_count === "number" ? row.allowed_origins_count : 0,
     primary_origin: typeof row.primary_origin === "string" ? row.primary_origin : "",
+    primary_origin_label: typeof row.primary_origin_label === "string" ? row.primary_origin_label.trim() : "",
     platform_preset: typeof row.platform_preset === "string" ? row.platform_preset : "",
     display_name: typeof row.display_name === "string" ? row.display_name.trim() : "",
+    avatar_data_url: typeof row.avatar_data_url === "string" ? row.avatar_data_url.trim() : "",
     description: typeof project.description === "string" ? project.description.trim() : "",
     project: {
       id: typeof project.id === "number" ? project.id : null,

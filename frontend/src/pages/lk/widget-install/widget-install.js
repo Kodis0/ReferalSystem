@@ -907,20 +907,12 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     // Soft hint for "last viewed" highlight on project sites overview.
     // The overview page may use this query as a *visual hint only* — it does not
     // participate in site identity selection on any site-level page.
-    const overviewHref = `${projectBasePath}/sites${
-      selectedSitePublicId ? `?site_public_id=${encodeURIComponent(selectedSitePublicId)}` : ""
-    }`;
     const widgetDeepHref = `${projectBasePath}/widget`;
 
     return (
       <div className="owner-programs__page owner-programs__site-page" data-testid="project-site-management-page">
         <header className="owner-programs__members-head owner-programs__site-page-head">
           <div>
-            <p className="owner-programs__shell-crumb" style={{ marginBottom: 8 }}>
-              <Link to={overviewHref}>Сайты проекта</Link>
-              <span aria-hidden="true"> · </span>
-              <span>Сайт</span>
-            </p>
             <h2 className="owner-programs__overview-title owner-programs__site-page-title">{siteName}</h2>
             <p className="owner-programs__muted owner-programs__site-page-domain">{displayDomain}</p>
             <div className="owner-programs__card-meta owner-programs__site-page-meta">

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
+import { sitePrimaryDomainLabel } from "./siteDisplay";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -13,6 +14,17 @@ function authHeaders() {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+
+function withSitePublicIdQuery(url, sitePublicId) {
+  if (!sitePublicId) return url;
+  try {
+    const u = new URL(url, window.location.origin);
+    u.searchParams.set("site_public_id", sitePublicId);
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 // Project-level shell never derives "current site" from a fallback chain. Site-level
@@ -144,6 +156,7 @@ export default function SiteProjectLayout() {
   const numericProjectId = Number(projectId);
   const hasProjectId = Number.isInteger(numericProjectId) && numericProjectId > 0;
   const routeSitePublicId = isUuidString(routeSitePublicIdParam) ? routeSitePublicIdParam.trim() : "";
+  const isSiteRouteShell = Boolean(routeSitePublicId);
   const projectBasePath = hasProjectId ? `/lk/partner/project/${numericProjectId}` : "/lk/partner";
   const [headLoading, setHeadLoading] = useState(true);
   const [headTitle, setHeadTitle] = useState("Проект");
@@ -311,7 +324,15 @@ export default function SiteProjectLayout() {
       const projectDescription =
         typeof nextEntry?.project?.description === "string" ? nextEntry.project.description.trim() : "";
       setProjectEntry(nextEntry);
-      setAvatarDataUrl(avatarDataUrlFromProject(nextEntry.project));
+      if (routeSitePublicId) {
+        const row = Array.isArray(nextEntry.sites)
+          ? nextEntry.sites.find((s) => s.public_id === routeSitePublicId)
+          : null;
+        const raw = row && typeof row.avatar_data_url === "string" ? row.avatar_data_url.trim() : "";
+        setAvatarDataUrl(raw);
+      } else {
+        setAvatarDataUrl(avatarDataUrlFromProject(nextEntry.project));
+      }
       setHeadTitle(projectName || "Проект");
       setHeadComment(projectDescription);
       setAvatarError("");
@@ -324,7 +345,7 @@ export default function SiteProjectLayout() {
     } finally {
       setHeadLoading(false);
     }
-  }, [hasProjectId, numericProjectId]);
+  }, [hasProjectId, numericProjectId, routeSitePublicId]);
 
   useEffect(() => {
     loadHead();
@@ -383,6 +404,10 @@ export default function SiteProjectLayout() {
     }
   }, [location.key, locationViewMode]);
 
+  useEffect(() => {
+    if (isSiteRouteShell) setCreateMenuOpen(false);
+  }, [isSiteRouteShell]);
+
   const saveAvatar = useCallback(
     async (nextAvatarDataUrl, successMessage) => {
       const url = API_ENDPOINTS.projectDetail(numericProjectId);
@@ -427,13 +452,58 @@ export default function SiteProjectLayout() {
     [numericProjectId],
   );
 
+  const saveSiteAvatar = useCallback(
+    async (nextAvatarDataUrl, successMessage) => {
+      if (!routeSitePublicId) {
+        throw new Error("Не удалось определить сайт");
+      }
+      const res = await fetch(withSitePublicIdQuery(API_ENDPOINTS.siteIntegration, routeSitePublicId), {
+        method: "PATCH",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ site_avatar_data_url: nextAvatarDataUrl }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = payload?.detail;
+        const detailMsg =
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? detail.join("\n")
+              : detail != null
+                ? String(detail)
+                : "";
+        throw new Error(detailMsg || `Не удалось сохранить фото (${res.status})`);
+      }
+      const fromApi =
+        typeof payload.site_avatar_data_url === "string" ? payload.site_avatar_data_url.trim() : "";
+      setAvatarDataUrl(fromApi || nextAvatarDataUrl);
+      await loadHead();
+      setAvatarSaveState("success");
+      setAvatarSuccessMessage(successMessage);
+      window.dispatchEvent(
+        new CustomEvent("lk-site-avatar-updated", { detail: { sitePublicId: routeSitePublicId } }),
+      );
+      window.setTimeout(() => {
+        setAvatarSaveState("idle");
+        setAvatarSuccessMessage("");
+      }, 1800);
+    },
+    [routeSitePublicId, loadHead],
+  );
+
   const handleAvatarChange = useCallback(
     async (event) => {
       const file = event.target.files && event.target.files[0];
       event.target.value = "";
       if (!file) return;
       if (!hasProjectId) {
-        setAvatarError("Фото проекта сейчас недоступно");
+        setAvatarError("Фото сейчас недоступно");
+        return;
+      }
+      if (isSiteRouteShell && !routeSitePublicId) {
+        setAvatarError("Не удалось определить сайт");
         return;
       }
 
@@ -448,7 +518,11 @@ export default function SiteProjectLayout() {
 
       try {
         const nextAvatarDataUrl = await fileToAvatarDataUrl(file);
-        await saveAvatar(nextAvatarDataUrl, "Фото сохранено");
+        if (isSiteRouteShell) {
+          await saveSiteAvatar(nextAvatarDataUrl, "Фото сохранено");
+        } else {
+          await saveAvatar(nextAvatarDataUrl, "Фото сохранено");
+        }
       } catch (err) {
         console.error(err);
         setAvatarSaveState("error");
@@ -456,7 +530,7 @@ export default function SiteProjectLayout() {
         setAvatarError(err instanceof Error && err.message ? err.message : "Не удалось сохранить фото");
       }
     },
-    [hasProjectId, saveAvatar],
+    [hasProjectId, isSiteRouteShell, routeSitePublicId, saveAvatar, saveSiteAvatar],
   );
 
   const handleAvatarRemove = useCallback(
@@ -470,7 +544,11 @@ export default function SiteProjectLayout() {
       setAvatarSuccessMessage("");
 
       try {
-        await saveAvatar("", "Фото удалено");
+        if (isSiteRouteShell) {
+          await saveSiteAvatar("", "Фото удалено");
+        } else {
+          await saveAvatar("", "Фото удалено");
+        }
       } catch (err) {
         console.error(err);
         setAvatarSaveState("error");
@@ -478,7 +556,7 @@ export default function SiteProjectLayout() {
         setAvatarError(err instanceof Error && err.message ? err.message : "Не удалось удалить фото");
       }
     },
-    [avatarDataUrl, avatarSaveState, hasProjectId, saveAvatar],
+    [avatarDataUrl, avatarSaveState, hasProjectId, isSiteRouteShell, saveAvatar, saveSiteAvatar],
   );
 
   const toggleAddSiteForm = useCallback(() => {
@@ -596,7 +674,6 @@ export default function SiteProjectLayout() {
 
   const projectComment =
     (typeof projectEntry?.project?.description === "string" ? projectEntry.project.description.trim() : "") || headComment;
-  const isSiteRouteShell = Boolean(routeSitePublicId);
   const siteRowForShell = useMemo(() => {
     if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
     return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
@@ -608,8 +685,7 @@ export default function SiteProjectLayout() {
     : headLoading
       ? "Проект…"
       : headTitle;
-  const siteShellOrigin =
-    typeof siteRowForShell?.primary_origin === "string" ? siteRowForShell.primary_origin.trim() : "";
+  const siteShellOrigin = sitePrimaryDomainLabel(siteRowForShell);
   const isDefaultProject = Boolean(
     projectEntry?.project?.is_default || projectEntry?.is_default || headTitle === "Общий проект",
   );
@@ -684,17 +760,66 @@ export default function SiteProjectLayout() {
     >
       {!isProjectInfoPage && !hideShellChrome ? (
         <>
+          {isSiteRouteShell ? (
+            <div className="page__returnButton owner-programs__shell-site-back">
+              <Link
+                className="tw-link link_primary link_s"
+                to={projectServicesNavPath}
+                data-testid="project-site-shell-back"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="7" height="13" fill="none" viewBox="0 0 7 13" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M1 6.99a1 1 0 0 1 .23-.64l4-5a1 1 0 0 1 1.54 1.29L3.29 6.99l3.32 4.35a1 1 0 0 1-.15 1.4A1 1 0 0 1 5 12.62l-3.83-5A1 1 0 0 1 1 7Z"
+                  />
+                </svg>
+                Назад
+              </Link>
+            </div>
+          ) : null}
           <header className="owner-programs__shell-header">
             <div className="owner-programs__shell-header-main">
               {isSiteRouteShell ? (
-                <div className="owner-programs__shell-avatar" aria-hidden="true">
-                  <span className="owner-programs__shell-avatar-placeholder">
-                    <ProjectShellAvatarIcon />
-                  </span>
-                </div>
+                <label
+                  className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
+                    avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
+                  }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
+                >
+                  <input
+                    type="file"
+                    accept="image/gif, image/jpeg, image/png, image/webp"
+                    className="owner-programs__shell-avatar-input"
+                    onChange={handleAvatarChange}
+                    disabled={avatarSaveState === "saving" || !hasProjectId || !routeSitePublicId}
+                  />
+                  {avatarDataUrl ? (
+                    <>
+                      <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото сайта" />
+                      <button
+                        type="button"
+                        className="owner-programs__shell-avatar-remove"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={handleAvatarRemove}
+                        disabled={avatarSaveState === "saving"}
+                        aria-label="Удалить фото сайта"
+                      >
+                        <ProjectAvatarRemoveIcon />
+                      </button>
+                    </>
+                  ) : (
+                    <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
+                      <ProjectShellAvatarIcon />
+                    </span>
+                  )}
+                </label>
               ) : (
                 <label
-                  className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
+                  className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
+                    avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
+                  }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
                 >
                   <input
                     type="file"
@@ -779,32 +904,34 @@ export default function SiteProjectLayout() {
                   <RemoveProjectIcon />
                 </button>
               ) : null}
-              <div className="owner-programs__create-menu" ref={createMenuRef}>
-                <button
-                  type="button"
-                  className="owner-programs__projects-create-btn owner-programs__create-menu-trigger"
-                  onClick={() => setCreateMenuOpen((value) => !value)}
-                  aria-haspopup="menu"
-                  aria-expanded={createMenuOpen}
-                  data-testid="project-create-menu-trigger"
-                >
-                  <span>Создать</span>
-                  <CreateMenuChevronIcon open={createMenuOpen} />
-                </button>
-                {createMenuOpen ? (
-                  <div className="owner-programs__create-menu-dropdown" role="menu" data-testid="project-create-menu-dropdown">
-                    <button
-                      type="button"
-                      className="owner-programs__create-menu-item"
-                      onClick={openCreateSite}
-                      role="menuitem"
-                      data-testid="project-create-menu-site"
-                    >
-                      Сайт
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              {!isSiteRouteShell ? (
+                <div className="owner-programs__create-menu" ref={createMenuRef}>
+                  <button
+                    type="button"
+                    className="owner-programs__projects-create-btn owner-programs__create-menu-trigger"
+                    onClick={() => setCreateMenuOpen((value) => !value)}
+                    aria-haspopup="menu"
+                    aria-expanded={createMenuOpen}
+                    data-testid="project-create-menu-trigger"
+                  >
+                    <span>Создать</span>
+                    <CreateMenuChevronIcon open={createMenuOpen} />
+                  </button>
+                  {createMenuOpen ? (
+                    <div className="owner-programs__create-menu-dropdown" role="menu" data-testid="project-create-menu-dropdown">
+                      <button
+                        type="button"
+                        className="owner-programs__create-menu-item"
+                        onClick={openCreateSite}
+                        role="menuitem"
+                        data-testid="project-create-menu-site"
+                      >
+                        Сайт
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </header>
 

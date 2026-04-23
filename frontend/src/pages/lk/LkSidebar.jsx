@@ -200,8 +200,10 @@ export default function LkSidebar() {
     }
 
     window.addEventListener("lk-project-avatar-updated", handleProjectAvatarUpdated);
+    window.addEventListener("lk-site-avatar-updated", handleProjectAvatarUpdated);
     return () => {
       window.removeEventListener("lk-project-avatar-updated", handleProjectAvatarUpdated);
+      window.removeEventListener("lk-site-avatar-updated", handleProjectAvatarUpdated);
     };
   }, [loadOwnerProjects]);
 

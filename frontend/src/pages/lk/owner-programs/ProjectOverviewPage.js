@@ -6,7 +6,7 @@ import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
-import { formatDomainLine, siteLifecycleLabelRu } from "./siteDisplay";
+import { formatDomainLine, siteLifecycleLabelRu, sitePrimaryDomainLabel } from "./siteDisplay";
 
 function ServicesGridIcon() {
   return (
@@ -29,7 +29,7 @@ function ServicesListIcon() {
 
 function serviceSearchValue(site) {
   const title = serviceTitle(site);
-  const domain = formatDomainLine(site.primary_origin, [site.primary_origin]);
+  const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
   return `${title} ${domain} ${site.public_id} ${site.platform_preset || ""}`.toLowerCase();
 }
 
@@ -38,7 +38,7 @@ function serviceTitle(site) {
   if (displayName) {
     return displayName;
   }
-  const domain = formatDomainLine(site?.primary_origin, [site?.primary_origin]);
+  const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site?.primary_origin, [site?.primary_origin]);
   if (domain && domain !== "Домен не задан") {
     return domain;
   }
@@ -480,8 +480,10 @@ export default function ProjectOverviewPage() {
                 {filteredSites.map((site) => {
                   const isCurrent = site.public_id === sitePublicId;
                   const title = serviceTitle(site);
-                  const domain = formatDomainLine(site.primary_origin, [site.primary_origin]);
+                  const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
                   const statusTone = serviceStatusTone(site.status);
+                  const siteCardAvatarUrl =
+                    typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   return (
                     <div
                       key={site.public_id}
@@ -535,7 +537,15 @@ export default function ProjectOverviewPage() {
                       </div>
                       <div className="owner-programs__service-card-top">
                         <div className="owner-programs__service-card-avatar">
-                          <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
+                          {siteCardAvatarUrl ? (
+                            <img
+                              src={siteCardAvatarUrl}
+                              alt=""
+                              className="owner-programs__service-card-avatar-img"
+                            />
+                          ) : (
+                            <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
+                          )}
                         </div>
                         <div className="owner-programs__service-card-copy">
                           <p className="owner-programs__service-card-title">{title}</p>
@@ -561,9 +571,11 @@ export default function ProjectOverviewPage() {
                 {filteredSites.map((site) => {
                   const isCurrent = site.public_id === sitePublicId;
                   const title = serviceTitle(site);
-                  const domain = formatDomainLine(site.primary_origin, [site.primary_origin]);
+                  const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
                   const statusLabel = `${siteLifecycleLabelRu(site.status)}${hasSiteId && isCurrent ? " · текущий" : ""}`;
                   const statusTone = serviceStatusTone(site.status);
+                  const siteListAvatarUrl =
+                    typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   return (
                     <div
                       key={site.public_id}
@@ -581,7 +593,15 @@ export default function ProjectOverviewPage() {
                     >
                       <div className="owner-programs__services-list-top">
                         <div className="owner-programs__service-card-avatar owner-programs__services-list-avatar">
-                          <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
+                          {siteListAvatarUrl ? (
+                            <img
+                              src={siteListAvatarUrl}
+                              alt=""
+                              className="owner-programs__service-card-avatar-img"
+                            />
+                          ) : (
+                            <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
+                          )}
                         </div>
                       </div>
                       <div className="owner-programs__services-list-middle">

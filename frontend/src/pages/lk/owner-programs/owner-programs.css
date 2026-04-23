@@ -712,6 +712,35 @@
   border-top-color: rgba(15, 23, 42, 0.08);
 }
 
+.owner-programs__shell-site-back {
+  margin-bottom: 16px;
+}
+
+.owner-programs__shell .owner-programs__shell-site-back .tw-link.link_primary.link_s {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 600;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.owner-programs__shell .owner-programs__shell-site-back .tw-link.link_primary.link_s:hover {
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme="light"] .owner-programs__shell .owner-programs__shell-site-back .tw-link.link_primary.link_s {
+  color: #848a9a;
+  font-weight: 600;
+}
+
+[data-theme="light"] .owner-programs__shell .owner-programs__shell-site-back .tw-link.link_primary.link_s:hover {
+  color: #4f5fff;
+}
+
 .owner-programs__shell-header {
   display: flex;
   align-items: center;
@@ -1028,13 +1057,15 @@
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  pointer-events: none;
 }
 
 .owner-programs__shell-avatar-remove {
   position: absolute;
   top: -2px;
   right: -2px;
-  z-index: 1;
+  z-index: 2;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1616,15 +1647,15 @@
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: #7f91a4;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .owner-programs__service-card-menu-trigger:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
 }
 
@@ -1634,12 +1665,12 @@
 }
 
 [data-theme="light"] .owner-programs__service-card-menu-trigger {
-  background: rgba(15, 23, 42, 0.05);
-  color: #83899f;
+  background: transparent;
+  color: rgba(38, 50, 92, 0.55);
 }
 
 [data-theme="light"] .owner-programs__service-card-menu-trigger:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.1);
+  background: rgba(15, 23, 42, 0.06);
   color: #26325c;
 }
 
@@ -1714,6 +1745,15 @@
   font-size: 16px;
   font-weight: 700;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.owner-programs__service-card-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .owner-programs__service-card-copy {

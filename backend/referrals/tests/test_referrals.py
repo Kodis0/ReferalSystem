@@ -719,6 +719,38 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIn('data-rs-api="https://api.example.com"', snippet)
         self.assertIn(f'data-rs-site="{site.public_id}"', snippet)
         self.assertIn('data-rs-key="pk_integration_test"', snippet)
+        self.assertEqual(r.data.get("site_avatar_data_url"), "")
+
+    def test_patch_site_avatar_does_not_change_project_avatar(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name="Proj",
+            description="",
+            avatar_data_url="data:image/png;base64,PROJ",
+        )
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_site_av_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+        r = self.api.patch(url, {"site_avatar_data_url": "data:image/png;base64,SITE"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("site_avatar_data_url"), "data:image/png;base64,SITE")
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("site_avatar_data_url"), "data:image/png;base64,SITE")
+        project.refresh_from_db()
+        self.assertEqual(project.avatar_data_url, "data:image/png;base64,PROJ")
+
+        r2 = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r2.status_code, 200)
+        flat = r2.data.get("sites") or []
+        row = next((s for s in flat if s["public_id"] == str(site.public_id)), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row.get("avatar_data_url"), "data:image/png;base64,SITE")
 
     def test_get_requires_auth(self):
         r = self.api.get("/referrals/site/integration/")
@@ -815,6 +847,41 @@ class SiteOwnerIntegrationApiTests(TestCase):
         for row in r.data["sites"]:
             self.assertIn("description", row)
             self.assertIn("project", row)
+
+    def test_owner_sites_list_primary_origin_prefers_longest_hostname(self):
+        project = Project.objects.create(owner=self.owner, name="Mixed origins", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_mixed_" + uuid.uuid4().hex,
+            allowed_origins=[
+                "xn--80aa",
+                "https://aaaaaaaa-long-hostname.example.com/path",
+            ],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        row = next(s for s in r.data["sites"] if s["public_id"] == str(site.public_id))
+        self.assertEqual(row["primary_origin"], "https://aaaaaaaa-long-hostname.example.com/path")
+        self.assertEqual(row["primary_origin_label"], "aaaaaaaa-long-hostname.example.com")
+
+    def test_owner_sites_list_primary_origin_label_decodes_idna(self):
+        project = Project.objects.create(owner=self.owner, name="IDNA project", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_idna_" + uuid.uuid4().hex,
+            allowed_origins=["https://xn--e1afmkfd.xn--p1ai"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        row = next(s for s in r.data["sites"] if s["public_id"] == str(site.public_id))
+        self.assertEqual(row["primary_origin"], "https://xn--e1afmkfd.xn--p1ai")
+        self.assertEqual(row["primary_origin_label"], "пример.рф")
 
     def test_bootstrap_requires_auth(self):
         r = self.api.post("/referrals/site/bootstrap/")

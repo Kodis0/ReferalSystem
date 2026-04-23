@@ -44,3 +44,13 @@ export function formatDomainLine(primaryOrigin, allowedOrigins) {
   }
   return raw.length > 96 ? `${raw.slice(0, 96)}…` : raw;
 }
+
+/** Prefer API `primary_origin_label` (Unicode host); else derive from `primary_origin`. */
+export function sitePrimaryDomainLabel(siteLike) {
+  const label = typeof siteLike?.primary_origin_label === "string" ? siteLike.primary_origin_label.trim() : "";
+  if (label) return label;
+  const raw = typeof siteLike?.primary_origin === "string" ? siteLike.primary_origin.trim() : "";
+  if (!raw) return "";
+  const line = formatDomainLine(raw, [raw]);
+  return line === "Домен не задан" ? "" : line;
+}

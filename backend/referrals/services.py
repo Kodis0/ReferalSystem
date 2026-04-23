@@ -45,6 +45,7 @@ _PROJECT_AVATAR_PALETTES = (
     ("#082F49", "#1D4ED8", "#0F3D91", "#2563EB"),
 )
 DEFAULT_OWNER_PROJECT_NAME = "Общий проект"
+SITE_SHELL_AVATAR_CONFIG_KEY = "site_avatar_data_url"
 SITE_DISPLAY_NAME_CONFIG_KEY = "site_display_name"
 SITE_CAPTURE_CONFIG_KEY = "capture_config"
 SITE_CAPTURE_CONFIG_VERSION = 1
@@ -56,6 +57,7 @@ _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
         "display_name",
         "description",
         "avatar_data_url",
+        SITE_SHELL_AVATAR_CONFIG_KEY,
         SITE_DISPLAY_NAME_CONFIG_KEY,
         SITE_CAPTURE_CONFIG_KEY,
     }
@@ -351,6 +353,13 @@ def link_session_attributions_to_user(
         customer_user_id__isnull=True,
         expires_at__gt=at_time,
     ).update(customer_user=user)
+
+
+def site_shell_avatar_data_url(site: Site) -> str:
+    """Owner UI avatar for a Site (stored on Site only; does not change Project.avatar)."""
+    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
+    raw = cfg.get(SITE_SHELL_AVATAR_CONFIG_KEY)
+    return raw.strip() if isinstance(raw, str) else ""
 
 
 def owner_project_metadata_from_site(site: Site) -> dict[str, str]:
@@ -1447,6 +1456,75 @@ def site_allowed_origins_list(site: Site) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [str(x).strip().rstrip("/") for x in raw if str(x).strip()]
+
+
+def idna_hostname_to_unicode(host: str) -> str:
+    """Decode punycode (xn--) labels for human-readable domain display (best-effort)."""
+    if not host or not isinstance(host, str):
+        return ""
+    host = host.strip().lower()
+    if not host:
+        return ""
+    labels: list[str] = []
+    for label in host.split("."):
+        if not label:
+            continue
+        if label.startswith("xn--"):
+            try:
+                labels.append(label.encode("ascii").decode("idna"))
+            except (UnicodeError, UnicodeDecodeError):
+                labels.append(label)
+        else:
+            labels.append(label)
+    return ".".join(labels)
+
+
+def owner_site_list_origin_display(site: Site) -> tuple[str, str]:
+    """
+    Pick an origin for owner list cards (sidebar, overview): prefer the longest
+    parseable hostname among allowed_origins instead of blindly using [0].
+
+    Returns (primary_origin, primary_origin_label) where label is a Unicode hostname
+    suitable for UI (IDNA decoded); primary_origin is the chosen raw entry from the list.
+    """
+    origins = site_allowed_origins_list(site)
+    if not origins:
+        return "", ""
+
+    best_raw = ""
+    best_score: tuple[int, int] = (-1, -1)
+
+    for raw in origins:
+        entry = (raw or "").strip()
+        if not entry:
+            continue
+        try:
+            parsed = urlparse(entry if "://" in entry else f"https://{entry}")
+        except Exception:
+            parsed = None
+        host = (parsed.hostname or "").strip().lower() if parsed is not None else ""
+        if not host:
+            continue
+        score = (len(host), len(entry))
+        if score > best_score:
+            best_score = score
+            best_raw = entry
+
+    if not best_raw:
+        for raw in origins:
+            e = (raw or "").strip()
+            if e:
+                return e, ""
+        return "", ""
+
+    try:
+        parsed = urlparse(best_raw if "://" in best_raw else f"https://{best_raw}")
+    except Exception:
+        return best_raw, ""
+    host = (parsed.hostname or "").strip()
+    if not host:
+        return best_raw, ""
+    return best_raw, idna_hostname_to_unicode(host)
 
 
 def site_origin_is_allowed(site: Site, origin_cmp: str) -> bool:

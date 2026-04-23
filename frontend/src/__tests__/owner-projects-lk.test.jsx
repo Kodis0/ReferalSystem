@@ -28,7 +28,9 @@ function makeSite({
   widget_enabled = true,
   allowed_origins_count = 1,
   primary_origin = "",
+  primary_origin_label = "",
   platform_preset = "tilda",
+  avatar_data_url = "",
   project = {},
 } = {}) {
   return {
@@ -38,7 +40,9 @@ function makeSite({
     widget_enabled,
     allowed_origins_count,
     primary_origin,
+    primary_origin_label: typeof primary_origin_label === "string" ? primary_origin_label : "",
     platform_preset,
+    avatar_data_url: typeof avatar_data_url === "string" ? avatar_data_url : "",
     display_name: typeof project.name === "string" ? project.name : "",
     description: typeof project.description === "string" ? project.description : "",
     project: {
@@ -2222,6 +2226,7 @@ describe("Canonical site identity contract", () => {
       expect(screen.getByTestId("project-site-management-page")).toBeInTheDocument();
     });
     expect(screen.getByRole("heading", { name: "Path site" })).toBeInTheDocument();
+    expect(screen.queryByTestId("project-create-menu-trigger")).not.toBeInTheDocument();
 
     // Integration was fetched for path site, never for primary site.
     const integrationCalls = fetchMock.mock.calls
