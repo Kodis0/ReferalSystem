@@ -52,7 +52,7 @@ export default function ProjectInfoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const overviewPath = hasProjectId ? `/lk/partner/project/${numericProjectId}/overview` : `/lk/partner/${siteId}/overview`;
+  const overviewPath = hasProjectId ? `/lk/partner/project/${numericProjectId}/sites` : `/lk/partner/${siteId}/overview`;
 
   const load = useCallback(async () => {
     if (!hasSiteId && !hasProjectId) return;

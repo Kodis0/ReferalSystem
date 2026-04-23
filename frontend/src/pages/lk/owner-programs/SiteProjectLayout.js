@@ -15,42 +15,19 @@ function authHeaders() {
   };
 }
 
-function selectedSiteFromSearch(search) {
-  try {
-    const params = new URLSearchParams(search || "");
-    return String(params.get("site_public_id") || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function selectedSiteSearch(sitePublicId, search) {
-  const params = new URLSearchParams(search || "");
-  if (sitePublicId) {
-    params.set("site_public_id", sitePublicId);
-  } else {
-    params.delete("site_public_id");
-  }
-  const next = params.toString();
-  return next ? `?${next}` : "";
-}
-
-function resolveSelectedSitePublicId(projectEntry, requestedSitePublicId) {
-  const sites = Array.isArray(projectEntry?.sites) ? projectEntry.sites : [];
-  if (requestedSitePublicId && sites.some((site) => site.public_id === requestedSitePublicId)) {
-    return requestedSitePublicId;
-  }
-  const primarySitePublicId =
-    typeof projectEntry?.primary_site_public_id === "string" ? projectEntry.primary_site_public_id.trim() : "";
-  if (primarySitePublicId && sites.some((site) => site.public_id === primarySitePublicId)) {
-    return primarySitePublicId;
-  }
-  return typeof sites[0]?.public_id === "string" ? sites[0].public_id.trim() : "";
-}
-
-function buildProjectPath(projectId, section, sitePublicId, search) {
+// Project-level shell never derives "current site" from a fallback chain. Site-level
+// screens read useParams().sitePublicId directly. The shell only knows the route param
+// (when on canonical site route) and the project's primary site (for project-level
+// fallbacks like members loading), nothing else.
+function buildProjectPath(projectId, section) {
   if (!(Number.isInteger(projectId) && projectId > 0)) return "/lk/partner";
-  return `/lk/partner/project/${projectId}/${section}${selectedSiteSearch(sitePublicId, search)}`;
+  return `/lk/partner/project/${projectId}/${section}`;
+}
+
+function buildProjectSitePath(projectId, sitePublicId) {
+  if (!(Number.isInteger(projectId) && projectId > 0)) return "/lk/partner";
+  if (!sitePublicId) return `/lk/partner/project/${projectId}/sites`;
+  return `/lk/partner/project/${projectId}/sites/${encodeURIComponent(sitePublicId)}`;
 }
 
 function tabClass({ isActive }) {
@@ -163,10 +140,10 @@ function ProjectAvatarRemoveIcon() {
 export default function SiteProjectLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { projectId } = useParams();
+  const { projectId, sitePublicId: routeSitePublicIdParam } = useParams();
   const numericProjectId = Number(projectId);
   const hasProjectId = Number.isInteger(numericProjectId) && numericProjectId > 0;
-  const requestedSitePublicId = selectedSiteFromSearch(location.search);
+  const routeSitePublicId = isUuidString(routeSitePublicIdParam) ? routeSitePublicIdParam.trim() : "";
   const projectBasePath = hasProjectId ? `/lk/partner/project/${numericProjectId}` : "/lk/partner";
   const [headLoading, setHeadLoading] = useState(true);
   const [headTitle, setHeadTitle] = useState("Проект");
@@ -191,14 +168,22 @@ export default function SiteProjectLayout() {
   const [deleteProjectError, setDeleteProjectError] = useState("");
   const createMenuRef = useRef(null);
   const locationViewMode = location.state?.projectViewMode;
-  const selectedSitePublicId = useMemo(
-    () => resolveSelectedSitePublicId(projectEntry, requestedSitePublicId),
-    [projectEntry, requestedSitePublicId],
-  );
+  // Project's primary site is a project-level concept: only used by project-level
+  // pages (members, settings) that need *some* site without being site-level routes.
+  // It must NOT be used as a substitute for canonical :sitePublicId when rendering
+  // a site-level screen.
+  const primarySitePublicId = useMemo(() => {
+    const raw =
+      typeof projectEntry?.primary_site_public_id === "string" ? projectEntry.primary_site_public_id.trim() : "";
+    return isUuidString(raw) ? raw : "";
+  }, [projectEntry]);
   const buildScopedProjectPath = useCallback(
-    (section, sitePublicIdOverride = selectedSitePublicId) =>
-      buildProjectPath(numericProjectId, section, sitePublicIdOverride, location.search),
-    [location.search, numericProjectId, selectedSitePublicId],
+    (section) => buildProjectPath(numericProjectId, section),
+    [numericProjectId],
+  );
+  const buildScopedProjectSitePath = useCallback(
+    (sitePublicIdOverride) => buildProjectSitePath(numericProjectId, sitePublicIdOverride),
+    [numericProjectId],
   );
 
   useEffect(() => {
@@ -315,31 +300,20 @@ export default function SiteProjectLayout() {
   }, [loadHead]);
 
   useEffect(() => {
-    if (!hasProjectId || headLoading) return;
-    if (addSiteState === "saving") return;
-    const nextSearch = selectedSiteSearch(selectedSitePublicId, location.search);
-    if (nextSearch === (location.search || "")) return;
-    navigate(
-      {
-        pathname: location.pathname,
-        search: nextSearch,
-      },
-      { replace: true, state: location.state },
-    );
-  }, [addSiteState, hasProjectId, headLoading, location.pathname, location.search, location.state, navigate, selectedSitePublicId]);
-
-  useEffect(() => {
     if (!hasProjectId || !isUuidString(createdSitePublicId) || addSiteState === "saving") return;
-    const widgetPath = buildScopedProjectPath("widget", createdSitePublicId);
+    const widgetPath = buildScopedProjectPath("widget");
     const onWidgetPath = location.pathname === `${projectBasePath}/widget`;
-    const selectedFromUrl = selectedSiteFromSearch(location.search);
-    if (onWidgetPath && selectedFromUrl === createdSitePublicId) {
+    const stateConnectId =
+      typeof location.state?.sitePublicIdForConnect === "string"
+        ? location.state.sitePublicIdForConnect.trim()
+        : "";
+    if (onWidgetPath && stateConnectId === createdSitePublicId) {
       setCreatedSitePublicId("");
       return;
     }
     navigate(widgetPath, {
       replace: true,
-      state: { projectViewMode: "connect-site" },
+      state: { projectViewMode: "connect-site", sitePublicIdForConnect: createdSitePublicId },
     });
   }, [
     addSiteState,
@@ -347,7 +321,7 @@ export default function SiteProjectLayout() {
     createdSitePublicId,
     hasProjectId,
     location.pathname,
-    location.search,
+    location.state,
     navigate,
     projectBasePath,
   ]);
@@ -489,8 +463,8 @@ export default function SiteProjectLayout() {
     setAddSiteDisplayName("");
     setAddSiteError("");
     setAddSiteState("idle");
-    if (!location.pathname.endsWith("/overview")) {
-      navigate(buildScopedProjectPath("overview"), { state: { projectViewMode: "create-site" } });
+    if (!location.pathname.endsWith("/sites")) {
+      navigate(buildScopedProjectPath("sites"), { state: { projectViewMode: "create-site" } });
     }
   }, [buildScopedProjectPath, location.pathname, navigate]);
 
@@ -575,9 +549,9 @@ export default function SiteProjectLayout() {
         setAddSiteState("success");
         if (isUuidString(nextSiteId)) {
           setCreatedSitePublicId(nextSiteId);
-          navigate(buildScopedProjectPath("widget", nextSiteId), {
+          navigate(buildScopedProjectPath("widget"), {
             replace: true,
-            state: { projectViewMode: "connect-site" },
+            state: { projectViewMode: "connect-site", sitePublicIdForConnect: nextSiteId },
           });
         }
       } catch (err) {
@@ -596,17 +570,19 @@ export default function SiteProjectLayout() {
   );
   const isProjectInfoPage = location.pathname === `${projectBasePath}/info`;
   const hideShellChromeForSiteCreate = addSiteOpen;
-  const hideShellChromeForFocusedConnect = locationViewMode === "connect-site";
+  const onProjectWidgetConnectPath =
+    hasProjectId && location.pathname === `${projectBasePath}/widget` && locationViewMode === "connect-site";
+  const hideShellChromeForFocusedConnect = onProjectWidgetConnectPath;
   const hideShellChrome = hideShellChromeForSiteCreate || hideShellChromeForFocusedConnect;
-  const membersSitePublicId = selectedSitePublicId;
   const outletContext = useMemo(
     () => ({
       base: projectBasePath,
-      sitePublicId: selectedSitePublicId,
-      selectedSitePublicId,
-      membersSitePublicId,
+      // Project-level outlet context never advertises a "current" site id derived from
+      // route/query/state/fallback. Site-level pages must read useParams().sitePublicId
+      // directly. primarySitePublicId is exposed strictly for project-level pages
+      // (members/settings) that need a default site without owning a site route.
+      primarySitePublicId,
       projectId: hasProjectId ? numericProjectId : null,
-      hasSiteId: Boolean(selectedSitePublicId),
       headLoading,
       projectEntry,
       reloadProjectEntry: loadProjectEntry,
@@ -623,6 +599,7 @@ export default function SiteProjectLayout() {
       setAddSitePlatform,
       reloadProjectHead: loadHead,
       buildProjectPath: buildScopedProjectPath,
+      buildProjectSitePath: buildScopedProjectSitePath,
       projectBasePath,
       toggleAddSiteForm,
       handleAddSite,
@@ -634,10 +611,11 @@ export default function SiteProjectLayout() {
       addSitePlatform,
       addSiteState,
       buildScopedProjectPath,
+      buildScopedProjectSitePath,
       handleAddSite,
       headLoading,
       hasProjectId,
-      membersSitePublicId,
+      primarySitePublicId,
       projectBasePath,
       projectEntry,
       projectEntryError,
@@ -645,7 +623,6 @@ export default function SiteProjectLayout() {
       loadProjectEntry,
       loadHead,
       numericProjectId,
-      selectedSitePublicId,
       toggleAddSiteForm,
     ],
   );
@@ -769,8 +746,8 @@ export default function SiteProjectLayout() {
           </header>
 
           <nav className="owner-programs__tabs" aria-label="Разделы проекта">
-            <NavLink to={buildScopedProjectPath("overview")} state={{ projectViewMode: "overview" }} className={tabClass} end>
-              Сервисы
+            <NavLink to={buildScopedProjectPath("sites")} state={{ projectViewMode: "overview" }} className={tabClass}>
+              Сайты
             </NavLink>
             <NavLink to={buildScopedProjectPath("members")} className={tabClass}>
               Пользователи

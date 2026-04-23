@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
@@ -34,14 +34,15 @@ function formatJoinedAt(iso) {
 }
 
 export default function ProjectMembersPage() {
-  const { sitePublicId } = useParams();
   const outletContext = useOutletContext() || {};
-  const { membersSitePublicId = "", selectedSitePublicId = "", headLoading = false } = outletContext;
+  const { primarySitePublicId = "", headLoading = false } = outletContext;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [count, setCount] = useState(null);
   const [members, setMembers] = useState([]);
-  const resolvedSitePublicId = (selectedSitePublicId || sitePublicId || membersSitePublicId || "").trim();
+  // Project-level page: uses the project's primary site as a default scope.
+  // It deliberately does NOT consume a "current site" from query/state/context.
+  const resolvedSitePublicId = (primarySitePublicId || "").trim();
 
   const load = useCallback(async () => {
     if (!resolvedSitePublicId) {

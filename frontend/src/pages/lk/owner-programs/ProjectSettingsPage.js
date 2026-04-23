@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -49,20 +49,20 @@ function projectMetaFromPayload(payload) {
 }
 
 export default function ProjectSettingsPage() {
-  const { sitePublicId } = useParams();
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
   const {
-    selectedSitePublicId = "",
+    primarySitePublicId = "",
     projectId = null,
     buildProjectPath,
   } = outletContext;
-  const id = (selectedSitePublicId || sitePublicId || "").trim();
+  // Project-level page: scoped to the project's primary site only.
+  const id = (primarySitePublicId || "").trim();
   const overviewPath =
     typeof buildProjectPath === "function"
-      ? buildProjectPath("overview", id)
+      ? buildProjectPath("sites")
       : typeof projectId === "number"
-        ? `/lk/partner/project/${projectId}/overview${id ? `?site_public_id=${id}` : ""}`
+        ? `/lk/partner/project/${projectId}/sites`
         : "/lk/partner";
 
   const [loadState, setLoadState] = useState("loading");
@@ -182,9 +182,9 @@ export default function ProjectSettingsPage() {
       }
       navigate(
         typeof buildProjectPath === "function"
-          ? buildProjectPath("overview", "")
+          ? buildProjectPath("sites", "")
           : typeof projectId === "number"
-            ? `/lk/partner/project/${projectId}/overview`
+            ? `/lk/partner/project/${projectId}/sites`
             : "/lk/partner",
         { replace: true },
       );

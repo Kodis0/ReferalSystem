@@ -31,7 +31,7 @@ function projectTargetHref(project) {
       params.set("site_public_id", project.primary_site_public_id);
     }
     const search = params.toString();
-    return `/lk/partner/project/${project.id}/overview${search ? `?${search}` : ""}`;
+    return `/lk/partner/project/${project.id}/sites${search ? `?${search}` : ""}`;
   }
   return "/lk/partner";
 }

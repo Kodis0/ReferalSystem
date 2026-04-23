@@ -213,7 +213,7 @@ export default function CreateOwnerProjectPage() {
         return;
       }
       if (typeof payload?.id === "number") {
-        navigate(`/lk/partner/project/${payload.id}/overview`, { replace: true });
+        navigate(`/lk/partner/project/${payload.id}/sites`, { replace: true });
         return;
       }
       navigate("/lk/partner", { replace: true });

@@ -623,6 +623,95 @@
   padding: 24px 0 28px;
 }
 
+/* Project-scoped site management (integration), matches project shell tone */
+.owner-programs__site-page-head {
+  margin-bottom: 8px;
+}
+
+.owner-programs__site-page-title {
+  margin-bottom: 6px;
+}
+
+.owner-programs__site-page-domain {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.owner-programs__site-page-meta {
+  margin-top: 4px;
+}
+
+.owner-programs__site-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.owner-programs__site-section {
+  padding: 18px 18px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="light"] .owner-programs__site-section {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.owner-programs__site-section-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.owner-programs__site-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  align-items: center;
+}
+
+.owner-programs__site-snippet-card {
+  padding: 16px 16px 14px;
+}
+
+.owner-programs__site-snippet-head {
+  margin-bottom: 12px;
+}
+
+.owner-programs__site-snippet-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.owner-programs__site-tech-details {
+  margin-top: 4px;
+}
+
+.owner-programs__site-tech-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  list-style: none;
+}
+
+.owner-programs__site-tech-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.owner-programs__site-tech-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="light"] .owner-programs__site-tech-body {
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
+
 .owner-programs__shell-header {
   display: flex;
   align-items: center;

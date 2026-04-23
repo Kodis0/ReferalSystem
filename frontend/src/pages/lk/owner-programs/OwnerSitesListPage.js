@@ -32,7 +32,7 @@ function projectTargetHref(project) {
       params.set("site_public_id", project.primary_site_public_id);
     }
     const search = params.toString();
-    return `/lk/partner/project/${project.id}/overview${search ? `?${search}` : ""}`;
+    return `/lk/partner/project/${project.id}/sites${search ? `?${search}` : ""}`;
   }
   return "/lk/partner";
 }
@@ -413,7 +413,7 @@ export default function OwnerSitesListPage() {
                   <div className="owner-programs__project-card-meta">
                     {desc ? <p className="owner-programs__project-card-desc">{desc}</p> : null}
                     <p className="owner-programs__project-card-desc" data-testid={`project-card-sites-${id}`}>
-                      Сервисов: {project.sites_count}
+                      Сайтов: {project.sites_count}
                     </p>
                   </div>
                   <div className="owner-programs__project-card-top-right">

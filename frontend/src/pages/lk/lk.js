@@ -16,6 +16,7 @@ import IdeaPage from "./idea/idea";
 import PartnerDashboard from "./partner/partner";
 import WidgetInstallScreen from "./widget-install/widget-install";
 import ProjectWidgetInstallScreen from "./widget-install/ProjectWidgetInstallScreen";
+import ProjectSiteManagementScreen from "./widget-install/ProjectSiteManagementScreen";
 import OwnerSitesListPage from "./owner-programs/OwnerSitesListPage";
 import CreateOwnerProjectPage from "./owner-programs/CreateOwnerProjectPage";
 import SiteProjectLayout from "./owner-programs/SiteProjectLayout";
@@ -543,9 +544,12 @@ function LK() {
               <Route index element={<OwnerSitesListPage />} />
               <Route path="new" element={<CreateOwnerProjectPage />} />
               <Route path="project/:projectId" element={<SiteProjectLayout />}>
-                <Route index element={<Navigate to="overview" replace relative="path" />} />
+                <Route index element={<Navigate to="sites" replace relative="path" />} />
                 <Route path="overview" element={<ProjectOverviewPage />} />
+                <Route path="sites" element={<ProjectOverviewPage />} />
+                <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
                 <Route path="info" element={<ProjectInfoPage />} />
+                <Route path="site" element={<ProjectSiteManagementScreen legacyTabRoute />} />
                 <Route path="widget" element={<ProjectWidgetInstallScreen />} />
                 <Route path="members" element={<ProjectMembersPage />} />
                 <Route path="settings" element={<ProjectSettingsPage />} />

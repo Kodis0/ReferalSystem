@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
-import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
@@ -202,10 +202,9 @@ function ConnectSitePlatformSelect({ value, onChange, disabled }) {
 export default function ProjectOverviewPage() {
   const navigate = useNavigate();
   const {
-    sitePublicId,
-    hasSiteId,
     projectId,
     buildProjectPath,
+    buildProjectSitePath,
     projectEntry,
     reloadProjectEntry,
     projectEntryLoading,
@@ -222,6 +221,11 @@ export default function ProjectOverviewPage() {
     toggleAddSiteForm,
     handleAddSite,
   } = useOutletContext();
+  // Soft hint for "currently viewed" highlight only — never used for site
+  // identity selection on a site-level screen.
+  const [searchParams] = useSearchParams();
+  const sitePublicId = (searchParams.get("site_public_id") || "").trim();
+  const hasSiteId = Boolean(sitePublicId);
   const [searchValue, setSearchValue] = useState("");
   const [layoutMode, setLayoutMode] = useState("cards");
   const [activeMenuSiteId, setActiveMenuSiteId] = useState("");
@@ -243,10 +247,10 @@ export default function ProjectOverviewPage() {
 
   const openSiteCard = useCallback(
     (sitePublicId) => {
-      if (!sitePublicId || typeof buildProjectPath !== "function") return;
-      navigate(buildProjectPath("overview", sitePublicId));
+      if (!sitePublicId || typeof buildProjectSitePath !== "function") return;
+      navigate(buildProjectSitePath(sitePublicId));
     },
-    [buildProjectPath, navigate],
+    [buildProjectSitePath, navigate],
   );
 
   useEffect(() => {
@@ -301,28 +305,22 @@ export default function ProjectOverviewPage() {
         const updatedProject =
           typeof projectEntry?.id === "number" ? await reloadProjectEntry(projectEntry.id) : null;
 
+        // After deletion, return to project sites list. We deliberately do NOT
+        // pick a "next" site for the user — site identity belongs to the URL,
+        // and the user should choose explicitly from the list.
         if (site.public_id === sitePublicId) {
-          const fallbackSiteId =
-            updatedProject && Array.isArray(updatedProject.sites) ? updatedProject.sites[0]?.public_id || "" : "";
-          if (fallbackSiteId) {
-            navigate(
-              typeof buildProjectPath === "function"
-                ? buildProjectPath("overview", fallbackSiteId)
-                : `/lk/partner/project/${projectEntry?.id}/overview?site_public_id=${fallbackSiteId}`,
-              { replace: true },
-            );
-          } else {
-            navigate(
-              typeof buildProjectPath === "function"
-                ? buildProjectPath("overview", "")
-                : projectId
-                  ? `/lk/partner/project/${projectId}/overview`
-                  : "/lk/partner",
-              { replace: true },
-            );
-          }
+          navigate(
+            typeof buildProjectPath === "function"
+              ? buildProjectPath("sites")
+              : projectId
+                ? `/lk/partner/project/${projectId}/sites`
+                : "/lk/partner",
+            { replace: true },
+          );
           return;
         }
+        // Touch updatedProject to keep loadProjectEntry's return value relevant.
+        void updatedProject;
       } catch (err) {
         console.error(err);
         setDeleteError(err instanceof Error && err.message ? err.message : "Не удалось удалить сайт");
@@ -353,7 +351,7 @@ export default function ProjectOverviewPage() {
           </h2>
           <p className="owner-programs__muted owner-programs__connect-site-lead">
             {currentProjectSites.length === 0
-              ? "Сначала добавьте сайт в проект, после этого откроются сервисы, настройки интеграции и пользователи."
+              ? "Сначала добавьте сайт в проект, после этого откроются сайты, настройки интеграции и пользователи."
               : "Добавьте ещё один сайт в текущий проект."}
           </p>
           <div id="create-owner-project" className="owner-programs__connect-site-nested-create">
@@ -460,7 +458,7 @@ export default function ProjectOverviewPage() {
               </button>
             </div>
             <div className="owner-programs__services-count">
-              {projectEntryLoading ? "Загрузка…" : `Сервисов: ${visibleProjectSites.length}`}
+              {projectEntryLoading ? "Загрузка…" : `Сайтов: ${visibleProjectSites.length}`}
             </div>
           </div>
 
@@ -469,7 +467,7 @@ export default function ProjectOverviewPage() {
           {!projectEntryLoading && !projectEntryError && deleteError ? <div className="owner-programs__error">{deleteError}</div> : null}
           {!projectEntryLoading && !projectEntryError && filteredSites.length === 0 && visibleProjectSites.length === 0 ? (
             <p className="owner-programs__muted" data-testid="project-services-empty">
-              У проекта пока нет сервисов.
+              У проекта пока нет сайтов.
             </p>
           ) : null}
           {!projectEntryLoading && !projectEntryError && filteredSites.length === 0 && visibleProjectSites.length > 0 ? (

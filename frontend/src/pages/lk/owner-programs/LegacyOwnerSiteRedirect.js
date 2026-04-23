@@ -25,6 +25,29 @@ function currentOwnerSection(pathname, sitePublicId) {
   return section || "overview";
 }
 
+// Map legacy section -> canonical project route. The site-level "overview" maps to
+// the canonical site route /sites/:sitePublicId; the rest are project-level
+// sections that no longer carry a site param in the URL.
+function buildCanonicalTargetPath(projectId, section, sitePublicId) {
+  const projectBase = `/lk/partner/project/${projectId}`;
+  switch (section) {
+    case "overview":
+    case "site":
+    case "widget":
+      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
+    case "members":
+      return `${projectBase}/members`;
+    case "settings":
+      return `${projectBase}/settings`;
+    case "info":
+      return `${projectBase}/info`;
+    case "sites":
+      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
+    default:
+      return `${projectBase}/sites/${encodeURIComponent(sitePublicId)}`;
+  }
+}
+
 export default function LegacyOwnerSiteRedirect() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -71,10 +94,12 @@ export default function LegacyOwnerSiteRedirect() {
           return;
         }
 
+        // Drop legacy ?site_public_id= from query — the canonical path carries it.
         const params = new URLSearchParams(location.search);
-        params.set("site_public_id", siteId);
+        params.delete("site_public_id");
         const search = params.toString();
-        const nextPath = `/lk/partner/project/${projectId}/${currentOwnerSection(location.pathname, siteId)}`;
+        const section = currentOwnerSection(location.pathname, siteId);
+        const nextPath = buildCanonicalTargetPath(projectId, section, siteId);
         navigate(
           {
             pathname: nextPath,

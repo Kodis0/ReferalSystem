@@ -7,7 +7,7 @@
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import LkSidebar from "../pages/lk/LkSidebar";
 import CreateOwnerProjectPage from "../pages/lk/owner-programs/CreateOwnerProjectPage";
 import OwnerSitesListPage from "../pages/lk/owner-programs/OwnerSitesListPage";
@@ -17,7 +17,9 @@ import ProjectMembersPage from "../pages/lk/owner-programs/ProjectMembersPage";
 import ProjectSettingsPage from "../pages/lk/owner-programs/ProjectSettingsPage";
 import SiteProjectLayout from "../pages/lk/owner-programs/SiteProjectLayout";
 import ProjectWidgetInstallScreen from "../pages/lk/widget-install/ProjectWidgetInstallScreen";
+import ProjectSiteManagementScreen from "../pages/lk/widget-install/ProjectSiteManagementScreen";
 import WidgetInstallScreen from "../pages/lk/widget-install/widget-install";
+import LegacyOwnerSiteRedirect from "../pages/lk/owner-programs/LegacyOwnerSiteRedirect";
 
 function makeSite({
   public_id,
@@ -64,6 +66,13 @@ function makeOwnerProjectsPayload(projects) {
     projects,
     sites: projects.flatMap((project) => project.sites),
   };
+}
+
+// Stub for tests that mount project-level pages in isolation. SiteProjectLayout
+// publishes only primarySitePublicId for these pages — they no longer derive a
+// "current site" from useParams/query/state.
+function ProjectStubLayout({ primarySitePublicId, projectId = null }) {
+  return <Outlet context={{ primarySitePublicId, projectId, headLoading: false }} />;
 }
 
 describe("LkSidebar owner IA", () => {
@@ -234,7 +243,7 @@ describe("LkSidebar owner IA", () => {
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /No Sites Yet/i })).toHaveAttribute(
         "href",
-        "/lk/partner/project/104/overview",
+        "/lk/partner/project/104/sites",
       );
     });
   });
@@ -263,7 +272,7 @@ describe("LkSidebar owner IA", () => {
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /With Site/i })).toHaveAttribute(
         "href",
-        `/lk/partner/project/105/overview?site_public_id=${siteId}`,
+        `/lk/partner/project/105/sites?site_public_id=${siteId}`,
       );
     });
   });
@@ -353,9 +362,9 @@ describe("OwnerSitesListPage → create flow", () => {
     });
     expect(screen.getByRole("link", { name: /Shop A/i })).toHaveAttribute(
       "href",
-      "/lk/partner/project/201/overview?site_public_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "/lk/partner/project/201/sites?site_public_id=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     );
-    expect(screen.getByTestId("project-card-sites-project-201")).toHaveTextContent("Сервисов: 2");
+    expect(screen.getByTestId("project-card-sites-project-201")).toHaveTextContent("Сайтов: 2");
   });
 
   it("opens project overview for project without sites", async () => {
@@ -383,7 +392,7 @@ describe("OwnerSitesListPage → create flow", () => {
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /Empty project/i })).toHaveAttribute(
         "href",
-        "/lk/partner/project/202/overview",
+        "/lk/partner/project/202/sites",
       );
     });
   });
@@ -550,7 +559,7 @@ describe("CreateOwnerProjectPage", () => {
         <Routes>
           <Route path="/lk/partner/new" element={<CreateOwnerProjectPage />} />
           <Route
-            path="/lk/partner/project/:projectId/overview"
+            path="/lk/partner/project/:projectId/sites"
             element={<div data-testid="project-services">project-services</div>}
           />
         </Routes>
@@ -733,7 +742,7 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-services-page")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("project-services-empty")).toHaveTextContent("У проекта пока нет сервисов.");
+    expect(screen.getByTestId("project-services-empty")).toHaveTextContent("У проекта пока нет сайтов.");
     expect(screen.getByTestId("project-delete-empty-button")).toBeInTheDocument();
     expect(screen.queryByTestId("project-add-site-origin")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Пользователи" })).toBeInTheDocument();
@@ -922,8 +931,40 @@ describe("SiteProjectLayout child sites", () => {
             ]),
         });
       }
+      if (u.includes("/referrals/site/integration/") && u.includes("diagnostics")) {
+        let selectedSite = siteA;
+        try {
+          const parsed = new URL(u, "http://localhost");
+          const q = String(parsed.searchParams.get("site_public_id") || "").trim();
+          if (q === siteB) selectedSite = siteB;
+          else if (q === siteA) selectedSite = siteA;
+        } catch {
+          selectedSite = u.includes(siteB) ? siteB : siteA;
+        }
+        const status = selectedSite === siteB ? "active" : "draft";
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            integration_status: "healthy",
+            site_status: status,
+            site_public_id: selectedSite,
+            connection_check: { status: status === "active" ? "found" : "not_found", last_seen_at: null },
+            integration_warnings: [],
+            embed_readiness: { origins_configured: true, publishable_key_present: true, public_id_present: true },
+            widget_enabled: true,
+          }),
+        });
+      }
       if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
-        const selectedSite = u.includes(siteB) ? siteB : siteA;
+        let selectedSite = siteA;
+        try {
+          const parsed = new URL(u, "http://localhost");
+          const q = String(parsed.searchParams.get("site_public_id") || "").trim();
+          if (q === siteB) selectedSite = siteB;
+          else if (q === siteA) selectedSite = siteA;
+        } catch {
+          selectedSite = u.includes(siteB) ? siteB : siteA;
+        }
         const origin = selectedSite === siteB ? "https://beta.example" : "https://alpha.example";
         const status = selectedSite === siteB ? "active" : "draft";
         return Promise.resolve({
@@ -935,6 +976,11 @@ describe("SiteProjectLayout child sites", () => {
             status,
             config_json: {},
             widget_enabled: true,
+            site_display_name: selectedSite === siteB ? "Beta site" : "Alpha site",
+            publishable_key: "pk_test",
+            widget_embed_snippet: "<script>stub</script>",
+            public_api_base: "https://api.example",
+            widget_script_base: "https://app.example",
             project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
           }),
         });
@@ -947,6 +993,7 @@ describe("SiteProjectLayout child sites", () => {
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -961,8 +1008,9 @@ describe("SiteProjectLayout child sites", () => {
     await userEvent.click(screen.getByTestId(`project-child-site-${siteB}`));
 
     await waitFor(() => {
-      expect(screen.getByTestId(`project-child-site-${siteB}`)).toHaveTextContent("текущий");
+      expect(screen.getByTestId("project-site-management-page")).toBeInTheDocument();
     });
+    expect(screen.getByRole("heading", { name: "Beta site" })).toBeInTheDocument();
   });
 
   it("hides shell header and tabs on project info page", async () => {
@@ -1114,6 +1162,7 @@ describe("SiteProjectLayout child sites", () => {
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="info" element={<ProjectInfoPage />} />
             <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="sites" element={<ProjectOverviewPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1261,6 +1310,7 @@ describe("SiteProjectLayout child sites", () => {
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="sites" element={<ProjectOverviewPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1320,7 +1370,15 @@ describe("SiteProjectLayout child sites", () => {
         });
       }
       if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
-        const selectedSite = u.includes(siteB) ? siteB : siteA;
+        let selectedSite = siteA;
+        try {
+          const parsed = new URL(u, "http://localhost");
+          const q = String(parsed.searchParams.get("site_public_id") || "").trim();
+          if (q === siteB) selectedSite = siteB;
+          else if (q === siteA) selectedSite = siteA;
+        } catch {
+          selectedSite = u.includes(siteB) ? siteB : siteA;
+        }
         const origin = selectedSite === siteB ? "https://beta.example" : "https://alpha.example";
         return Promise.resolve({
           ok: true,
@@ -1353,6 +1411,7 @@ describe("SiteProjectLayout child sites", () => {
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="sites" element={<ProjectOverviewPage />} />
             <Route path="widget" element={<ProjectWidgetInstallScreen />} />
           </Route>
           <Route path="/lk/widget-install" element={<WidgetInstallScreen />} />
@@ -1381,14 +1440,14 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Скопировать код" })).toBeInTheDocument();
     });
-    expect(screen.getByText(new RegExp(`data-rs-site="${siteB}"`))).toBeInTheDocument();
-    expect(screen.getByText(/data-rs-key="pk_site_b"/)).toBeInTheDocument();
+    const snippetAfterCreate = screen.getByTestId("widget-install-snippet-block");
+    expect(snippetAfterCreate).toHaveTextContent(siteB);
+    expect(snippetAfterCreate).toHaveTextContent("pk_site_b");
     expect(screen.getByRole("heading", { name: "Видеоинструкция" })).toBeInTheDocument();
     expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/501");
     expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
     expect(screen.queryByText("Shared project")).not.toBeInTheDocument();
     expect(screen.queryByTestId("project-services-page")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Проверить подключение/i })).not.toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/referrals/project/501/site/create/"),
       expect.objectContaining({
@@ -1468,6 +1527,7 @@ describe("SiteProjectLayout child sites", () => {
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="sites" element={<ProjectOverviewPage />} />
             <Route path="widget" element={<ProjectWidgetInstallScreen />} />
           </Route>
         </Routes>
@@ -1488,7 +1548,7 @@ describe("SiteProjectLayout child sites", () => {
       expect(screen.getByTestId("project-site-connect-page")).toBeInTheDocument();
     });
     expect(screen.getByRole("heading", { name: "Подключите сайт" })).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(`data-rs-site="${siteA}"`))).toBeInTheDocument();
+    expect(screen.getByTestId("widget-install-snippet-block")).toHaveTextContent(siteA);
     expect(screen.getByRole("button", { name: "Скопировать код" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Видеоинструкция" })).toBeInTheDocument();
     expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/502");
@@ -1571,7 +1631,7 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.queryByTestId(`project-child-site-${siteB}`)).not.toBeInTheDocument();
     });
-    expect(screen.getByText("Сервисов: 1")).toBeInTheDocument();
+    expect(screen.getByText("Сайтов: 1")).toBeInTheDocument();
 
     resolveDeleteRequest({
       ok: true,
@@ -1686,9 +1746,11 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1714,9 +1776,11 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1738,9 +1802,11 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1834,9 +1900,11 @@ describe("ProjectSettingsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/settings`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1883,9 +1951,11 @@ describe("ProjectSettingsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/settings`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1941,9 +2011,11 @@ describe("ProjectSettingsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/settings`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1983,10 +2055,13 @@ describe("ProjectSettingsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/settings`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
         <Routes>
           <Route path="/lk/partner" element={<div data-testid="partner-list">Список</div>} />
-          <Route path="/lk/partner/:sitePublicId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+            <Route path="sites" element={<div data-testid="project-sites-list">Сайты проекта</div>} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -1998,7 +2073,7 @@ describe("ProjectSettingsPage", () => {
     await userEvent.click(screen.getByTestId("delete-project-button"));
 
     await waitFor(() => {
-      expect(screen.getByTestId("partner-list")).toBeInTheDocument();
+      expect(screen.getByTestId("project-sites-list")).toBeInTheDocument();
     });
   });
 
@@ -2029,9 +2104,11 @@ describe("ProjectSettingsPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/${siteId}/settings`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
         <Routes>
-          <Route path="/lk/partner/:sitePublicId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
         </Routes>
       </MemoryRouter>
     );
@@ -2045,5 +2122,316 @@ describe("ProjectSettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("site_missing")).toBeInTheDocument();
     });
+  });
+});
+
+describe("Canonical site identity contract", () => {
+  beforeEach(() => {
+    localStorage.setItem("access_token", "test-token");
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    jest.restoreAllMocks();
+  });
+
+  // --- Helpers ----------------------------------------------------------------
+  const projectId = 901;
+  const siteFromPath = "11111111-1111-1111-1111-111111111111";
+  const siteFromQuery = "22222222-2222-2222-2222-222222222222";
+  const primarySite = "33333333-3333-3333-3333-333333333333";
+  const firstSite = "44444444-4444-4444-4444-444444444444";
+
+  function mockOwnerAndIntegration({ owner, byId, defaultIntegration }) {
+    return jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({ ok: true, json: async () => owner });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        let resolvedSite = "";
+        try {
+          const parsed = new URL(u, "http://localhost");
+          resolvedSite = String(parsed.searchParams.get("site_public_id") || "").trim();
+        } catch {
+          resolvedSite = "";
+        }
+        const payload =
+          (resolvedSite && byId[resolvedSite]) || defaultIntegration || { public_id: resolvedSite };
+        return Promise.resolve({ ok: true, json: async () => payload });
+      }
+      if (u.includes("/referrals/site/integration/") && u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            integration_status: "healthy",
+            connection_check: { status: "not_found", last_seen_at: null },
+            integration_warnings: [],
+            embed_readiness: { origins_configured: true, publishable_key_present: true, public_id_present: true },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+  }
+
+  function makeIntegrationPayload(siteId, displayName) {
+    return {
+      public_id: siteId,
+      allowed_origins: [`https://${displayName.replace(/\s+/g, "-").toLowerCase()}.example`],
+      platform_preset: "tilda",
+      status: "draft",
+      site_display_name: displayName,
+      config_json: {},
+      widget_enabled: true,
+      project: { id: projectId, name: "P", description: "", avatar_data_url: "" },
+    };
+  }
+
+  // --- 1. Direct open of canonical route renders exactly that site -----------
+  it("canonical route renders exactly :sitePublicId from path", async () => {
+    const fetchMock = mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [
+            makeSite({ public_id: primarySite, project_id: projectId, project: { name: "P" } }),
+            makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } }),
+          ],
+        }),
+      ]),
+      byId: {
+        [primarySite]: makeIntegrationPayload(primarySite, "Primary site"),
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Path site"),
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-site-management-page")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Path site" })).toBeInTheDocument();
+
+    // Integration was fetched for path site, never for primary site.
+    const integrationCalls = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .filter((u) => u.includes("/referrals/site/integration/") && !u.includes("diagnostics"));
+    expect(integrationCalls.some((u) => u.includes(siteFromPath))).toBe(true);
+    expect(integrationCalls.every((u) => !u.includes(primarySite))).toBe(true);
+  });
+
+  // --- 2. Path beats query: query is ignored on a canonical site route -------
+  it("canonical site route ignores ?site_public_id= in query", async () => {
+    const fetchMock = mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [
+            makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } }),
+            makeSite({ public_id: siteFromQuery, project_id: projectId, project: { name: "P" } }),
+          ],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Path wins"),
+        [siteFromQuery]: makeIntegrationPayload(siteFromQuery, "Query loses"),
+      },
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}?site_public_id=${siteFromQuery}`]}
+      >
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Path wins" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: "Query loses" })).not.toBeInTheDocument();
+
+    const integrationCalls = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .filter((u) => u.includes("/referrals/site/integration/") && !u.includes("diagnostics"));
+    expect(integrationCalls.every((u) => !u.includes(siteFromQuery))).toBe(true);
+  });
+
+  // --- 3. Invalid canonical site id never falls back to primary/first --------
+  it("invalid :sitePublicId redirects to project sites list, not to primary/first site", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [
+            makeSite({ public_id: primarySite, project_id: projectId, project: { name: "P" } }),
+            makeSite({ public_id: firstSite, project_id: projectId, project: { name: "P" } }),
+          ],
+        }),
+      ]),
+      byId: {
+        [primarySite]: makeIntegrationPayload(primarySite, "Primary"),
+        [firstSite]: makeIntegrationPayload(firstSite, "First"),
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/not-a-uuid`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites" element={<div data-testid="project-sites-list">Sites</div>} />
+            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-sites-list")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: "Primary" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "First" })).not.toBeInTheDocument();
+  });
+
+  // --- 4. Legacy /project/:projectId/site?site_public_id=... → canonical ----
+  it("legacy /project/:projectId/site?site_public_id=... redirects to canonical /sites/:sitePublicId", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromQuery, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromQuery]: makeIntegrationPayload(siteFromQuery, "Migrated"),
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/site?site_public_id=${siteFromQuery}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="site" element={<ProjectSiteManagementScreen legacyTabRoute />} />
+            <Route path="sites" element={<div data-testid="project-sites-list">Sites</div>} />
+            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Migrated" })).toBeInTheDocument();
+    });
+  });
+
+  // --- 5. Legacy /lk/partner/:sitePublicId/* → canonical project site route --
+  it("LegacyOwnerSiteRedirect lands on canonical /project/:projectId/sites/:sitePublicId", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteFromPath,
+            allowed_origins: ["https://x.example"],
+            platform_preset: "tilda",
+            project: { id: projectId, name: "P", description: "", avatar_data_url: "" },
+            config_json: {},
+            widget_enabled: true,
+            status: "draft",
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/${siteFromPath}/overview`]}>
+        <Routes>
+          <Route path="/lk/partner/:sitePublicId/*" element={<LegacyOwnerSiteRedirect />} />
+          <Route
+            path="/lk/partner/project/:projectId/sites/:sitePublicId"
+            element={<div data-testid="canonical-site-landing">canonical</div>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("canonical-site-landing")).toBeInTheDocument();
+    });
+  });
+
+  // --- 6. Connect flow lands on canonical site route (state-driven only) ----
+  it("ProjectWidgetInstallScreen redirects to project sites list when no transitional state", () => {
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/widget`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="widget" element={<ProjectWidgetInstallScreen />} />
+            <Route path="sites" element={<div data-testid="project-sites-list">Sites</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // No state.sitePublicIdForConnect → navigate to /sites, never render widget UI.
+    expect(screen.queryByTestId("widget-install-snippet-block")).not.toBeInTheDocument();
+  });
+
+  // --- 7. Canonical route does not pollute URL with ?site_public_id= --------
+  it("canonical site route does not append ?site_public_id= to the URL via history sync", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Canonical only"),
+      },
+    });
+
+    // Set a stable browser-like URL so widget-install's syncSelectedSiteInUrl
+    // can be observed if it ever ran.
+    const initialHref = `http://localhost/lk/partner/project/${projectId}/sites/${siteFromPath}`;
+    window.history.replaceState({}, "", initialHref);
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId" element={<ProjectSiteManagementScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Canonical only" })).toBeInTheDocument();
+    });
+
+    expect(window.location.search).toBe("");
+    expect(window.location.pathname.endsWith(siteFromPath)).toBe(true);
   });
 });
