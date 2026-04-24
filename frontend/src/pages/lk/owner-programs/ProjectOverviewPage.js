@@ -7,6 +7,13 @@ import "../partner/partner.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
 import { formatDomainLine, siteLifecycleLabelRu, sitePrimaryDomainLabel } from "./siteDisplay";
+import {
+  preserveResolvedReachabilityPhase,
+  reachabilityDotPhase,
+  reachabilityLabel,
+  SITE_REACHABILITY_POLL_MS,
+  withSitePublicIdQuery,
+} from "./siteReachability";
 
 function ServicesGridIcon() {
   return (
@@ -117,6 +124,25 @@ function serviceStatusTone(status) {
   if (value.includes("draft") || value.includes("чернов")) return "warning";
   if (value.includes("error") || value.includes("fail") || value.includes("disabled")) return "danger";
   return "success";
+}
+
+function serviceStatusPresentation(site, reachabilityPhase, isCurrent) {
+  const currentSuffix = isCurrent ? " · текущий" : "";
+  if (reachabilityPhase === "checking" || reachabilityPhase === "online" || reachabilityPhase === "offline") {
+    const dotClassName = `owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(reachabilityPhase)}`;
+    return {
+      label: `${reachabilityLabel(reachabilityPhase)}${currentSuffix}`,
+      cardDotClassName: dotClassName,
+      listDotClassName: dotClassName,
+    };
+  }
+
+  const statusTone = serviceStatusTone(site.status);
+  return {
+    label: `${siteLifecycleLabelRu(site.status)}${currentSuffix}`,
+    cardDotClassName: `owner-programs__service-card-status-dot owner-programs__service-card-status-dot_${statusTone}`,
+    listDotClassName: `owner-programs__services-list-status owner-programs__services-list-status_${statusTone}`,
+  };
 }
 
 const CONNECT_SITE_PLATFORMS = [
@@ -231,6 +257,9 @@ export default function ProjectOverviewPage() {
   const [activeMenuSiteId, setActiveMenuSiteId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingSiteId, setDeletingSiteId] = useState("");
+  const [siteReachabilityById, setSiteReachabilityById] = useState({});
+  const siteReachabilityByIdRef = useRef({});
+  const reachabilityProbeTargetsRef = useRef([]);
   const menuRef = useRef(null);
 
   const currentProjectSites = Array.isArray(projectEntry?.sites) ? projectEntry.sites : [];
@@ -244,6 +273,29 @@ export default function ProjectOverviewPage() {
     if (!needle) return visibleProjectSites;
     return visibleProjectSites.filter((site) => serviceSearchValue(site).includes(needle));
   }, [visibleProjectSites, searchValue]);
+  const reachabilityProbeTargets = useMemo(
+    () =>
+      visibleProjectSites
+        .filter((site) => typeof site?.public_id === "string" && site.public_id.trim())
+        .map((site) => ({
+          public_id: site.public_id.trim(),
+          primary_origin: typeof site?.primary_origin === "string" ? site.primary_origin : "",
+          primary_origin_label: typeof site?.primary_origin_label === "string" ? site.primary_origin_label : "",
+        })),
+    [visibleProjectSites],
+  );
+  const reachabilityProbeKey = useMemo(
+    () => reachabilityProbeTargets.map((site) => `${site.public_id}:${site.primary_origin_label}:${site.primary_origin}`).join("|"),
+    [reachabilityProbeTargets],
+  );
+
+  useEffect(() => {
+    siteReachabilityByIdRef.current = siteReachabilityById;
+  }, [siteReachabilityById]);
+
+  useEffect(() => {
+    reachabilityProbeTargetsRef.current = reachabilityProbeTargets;
+  }, [reachabilityProbeTargets]);
 
   const openSiteCard = useCallback(
     (sitePublicId) => {
@@ -272,6 +324,76 @@ export default function ProjectOverviewPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  useEffect(() => {
+    const sitesForProbe = reachabilityProbeTargetsRef.current;
+
+    if (sitesForProbe.length === 0) {
+      setSiteReachabilityById({});
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function runOnce() {
+      const snapshot = siteReachabilityByIdRef.current;
+      const optimisticState = {};
+
+      sitesForProbe.forEach((site) => {
+        const previousPhase = snapshot[site.public_id]?.phase || "idle";
+        optimisticState[site.public_id] = {
+          phase: sitePrimaryDomainLabel(site) ? preserveResolvedReachabilityPhase(previousPhase) || "checking" : "no_url",
+        };
+        if (optimisticState[site.public_id].phase === "idle") {
+          optimisticState[site.public_id] = { phase: "checking" };
+        }
+      });
+
+      setSiteReachabilityById(optimisticState);
+
+      const updates = await Promise.all(
+        sitesForProbe.map(async (site) => {
+          const origin = sitePrimaryDomainLabel(site);
+          if (!origin) {
+            return [site.public_id, { phase: "no_url" }];
+          }
+
+          try {
+            const res = await fetch(withSitePublicIdQuery(API_ENDPOINTS.siteReachability, site.public_id), {
+              headers: authHeaders(),
+              credentials: "include",
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              return [site.public_id, { phase: preserveResolvedReachabilityPhase(snapshot[site.public_id]?.phase) }];
+            }
+            return [site.public_id, { phase: body.reachable ? "online" : "offline" }];
+          } catch {
+            return [site.public_id, { phase: preserveResolvedReachabilityPhase(snapshot[site.public_id]?.phase) }];
+          }
+        }),
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setSiteReachabilityById((prev) => {
+        const next = { ...prev };
+        updates.forEach(([siteId, state]) => {
+          next[siteId] = state;
+        });
+        return next;
+      });
+    }
+
+    runOnce();
+    const timer = window.setInterval(runOnce, SITE_REACHABILITY_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [reachabilityProbeKey]);
 
   const handleDeleteSite = useCallback(
     async (site) => {
@@ -481,7 +603,7 @@ export default function ProjectOverviewPage() {
                   const isCurrent = site.public_id === sitePublicId;
                   const title = serviceTitle(site);
                   const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
-                  const statusTone = serviceStatusTone(site.status);
+                  const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
                   const siteCardAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   return (
@@ -554,11 +676,8 @@ export default function ProjectOverviewPage() {
                       </div>
                       <div className="owner-programs__service-card-meta">
                         <span className="owner-programs__service-card-status">
-                          <span
-                            className={`owner-programs__service-card-status-dot owner-programs__service-card-status-dot_${statusTone}`}
-                            aria-hidden="true"
-                          />
-                          <span>{siteLifecycleLabelRu(site.status)}{hasSiteId && isCurrent ? " · текущий" : ""}</span>
+                          <span className={status.cardDotClassName} aria-hidden="true" />
+                          <span>{status.label}</span>
                         </span>
                         <span>{site.platform_preset || "—"}</span>
                       </div>
@@ -572,8 +691,7 @@ export default function ProjectOverviewPage() {
                   const isCurrent = site.public_id === sitePublicId;
                   const title = serviceTitle(site);
                   const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
-                  const statusLabel = `${siteLifecycleLabelRu(site.status)}${hasSiteId && isCurrent ? " · текущий" : ""}`;
-                  const statusTone = serviceStatusTone(site.status);
+                  const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
                   const siteListAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   return (
@@ -605,7 +723,7 @@ export default function ProjectOverviewPage() {
                         </div>
                       </div>
                       <div className="owner-programs__services-list-middle">
-                        <div className={`owner-programs__services-list-status owner-programs__services-list-status_${statusTone}`} />
+                        <div className={status.listDotClassName} aria-hidden="true" />
                         <div className="owner-programs__services-list-copy">
                           <p className="owner-programs__services-list-title">{title}</p>
                           <p className="owner-programs__services-list-domain">{domain}</p>

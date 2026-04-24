@@ -7,6 +7,13 @@ import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
 import { sitePrimaryDomainLabel } from "./siteDisplay";
+import {
+  preserveResolvedReachabilityPhase,
+  reachabilityDotPhase,
+  reachabilityLabel,
+  SITE_REACHABILITY_POLL_MS,
+  withSitePublicIdQuery,
+} from "./siteReachability";
 import SiteShellToolbarSubscriber from "./SiteShellToolbarSubscriber";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
@@ -17,20 +24,6 @@ function authHeaders() {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
-
-function withSitePublicIdQuery(url, sitePublicId) {
-  if (!sitePublicId) return url;
-  try {
-    const u = new URL(url, window.location.origin);
-    u.searchParams.set("site_public_id", sitePublicId);
-    return u.toString();
-  } catch {
-    return url;
-  }
-}
-
-/** Интервал проверки «сайт в сети» в шапке карточки сайта (серверный HTTP-зонд). */
-const SITE_REACHABILITY_POLL_MS = 5 * 60 * 1000;
 
 // Project-level shell never derives "current site" from a fallback chain. Site-level
 // screens read useParams().sitePublicId directly. The shell only knows the route param
@@ -777,7 +770,7 @@ export default function SiteProjectLayout() {
         if (cancelled) return;
         if (!res.ok) {
           setSiteReachability((prev) => ({
-            phase: prev.phase === "online" || prev.phase === "offline" ? prev.phase : "idle",
+            phase: preserveResolvedReachabilityPhase(prev.phase),
           }));
           return;
         }
@@ -787,7 +780,7 @@ export default function SiteProjectLayout() {
       } catch {
         if (!cancelled) {
           setSiteReachability((prev) => ({
-            phase: prev.phase === "online" || prev.phase === "offline" ? prev.phase : "idle",
+            phase: preserveResolvedReachabilityPhase(prev.phase),
           }));
         }
       }
@@ -1004,22 +997,10 @@ export default function SiteProjectLayout() {
                     {showSiteReachability ? (
                       <p className="owner-programs__shell-reachability" role="status" aria-live="polite">
                         <span
-                          className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${
-                            siteReachability.phase === "online"
-                              ? "online"
-                              : siteReachability.phase === "offline"
-                                ? "offline"
-                                : "pending"
-                          }`}
+                          className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(siteReachability.phase)}`}
                           aria-hidden="true"
                         />
-                        <span className="owner-programs__shell-reachability-text">
-                          {siteReachability.phase === "checking"
-                            ? "Проверка доступности…"
-                            : siteReachability.phase === "online"
-                              ? "В сети"
-                              : "Не в сети"}
-                        </span>
+                        <span className="owner-programs__shell-reachability-text">{reachabilityLabel(siteReachability.phase)}</span>
                       </p>
                     ) : null}
                     <div

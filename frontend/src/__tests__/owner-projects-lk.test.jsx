@@ -669,6 +669,12 @@ describe("ProjectOverviewPage", () => {
             ]),
         });
       }
+      if (u.includes("/referrals/site/reachability/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ reachable: true }),
+        });
+      }
       if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics")) {
         return Promise.resolve({
           ok: true,
@@ -703,6 +709,9 @@ describe("ProjectOverviewPage", () => {
     expect(screen.getByTestId("project-services-layout-cards")).toBeInTheDocument();
     expect(screen.getByTestId(`project-child-site-${siteId}`)).toBeInTheDocument();
     expect(screen.getByLabelText("Флаг страны RU")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("В сети · текущий")).toBeInTheDocument();
+    });
   });
 });
 
@@ -2283,12 +2292,13 @@ describe("Canonical site identity contract", () => {
     };
   }
 
-  function makePageScanPayload(blocks, platform = "tilda") {
+  function makePageScanPayload(blocks, platform = "tilda", { visualVideoCount = 0 } = {}) {
     return {
       url: "https://example.com/page",
       platform,
       visual_import_available: true,
       visual_mode: "screenshot",
+      visual_video_count: visualVideoCount,
       blocks,
     };
   }
@@ -2360,9 +2370,9 @@ describe("Canonical site identity contract", () => {
     expect(screen.getByRole("link", { name: "Блок для сайта" })).toBeInTheDocument();
     expect(screen.getByTestId("referral-builder-shell")).toBeInTheDocument();
     expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
-    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+    expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
     expect(screen.getByLabelText("URL страницы")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Импортировать дизайн" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Импорт дизайна" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "На весь экран" })).toBeInTheDocument();
   });
 
@@ -2421,21 +2431,34 @@ describe("Canonical site identity contract", () => {
     });
 
     await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
-    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
     });
 
+    expect(screen.queryByTestId("referral-builder-blocks-dock")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "На весь экран" }));
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute("data-lk-referral-builder-expanded");
+    });
+
     const pageStack = screen.getByTestId("imported-page-stack-node");
-    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+    expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
+    expect(screen.getByTestId("referral-builder-blocks-dock")).toBeInTheDocument();
     expect(screen.queryByTestId("site-scan-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("imported-site-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("screenshot-site-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("referral-insert-slot-node")).not.toBeInTheDocument();
     expect(within(pageStack).getAllByTestId("imported-page-section")).toHaveLength(2);
     const slotNodes = within(pageStack).getAllByTestId("imported-page-insert-slot");
-    const slotButtons = slotNodes.map((slotNode) => within(slotNode).getByText("+ Вставить реферальный блок здесь"));
+    const slotButtons = slotNodes.map((slotNode) => {
+      const btn = slotNode.querySelector("button.imported-page-insert-slot__button");
+      if (!btn) {
+        throw new Error("insert slot button missing");
+      }
+      return btn;
+    });
     expect(slotButtons).toHaveLength(3);
     const images = within(pageStack).getAllByTestId("imported-page-section-image");
     expect(images[0]).toHaveAttribute("src", expect.stringContaining("data:image/png;base64,"));
@@ -2443,13 +2466,455 @@ describe("Canonical site identity contract", () => {
     fireEvent.click(slotButtons[1]);
 
     await waitFor(() => {
-      expect(within(within(pageStack).getAllByTestId("imported-page-insert-slot")[1]).getByText("+ Вставить реферальный блок здесь"))
-        .toHaveAttribute("aria-pressed", "true");
+      const activeBtn = within(pageStack)
+        .getAllByTestId("imported-page-insert-slot")[1]
+        .querySelector("button.imported-page-insert-slot__button");
+      expect(activeBtn).toHaveAttribute("aria-pressed", "true");
     });
 
     expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
-    expect(screen.getByTestId("referral-builder-inline-preview")).toBeInTheDocument();
-    expect(screen.getAllByText("Стать рефералом")).toHaveLength(1);
+    expect(screen.queryByTestId("referral-builder-inline-preview")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("builder-library-hero"));
+
+    await waitFor(() => {
+      expect(within(pageStack).getByTestId("editable-referral-block-preview")).toBeInTheDocument();
+    });
+
+    const editable = within(pageStack).getByTestId("editable-referral-block-preview");
+    expect(editable).toHaveAttribute("data-builder-block-type", "referralHero");
+    expect(editable).toHaveAttribute("data-selected", "true");
+    expect(within(editable).getByText("Станьте рефералом магазина")).toBeInTheDocument();
+    expect(screen.getAllByText("Стать рефералом").length).toBeGreaterThanOrEqual(1);
+
+    const sectionImages = within(pageStack).getAllByTestId("imported-page-section-image");
+    sectionImages.forEach((img) => {
+      expect(img).not.toHaveAttribute("contenteditable");
+    });
+  });
+
+  it("renders html5 video overlays on imported screenshot sections", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () =>
+          makePageScanPayload(
+            [
+              {
+                id: "screenshot-section-1",
+                selector: null,
+                title: "Секция 1",
+                position: 1,
+                kind: "screenshot",
+                screenshot_data_url:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+                width: 1440,
+                height: 720,
+                media_overlays: [
+                  {
+                    type: "video",
+                    src: "https://example.com/assets/hero.mp4",
+                    poster: "",
+                    x_percent: 10,
+                    y_percent: 5,
+                    width_percent: 80,
+                    height_percent: 40,
+                    muted: true,
+                    autoplay: true,
+                    loop: true,
+                    plays_inline: true,
+                  },
+                ],
+              },
+            ],
+            "generic",
+            { visualVideoCount: 1 },
+          ),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
+    });
+
+    const pageStack = screen.getByTestId("imported-page-stack-node");
+    expect(within(pageStack).getByTestId("imported-page-section-image")).toBeInTheDocument();
+    const videos = within(pageStack).getAllByTestId("imported-section-video-overlay");
+    expect(videos).toHaveLength(1);
+    expect(videos[0]).toHaveAttribute("src", "https://example.com/assets/hero.mp4");
+    expect(videos[0].muted).toBe(true);
+    expect(videos[0].autoplay).toBe(true);
+    expect(videos[0].loop).toBe(true);
+    expect(videos[0].playsInline).toBe(true);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-scan-success")).toHaveTextContent(/найдено 1 видео/);
+      expect(screen.getByTestId("referral-builder-scan-success")).toHaveTextContent(
+        /Видео проигрываются поверх снимка страницы/,
+      );
+    });
+  });
+
+  it("imported stack exposes section kinds and omits insert slot before header", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () =>
+          makePageScanPayload(
+            [
+              {
+                id: "hdr",
+                selector: null,
+                title: "Шапка",
+                position: 1,
+                kind: "header",
+                screenshot_data_url:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+                width: 1440,
+                height: 80,
+              },
+              {
+                id: "mid",
+                selector: null,
+                title: "Контент",
+                position: 2,
+                kind: "screenshot",
+                screenshot_data_url:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+                width: 1440,
+                height: 400,
+              },
+              {
+                id: "ftr",
+                selector: null,
+                title: "Подвал",
+                position: 3,
+                kind: "footer",
+                screenshot_data_url:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+                width: 1440,
+                height: 120,
+              },
+            ],
+            "generic",
+            { visualVideoCount: 0 },
+          ),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
+    });
+
+    const pageStack = screen.getByTestId("imported-page-stack-node");
+    const sections = within(pageStack).getAllByTestId("imported-page-section");
+    expect(sections).toHaveLength(3);
+    expect(sections[0]).toHaveAttribute("data-section-kind", "header");
+    expect(sections[1]).toHaveAttribute("data-section-kind", "screenshot");
+    expect(sections[2]).toHaveAttribute("data-section-kind", "footer");
+
+    const stackBody = pageStack.querySelector(".imported-page-stack-node__body");
+    expect(stackBody).toBeTruthy();
+    const firstChild = stackBody.firstElementChild;
+    expect(firstChild?.getAttribute("data-testid")).toBe("imported-page-section");
+    const slotButtons = within(pageStack).getAllByTestId("imported-page-insert-slot");
+    expect(slotButtons.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("renders layered screenshot with video under foreground text and button", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () =>
+          makePageScanPayload(
+            [
+              {
+                id: "screenshot-section-1",
+                selector: null,
+                title: "Секция 1",
+                position: 1,
+                kind: "screenshot",
+                screenshot_data_url:
+                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+                width: 1440,
+                height: 720,
+                media_overlays: [
+                  {
+                    type: "video",
+                    src: "https://example.com/assets/hero.mp4",
+                    poster: "",
+                    x: 0,
+                    y: 0,
+                    width: 1440,
+                    height: 720,
+                    x_percent: 0,
+                    y_percent: 0,
+                    width_percent: 100,
+                    height_percent: 100,
+                    muted: true,
+                    autoplay: true,
+                    loop: true,
+                    plays_inline: true,
+                  },
+                ],
+                foreground_overlays: [
+                  {
+                    type: "text",
+                    text: "RECENT LAUNCH",
+                    href: "",
+                    x: 115,
+                    y: 446,
+                    width: 576,
+                    height: 58,
+                    x_percent: 8,
+                    y_percent: 62,
+                    width_percent: 40,
+                    height_percent: 8,
+                    style: { color: "rgb(255,255,255)", font_size: "14px" },
+                  },
+                  {
+                    type: "button",
+                    text: "REWATCH",
+                    href: "",
+                    x: 115,
+                    y: 562,
+                    width: 173,
+                    height: 43,
+                    x_percent: 8,
+                    y_percent: 78,
+                    width_percent: 12,
+                    height_percent: 6,
+                    style: { background_color: "rgb(0,0,0)", border_radius: "4px" },
+                  },
+                ],
+              },
+            ],
+            "generic",
+            { visualVideoCount: 1 },
+          ),
+      }),
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
+    });
+
+    const pageStack = screen.getByTestId("imported-page-stack-node");
+    expect(within(pageStack).getByTestId("imported-page-section-image")).toBeInTheDocument();
+    const videos = within(pageStack).getAllByTestId("imported-section-video-overlay");
+    expect(videos).toHaveLength(1);
+    expect(videos[0]).toHaveAttribute("src", "https://example.com/assets/hero.mp4");
+    expect(videos[0].muted).toBe(true);
+    expect(videos[0].autoplay).toBe(true);
+    expect(videos[0].loop).toBe(true);
+    expect(videos[0].playsInline).toBe(true);
+
+    const fg = within(pageStack).getAllByTestId("imported-section-foreground-crop");
+    expect(fg).toHaveLength(2);
+    expect(within(fg[0]).queryByText("RECENT LAUNCH")).not.toBeInTheDocument();
+    expect(within(fg[1]).queryByText("REWATCH")).not.toBeInTheDocument();
+
+    const cropImages = within(pageStack).getAllByTestId("imported-section-foreground-crop-image");
+    expect(cropImages).toHaveLength(2);
+    const sectionImg = within(pageStack).getByTestId("imported-page-section-image");
+    expect(cropImages[0]).toHaveAttribute("src", sectionImg.getAttribute("src"));
+    expect(cropImages[0].style.transform).toMatch(/translate\(-115px,\s*-446px\)/);
+    expect(cropImages[1].style.transform).toMatch(/translate\(-111px,\s*-558px\)/);
+
+    expect(fg[0]).toHaveAttribute("data-foreground-type", "text");
+    expect(fg[1]).toHaveAttribute("data-foreground-type", "button");
+    expect(fg[0]).toHaveClass("owner-programs__imported-section-foreground-crop--text");
+    expect(fg[1]).toHaveClass("owner-programs__imported-section-foreground-crop--button");
+
+    const overlayLayer = within(pageStack).getByTestId("imported-screenshot-overlay-layer");
+    expect(overlayLayer.getAttribute("style") || "").toMatch(/width:\s*1440px/);
+    expect(overlayLayer.getAttribute("style") || "").toMatch(/height:\s*720px/);
+    expect(overlayLayer.getAttribute("style") || "").toMatch(/transform:\s*scale\(/);
+    expect(overlayLayer.contains(videos[0])).toBe(true);
+    expect(overlayLayer.contains(fg[0])).toBe(true);
+
+    expect(videos[0].style.width).toBe("1440px");
+    expect(videos[0].style.left).toBe("0px");
+    expect(videos[0].style.left).not.toContain("%");
+
+    expect(fg[0].style.left).toBe("115px");
+    expect(fg[0].style.width).toBe("576px");
+    expect(fg[1].style.left).toBe("111px");
+    expect(fg[1].style.width).toBe("181px");
+
+    const sectionRoot = container.querySelector(".owner-programs__imported-screenshot-section");
+    expect(sectionRoot).toBeTruthy();
+    const children = Array.from(sectionRoot.children);
+    const imgIdx = children.findIndex((el) => el.matches("img"));
+    const layerIdx = children.findIndex((el) => el.getAttribute("data-testid") === "imported-screenshot-overlay-layer");
+    expect(imgIdx).toBeGreaterThanOrEqual(0);
+    expect(layerIdx).toBeGreaterThan(imgIdx);
+    expect(videos[0]).toHaveStyle({ zIndex: "1" });
+  });
+
+  it("builder blocks: selecting block, inspector title, and delete", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () =>
+          makePageScanPayload([
+            {
+              id: "screenshot-section-1",
+              selector: null,
+              title: "Секция 1",
+              position: 1,
+              kind: "screenshot",
+              screenshot_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+              width: 1440,
+              height: 720,
+            },
+          ]),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "На весь экран" }));
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute("data-lk-referral-builder-expanded");
+    });
+
+    const pageStack = screen.getByTestId("imported-page-stack-node");
+    fireEvent.click(within(pageStack).getAllByTestId("imported-page-insert-slot")[0].querySelector("button"));
+    fireEvent.click(screen.getByTestId("builder-library-hero"));
+
+    await waitFor(() => {
+      expect(within(pageStack).getByTestId("editable-referral-block-preview")).toBeInTheDocument();
+    });
+
+    const blockEl = within(pageStack).getByTestId("editable-referral-block-preview");
+    expect(blockEl).toHaveClass("is-selected");
+
+    fireEvent.click(blockEl);
+    expect(blockEl).toHaveAttribute("data-selected", "true");
+
+    const titleInput = screen.getByTestId("builder-inspector-title");
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, "Заголовок из инспектора");
+
+    await waitFor(() => {
+      expect(within(blockEl).getByText("Заголовок из инспектора")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("builder-inspector-delete"));
+
+    await waitFor(() => {
+      expect(within(pageStack).queryByTestId("editable-referral-block-preview")).not.toBeInTheDocument();
+    });
   });
 
   it("deletes the selected imported screenshot block on Delete", async () => {
@@ -2507,7 +2972,7 @@ describe("Canonical site identity contract", () => {
     });
 
     await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
-    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
@@ -2575,7 +3040,7 @@ describe("Canonical site identity contract", () => {
     });
 
     await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
-    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("site-scan-block-node")).toBeInTheDocument();
@@ -2583,9 +3048,10 @@ describe("Canonical site identity contract", () => {
 
     expect(screen.queryByTestId("imported-site-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("screenshot-site-block-node")).not.toBeInTheDocument();
+    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
   });
 
-  it("shows a friendly scan error and keeps the referral preview node", async () => {
+  it("shows a friendly scan error without the referral preview placeholder", async () => {
     mockOwnerAndIntegration({
       owner: makeOwnerProjectsPayload([
         makeProject({
@@ -2619,13 +3085,13 @@ describe("Canonical site identity contract", () => {
     });
 
     await userEvent.type(screen.getByLabelText("URL страницы"), "https://bad.example/page");
-    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
 
     await waitFor(() => {
       expect(screen.getByText("Не удалось просканировать страницу")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+    expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
   });
 
   it("shows backend scan detail when it is available", async () => {
@@ -2662,7 +3128,7 @@ describe("Canonical site identity contract", () => {
     });
 
     await userEvent.type(screen.getByLabelText("URL страницы"), "example.com/page");
-    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+    await userEvent.click(screen.getByRole("button", { name: "Импорт дизайна" }));
 
     await waitFor(() => {
       expect(screen.getByText("Разрешены только адреса с http:// или https://.")).toBeInTheDocument();
