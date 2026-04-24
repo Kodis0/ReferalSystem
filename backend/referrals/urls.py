@@ -14,7 +14,9 @@ from .views import (
     SiteOwnerIntegrationDiagnosticsView,
     SiteOwnerIntegrationView,
     SiteOwnerIntegrationVerifyView,
+    SiteOwnerPageScanView,
     SiteOwnerReachabilityView,
+    SiteOwnerSiteActivityListView,
     SiteOwnerSiteMembersListView,
     SiteOwnerSitesListView,
 )
@@ -69,6 +71,11 @@ urlpatterns = [
         name="site-owner-reachability",
     ),
     path(
+        "site/page-scan/",
+        SiteOwnerPageScanView.as_view(),
+        name="site-owner-page-scan",
+    ),
+    path(
         "site/integration/analytics/",
         SiteOwnerIntegrationAnalyticsView.as_view(),
         name="site-owner-integration-analytics",
@@ -77,6 +84,11 @@ urlpatterns = [
         "site/integration/members/",
         SiteOwnerSiteMembersListView.as_view(),
         name="site-owner-site-members",
+    ),
+    path(
+        "site/integration/activity/",
+        SiteOwnerSiteActivityListView.as_view(),
+        name="site-owner-site-activity",
     ),
     path(
         "site/integration/verify/",

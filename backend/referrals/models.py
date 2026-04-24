@@ -144,6 +144,39 @@ class Site(models.Model):
         return f"Site {self.public_id} (owner={self.owner_id})"
 
 
+class SiteOwnerActivityLog(models.Model):
+    """
+    Append-only owner-visible log for LK «История» (настройки сайта, статусы, и т.д.).
+    """
+
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.CASCADE,
+        related_name="owner_activity_logs",
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="site_owner_activity_logs",
+    )
+    action = models.CharField(max_length=64, db_index=True)
+    message = models.TextField()
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["site", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"SiteOwnerActivityLog(site={self.site_id}, action={self.action!r})"
+
+
 class SiteMembership(models.Model):
     class JoinedVia(models.TextChoices):
         CTA_SIGNUP = "cta_signup", "CTA signup"

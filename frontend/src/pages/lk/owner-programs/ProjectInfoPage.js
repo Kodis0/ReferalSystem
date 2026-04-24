@@ -3,6 +3,7 @@ import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "./CreateOwnerProjectPage.css";
+import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -121,6 +122,9 @@ export default function ProjectInfoPage() {
       const meta = projectMetaFromPayload(payload);
       setName(meta.name);
       setDescription(meta.description);
+      if (hasSiteId) {
+        emitSiteOwnerActivity(siteId);
+      }
       if (typeof reloadProjectHead === "function") {
         await reloadProjectHead();
       }

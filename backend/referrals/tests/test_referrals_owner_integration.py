@@ -11,6 +11,7 @@ from referrals.models import (
     ReferralLeadEvent,
     Site,
     SiteMembership,
+    SiteOwnerActivityLog,
 )
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME, ensure_partner_profile
 
@@ -835,6 +836,63 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIsNotNone(site.verified_at)
         self.assertEqual(r.data["connection_check"]["status"], "found")
 
+    def test_verify_repeat_on_verified_site_logs_connection_recheck(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_verify_repeat_" + uuid.uuid4().hex,
+            allowed_origins=["https://verify-repeat.example"],
+            widget_enabled=True,
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://verify-repeat.example",
+        )
+        self.api.force_authenticate(self.owner)
+        before = SiteOwnerActivityLog.objects.filter(site=site).count()
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(SiteOwnerActivityLog.objects.filter(site=site).count(), before + 1)
+        last = SiteOwnerActivityLog.objects.filter(site=site).order_by("-created_at").first()
+        self.assertEqual(last.action, "connection_recheck")
+
+    def test_diagnostics_refresh_header_writes_activity_log(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_diag_refresh_" + uuid.uuid4().hex,
+            allowed_origins=["https://diag.example"],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        before = SiteOwnerActivityLog.objects.filter(site=site).count()
+        r = self.api.get(
+            f"/referrals/site/integration/diagnostics/?site_public_id={site.public_id}",
+            HTTP_X_SITE_OWNER_ACTIVITY_REFRESH="1",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(SiteOwnerActivityLog.objects.filter(site=site).count(), before + 1)
+        last = SiteOwnerActivityLog.objects.filter(site=site).order_by("-created_at").first()
+        self.assertEqual(last.action, "status_refresh")
+
+    def test_diagnostics_owner_activity_refresh_query_writes_activity_log(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_diag_qs_" + uuid.uuid4().hex,
+            allowed_origins=["https://diag-qs.example"],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        before = SiteOwnerActivityLog.objects.filter(site=site).count()
+        r = self.api.get(
+            f"/referrals/site/integration/diagnostics/?site_public_id={site.public_id}&owner_activity_refresh=1",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(SiteOwnerActivityLog.objects.filter(site=site).count(), before + 1)
+        last = SiteOwnerActivityLog.objects.filter(site=site).order_by("-created_at").first()
+        self.assertEqual(last.action, "status_refresh")
+
     def test_verify_rejects_incomplete_site(self):
         site = Site.objects.create(
             owner=self.owner,
@@ -1188,4 +1246,31 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r_list = self.api.get("/referrals/site/integration/")
         self.assertEqual(r_list.status_code, 200)
         self.assertEqual(r_list.data["public_id"], str(b.public_id))
+
+    def test_site_activity_list_requires_site_public_id_query(self):
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/integration/activity/")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "site_public_id_required")
+
+    def test_site_activity_list_after_integration_patch(self):
+        project = Project.objects.create(owner=self.owner, name="P", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_act_" + uuid.uuid4().hex,
+            allowed_origins=["https://one.example"],
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+        r_patch = self.api.patch(url, {"display_name": "Новое имя"}, format="json")
+        self.assertEqual(r_patch.status_code, 200)
+        r = self.api.get(f"/referrals/site/integration/activity/?site_public_id={site.public_id}")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("results", r.data)
+        self.assertGreaterEqual(len(r.data["results"]), 1)
+        self.assertEqual(r.data["results"][0]["actor_display"], "owner-api@example.com")
+        self.assertIn("отображаемое имя", r.data["results"][0]["message"].lower())
+        self.assertEqual(r.data["results"][0]["action"], "site_settings")
+        self.assertTrue(SiteOwnerActivityLog.objects.filter(site=site).exists())
 

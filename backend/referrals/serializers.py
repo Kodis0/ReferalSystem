@@ -39,6 +39,15 @@ class ReferralCaptureSerializer(serializers.Serializer):
     utm_campaign = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+class PageScanRequestSerializer(serializers.Serializer):
+    url = serializers.CharField(max_length=2048, trim_whitespace=True)
+    mode = serializers.ChoiceField(
+        choices=("map", "visual"),
+        required=False,
+        default="map",
+    )
+
+
 def build_widget_embed_snippet(
     *,
     widget_script_base: str,

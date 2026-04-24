@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -10,14 +11,25 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import PartnerProfile, Project, Site
+from .models import PartnerProfile, Project, Site, SiteOwnerActivityLog
+from .owner_site_activity import (
+    log_integration_patch,
+    log_site_activated,
+    log_site_connection_rechecked,
+    log_site_created_in_project,
+    log_site_status_refreshed_in_lk,
+    log_site_verified,
+    serialize_activity_rows,
+)
 from .owner_diagnostics import (
     build_embed_readiness,
     build_site_membership_owner_list_payload,
     build_site_owner_diagnostics_payload,
 )
 from .owner_site_analytics import build_site_owner_analytics_payload
+from .page_scan import PageScanError, scan_page_url
 from .serializers import (
+    PageScanRequestSerializer,
     ProjectOwnerCreateSerializer,
     ProjectOwnerUpdateSerializer,
     ProjectSiteOwnerCreateSerializer,
@@ -301,6 +313,7 @@ class SiteOwnerBootstrapView(APIView):
             publishable_key=generate_publishable_key(),
         )
         create_project_for_site(site)
+        log_site_created_in_project(site=site, actor=request.user)
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data, status=status.HTTP_201_CREATED)
 
@@ -334,6 +347,7 @@ class SiteOwnerCreateView(APIView):
             config_json=cfg,
         )
         create_project_for_site(site)
+        log_site_created_in_project(site=site, actor=request.user)
         out = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
 
@@ -449,6 +463,7 @@ class ProjectSiteOwnerCreateView(APIView):
             platform_preset=data["platform_preset"],
             config_json={SITE_DISPLAY_NAME_CONFIG_KEY: data["site_display_name"]},
         )
+        log_site_created_in_project(site=site, actor=request.user)
         out = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
 
@@ -591,6 +606,12 @@ class SiteOwnerIntegrationView(APIView):
             site.activated_at = None
             update_fields.extend(["status", "verified_at", "activated_at"])
         site.save(update_fields=update_fields)
+        log_integration_patch(
+            site=site,
+            actor=request.user,
+            validated=data,
+            status_reset_to_draft="status" in update_fields,
+        )
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data)
 
@@ -623,6 +644,11 @@ class SiteOwnerIntegrationDiagnosticsView(APIView):
         site, error = _resolve_owner_site(request)
         if error is not None:
             return error
+        if (
+            (request.headers.get("X-Site-Owner-Activity-Refresh") or "").strip() == "1"
+            or (request.query_params.get("owner_activity_refresh") or "").strip() == "1"
+        ):
+            log_site_status_refreshed_in_lk(site=site, actor=request.user)
         payload = build_site_owner_diagnostics_payload(site=site, recent_limit=50)
         return Response(payload)
 
@@ -645,6 +671,26 @@ class SiteOwnerReachabilityView(APIView):
         if error is not None:
             return error
         return Response(check_site_http_reachability(site))
+
+
+class SiteOwnerPageScanView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PageScanRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = scan_page_url(
+                serializer.validated_data["url"],
+                mode=serializer.validated_data.get("mode") or "map",
+            )
+        except PageScanError:
+            return Response(
+                {"detail": "Не удалось просканировать страницу"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class SiteOwnerIntegrationAnalyticsView(APIView):
@@ -719,6 +765,9 @@ class SiteOwnerIntegrationVerifyView(APIView):
             if site.verified_at is None:
                 site.verified_at = timezone.now()
             site.save(update_fields=["status", "verified_at", "updated_at"])
+            log_site_verified(site=site, actor=request.user)
+        else:
+            log_site_connection_rechecked(site=site, actor=request.user)
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         payload = dict(ser.data)
         payload["connection_check"] = build_site_connection_check(site)
@@ -757,5 +806,46 @@ class SiteOwnerIntegrationActivateView(APIView):
             if site.activated_at is None:
                 site.activated_at = timezone.now()
             site.save(update_fields=["status", "verified_at", "activated_at", "updated_at"])
+            log_site_activated(site=site, actor=request.user)
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data)
+
+
+class SiteOwnerSiteActivityListView(APIView):
+    """
+    Paginated owner activity log for one Site (LK «История»).
+    Query: ``site_public_id`` (required), ``page`` (1-based), ``page_size`` (max 100).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (request.query_params.get("site_public_id") or "").strip():
+            return Response(
+                _owner_api_error_body("site_public_id_required"),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        site, error = _resolve_owner_site(request)
+        if error is not None:
+            return error
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+        except ValueError:
+            page = 1
+        try:
+            page_size = int(request.query_params.get("page_size") or 20)
+        except ValueError:
+            page_size = 20
+        page_size = max(1, min(page_size, 100))
+        qs = SiteOwnerActivityLog.objects.filter(site=site)
+        paginator = Paginator(qs, page_size)
+        p = paginator.get_page(page)
+        return Response(
+            {
+                "results": serialize_activity_rows(p.object_list),
+                "count": paginator.count,
+                "page": p.number,
+                "page_size": page_size,
+                "num_pages": paginator.num_pages,
+            }
+        )

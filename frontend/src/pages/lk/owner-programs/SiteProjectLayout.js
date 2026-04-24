@@ -8,6 +8,7 @@ import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
 import { sitePrimaryDomainLabel } from "./siteDisplay";
 import SiteShellToolbarSubscriber from "./SiteShellToolbarSubscriber";
+import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -231,10 +232,26 @@ export default function SiteProjectLayout() {
     return buildScopedProjectPath("sites");
   }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
 
+  /** Вкладка «Блок для сайта» — готовый HTML-блок для Tilda и др. */
+  const referralBlockSiteNavPath = useMemo(() => {
+    if (!hasProjectId) return "/lk/partner";
+    if (shellScopedSitePublicIdForNav) {
+      return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/referral-block`;
+    }
+    return buildScopedProjectPath("sites");
+  }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
+
   /** Вкладка «Пользователи» на маршруте конкретного сайта. */
   const membersSiteNavPath = useMemo(() => {
     if (!hasProjectId) return "/lk/partner";
     if (shellScopedSitePublicIdForNav) return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/members`;
+    return buildScopedProjectPath("sites");
+  }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
+
+  /** Вкладка «История» — журнал изменений сайта. */
+  const historySiteNavPath = useMemo(() => {
+    if (!hasProjectId) return "/lk/partner";
+    if (shellScopedSitePublicIdForNav) return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/history`;
     return buildScopedProjectPath("sites");
   }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
 
@@ -520,6 +537,7 @@ export default function SiteProjectLayout() {
       window.dispatchEvent(
         new CustomEvent("lk-site-avatar-updated", { detail: { sitePublicId: routeSitePublicId } }),
       );
+      emitSiteOwnerActivity(routeSitePublicId);
       window.setTimeout(() => {
         setAvatarSaveState("idle");
         setAvatarSuccessMessage("");
@@ -1120,7 +1138,9 @@ export default function SiteProjectLayout() {
           <nav
             className="owner-programs__tabs"
             aria-label={
-              isSiteRouteShell ? "Дашборд, виджет, настройки и пользователи сайта" : "Сервисы и пользователи проекта"
+              isSiteRouteShell
+                ? "Дашборд, виджет, блок для сайта, настройки, пользователи и история сайта"
+                : "Сервисы и пользователи проекта"
             }
           >
             {isSiteRouteShell ? (
@@ -1131,11 +1151,17 @@ export default function SiteProjectLayout() {
                 <NavLink to={widgetSiteNavPath} end className={tabClass} preventScrollReset>
                   Виджет
                 </NavLink>
+                <NavLink to={referralBlockSiteNavPath} end className={tabClass} preventScrollReset>
+                  Блок для сайта
+                </NavLink>
                 <NavLink to={settingsSiteNavPath} end className={tabClass} preventScrollReset>
                   Настройки
                 </NavLink>
                 <NavLink to={membersSiteNavPath} end className={tabClass} preventScrollReset>
                   Пользователи
+                </NavLink>
+                <NavLink to={historySiteNavPath} end className={tabClass} preventScrollReset>
+                  История
                 </NavLink>
               </>
             ) : (

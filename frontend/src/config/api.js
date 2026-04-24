@@ -16,6 +16,7 @@ export const API_ENDPOINTS = {
   projectCreate: `${API_BASE}/referrals/project/create/`,
   projectDetail: (projectId) => `${API_BASE}/referrals/project/${encodeURIComponent(projectId)}/`,
   siteOwnerSites: `${API_BASE}/referrals/site/owner-sites/`,
+  sitePageScan: `${API_BASE}/referrals/site/page-scan/`,
   // Same path, different methods: backend `ProjectSiteOwnerCreateView` (referrals/views.py).
   // POST = create child Site in project. DELETE = remove Site; requires `site_public_id` in query or JSON body (`_requested_site_public_id`).
   projectSiteCreate: (projectId) => `${API_BASE}/referrals/project/${encodeURIComponent(projectId)}/site/create/`,
@@ -27,6 +28,7 @@ export const API_ENDPOINTS = {
   siteIntegrationVerify: `${API_BASE}/referrals/site/integration/verify/`,
   siteIntegrationActivate: `${API_BASE}/referrals/site/integration/activate/`,
   siteReachability: `${API_BASE}/referrals/site/reachability/`,
+  siteIntegrationActivity: `${API_BASE}/referrals/site/integration/activity/`,
 };
 
 export { API_BASE };

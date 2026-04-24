@@ -10,6 +10,7 @@
 
 /* Тема по умолчанию: тёмная */
 :root {
+  color-scheme: dark;
   --page-bg: #050c26;
   --content-gradient-start: #050c26;
   --content-gradient-end: #050050;
@@ -29,6 +30,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --page-bg: #ffffff;
   --content-gradient-start: #ffffff;
   --content-gradient-end: #f5f6fa;
@@ -48,10 +50,21 @@
 }
 
 html {
+  /* Иначе у края вьюпорта и под scrollbar-gutter остаётся белый canvas */
+  background-color: var(--page-bg);
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   scrollbar-width: thin;
   scrollbar-gutter: stable;
-  transition: scrollbar-color 0.25s ease;
+  transition:
+    scrollbar-color 0.25s ease,
+    background-color 0.25s ease;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --scrollbar-track: #242f3d;
+  --scrollbar-thumb: #596579;
+  --scrollbar-thumb-hover: #6d7890;
 }
 
 body {

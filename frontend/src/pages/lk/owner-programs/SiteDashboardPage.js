@@ -36,12 +36,12 @@ function parseSeriesNumbers(rows, key) {
   });
 }
 
-const CHART_VB_W = 604;
+const CHART_VB_W = 640;
 const CHART_VB_H = 306;
-/** Plot insets; Y ticks sit just left of the plot (text-anchor end) so no dead band before the grid. */
+/** Plot insets; `left`/`right` are overridden in chart — equal gutters; left reserves a column for Y labels. */
 const CHART_PAD = { top: 12, right: 52, bottom: 28, left: 52 };
-/** Gap between Y tick labels and vertical grid (SVG user units). */
-const CHART_Y_LABEL_GAP = 6;
+/** Y-axis numbers: `text-anchor: start` at this x so they align with the plate title/subtitle. */
+const CHART_Y_LABEL_X = 0;
 const CHART_Y_TICKS = 6;
 const CHART_X_MAX_TICKS = 8;
 
@@ -222,10 +222,10 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
   const wrapRef = useRef(null);
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
-  const chartPad = useMemo(
-    () => ({ ...CHART_PAD, left: fmt === formatMoney ? 64 : 50 }),
-    [fmt],
-  );
+  const chartPad = useMemo(() => {
+    const gutter = fmt === formatMoney ? 58 : 38;
+    return { ...CHART_PAD, left: gutter, right: gutter };
+  }, [fmt]);
   const geom = useMemo(() => buildLineGeometry(values, CHART_VB_W, CHART_VB_H, chartPad), [values, chartPad]);
   const ticks = useMemo(() => {
     if (!byDay.length) return null;
@@ -306,6 +306,7 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
   return (
     <div
       className="owner-programs__site-dash-line-wrap"
+      style={{ aspectRatio: `${vbW} / ${vbH}` }}
       ref={wrapRef}
       onPointerLeave={clearHover}
       onBlur={clearHover}
@@ -366,6 +367,14 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
             fill="none"
           />
         </g>
+        <line
+          x1={geom.innerLeft}
+          y1={geom.axisY}
+          x2={geom.innerRight}
+          y2={geom.axisY}
+          className="owner-programs__site-dash-svg-x-axis"
+          aria-hidden
+        />
         {hi ? (
           <g className="owner-programs__site-dash-svg-hover" clipPath={`url(#${gradId}-plot-clip)`} aria-hidden>
             <line
@@ -382,9 +391,9 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
           {geom.yTicks.map((row, i) => (
             <text
               key={`yl-${i}`}
-              x={geom.innerLeft - CHART_Y_LABEL_GAP}
+              x={CHART_Y_LABEL_X}
               y={row.y}
-              textAnchor="end"
+              textAnchor="start"
               dominantBaseline="middle"
             >
               {formatYAxisTickValue(row.value, geom.y1 - geom.y0, fmt)}
@@ -427,6 +436,16 @@ const PERIODS = [
   { id: "30d", label: "30 дней" },
   { id: "all", label: "Всё время" },
 ];
+
+function SiteDashKpiCard({ label, value, hint }) {
+  return (
+    <div className="owner-programs__site-dash-kpi">
+      <span className="owner-programs__site-dash-kpi-label">{label}</span>
+      <span className="owner-programs__site-dash-kpi-value">{value}</span>
+      <span className="owner-programs__site-dash-kpi-hint">{hint}</span>
+    </div>
+  );
+}
 
 export default function SiteDashboardPage() {
   const { sitePublicId: sitePublicIdParam } = useParams();
@@ -502,8 +521,6 @@ export default function SiteDashboardPage() {
     });
   }, [byDay]);
 
-  const funnel = payload?.funnel && typeof payload.funnel === "object" ? payload.funnel : {};
-  const funnelMax = Math.max(1, Number(funnel.visits) || 0, Number(funnel.leads) || 0, Number(funnel.sales) || 0);
   const kpis = payload?.kpis && typeof payload.kpis === "object" ? payload.kpis : {};
 
   const recentSales = Array.isArray(payload?.recent_sales) ? payload.recent_sales : [];
@@ -586,172 +603,120 @@ export default function SiteDashboardPage() {
 
       {!loading && !error && payload ? (
         <>
-          <section className="owner-programs__site-dash-kpis" aria-label="Ключевые показатели">
-            <div className="owner-programs__site-dash-kpi">
-              <span className="owner-programs__site-dash-kpi-label">Рефералов</span>
-              <span className="owner-programs__site-dash-kpi-value">{formatInt(kpis.referrals_count)}</span>
-              <span className="owner-programs__site-dash-kpi-hint">Новые участники за период</span>
-            </div>
-            <div className="owner-programs__site-dash-kpi">
-              <span className="owner-programs__site-dash-kpi-label">Переходов</span>
-              <span className="owner-programs__site-dash-kpi-value">{formatInt(kpis.visits_count)}</span>
-              <span className="owner-programs__site-dash-kpi-hint">По ссылкам участников</span>
-            </div>
-            <div className="owner-programs__site-dash-kpi">
-              <span className="owner-programs__site-dash-kpi-label">Заявок</span>
-              <span className="owner-programs__site-dash-kpi-value">{formatInt(kpis.leads_count)}</span>
-              <span className="owner-programs__site-dash-kpi-hint">Отправки с виджета</span>
-            </div>
-            <div className="owner-programs__site-dash-kpi">
-              <span className="owner-programs__site-dash-kpi-label">Продаж</span>
-              <span className="owner-programs__site-dash-kpi-value">{formatInt(kpis.sales_count)}</span>
-              <span className="owner-programs__site-dash-kpi-hint">Оплаченные заказы</span>
-            </div>
-            <div className="owner-programs__site-dash-kpi">
-              <span className="owner-programs__site-dash-kpi-label">Сумма продаж</span>
-              <span className="owner-programs__site-dash-kpi-value">{formatMoney(kpis.sales_amount)}</span>
-              <span className="owner-programs__site-dash-kpi-hint">Оплаченные, сумма</span>
-            </div>
-            <div className="owner-programs__site-dash-kpi">
-              <span className="owner-programs__site-dash-kpi-label">Начислено</span>
-              <span className="owner-programs__site-dash-kpi-value">{formatMoney(kpis.commissions_total)}</span>
-              <span className="owner-programs__site-dash-kpi-hint">Комиссии участникам</span>
-            </div>
-          </section>
-
           <section className="owner-programs__site-dash-analytics" aria-label="Аналитика за период">
             <div className="owner-programs__site-dash-charts-grid">
-              <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-activity-title">
-                <div className="owner-programs__site-dash-chart-plate">
-                  <header className="owner-programs__site-dash-chart-plate-head">
-                    <div className="owner-programs__site-dash-chart-plate-titles">
-                      <h2 id="site-dash-activity-title" className="owner-programs__site-dash-chart-plate-title">
-                        Активность по дням
-                      </h2>
-                      <p className="owner-programs__site-dash-chart-plate-sub">
-                        Сумма заявок с виджета и переходов по реферальным ссылкам
-                      </p>
-                    </div>
-                  </header>
-                  <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
-                    {byDay.length === 0 ? (
-                      <p className="owner-programs__site-dash-empty">Нет данных за выбранный период.</p>
-                    ) : (
-                      <DaySeriesChart
-                        byDay={byDay}
-                        values={activitySeries}
-                        gradId="site-dash-grad-activity"
-                        formatY={formatInt}
-                        tooltipMetricLabel="Активность"
-                        ariaLabel="График активности по дням"
-                      />
-                    )}
-                  </div>
-                </div>
-              </article>
-
-              <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-sales-title">
-                <div className="owner-programs__site-dash-chart-plate">
-                  <header className="owner-programs__site-dash-chart-plate-head">
-                    <div className="owner-programs__site-dash-chart-plate-titles">
-                      <h2 id="site-dash-sales-title" className="owner-programs__site-dash-chart-plate-title">
-                        Продажи по дням
-                      </h2>
-                      <p className="owner-programs__site-dash-chart-plate-sub">Число оплаченных заказов участников программы</p>
-                    </div>
-                  </header>
-                  <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
-                    {byDay.length === 0 ? (
-                      <p className="owner-programs__site-dash-empty">Нет данных за выбранный период.</p>
-                    ) : (
-                      <DaySeriesChart
-                        byDay={byDay}
-                        values={salesSeries}
-                        gradId="site-dash-grad-sales"
-                        formatY={formatInt}
-                        tooltipMetricLabel="Продажи, шт."
-                        ariaLabel="График продаж по дням"
-                      />
-                    )}
-                  </div>
-                </div>
-              </article>
-
-              <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-comm-title">
-                <div className="owner-programs__site-dash-chart-plate">
-                  <header className="owner-programs__site-dash-chart-plate-head">
-                    <div className="owner-programs__site-dash-chart-plate-titles">
-                      <h2 id="site-dash-comm-title" className="owner-programs__site-dash-chart-plate-title">
-                        Начисления по дням
-                      </h2>
-                      <p className="owner-programs__site-dash-chart-plate-sub">Сумма комиссий по дате начисления</p>
-                    </div>
-                  </header>
-                  <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
-                    {byDay.length === 0 ? (
-                      <p className="owner-programs__site-dash-empty">Нет данных за выбранный период.</p>
-                    ) : (
-                      <DaySeriesChart
-                        byDay={byDay}
-                        values={commissionsSeries}
-                        gradId="site-dash-grad-comm"
-                        formatY={formatMoney}
-                        tooltipMetricLabel="Начисления"
-                        ariaLabel="График начислений по дням"
-                      />
-                    )}
-                  </div>
-                </div>
-              </article>
-
-              <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-funnel-title">
-                <div className="owner-programs__site-dash-chart-plate">
-                  <header className="owner-programs__site-dash-chart-plate-head">
-                    <div className="owner-programs__site-dash-chart-plate-titles">
-                      <h2 id="site-dash-funnel-title" className="owner-programs__site-dash-chart-plate-title">
-                        Воронка за период
-                      </h2>
-                      <p className="owner-programs__site-dash-chart-plate-sub">
-                        Переходы → заявки с сайта → оплаченные продажи участников
-                      </p>
-                    </div>
-                  </header>
-                  <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_funnel">
-                    <div className="owner-programs__site-dash-funnel">
-                      <div className="owner-programs__site-dash-funnel-row">
-                        <span className="owner-programs__site-dash-funnel-label">Переходы</span>
-                        <div className="owner-programs__site-dash-funnel-bar-wrap">
-                          <div
-                            className="owner-programs__site-dash-funnel-bar owner-programs__site-dash-funnel-bar_visits"
-                            style={{ width: `${(100 * (Number(funnel.visits) || 0)) / funnelMax}%` }}
-                          />
-                        </div>
-                        <span className="owner-programs__site-dash-funnel-num">{formatInt(funnel.visits)}</span>
+              <div className="owner-programs__site-dash-analytics-row">
+                <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-activity-title">
+                  <div className="owner-programs__site-dash-chart-plate">
+                    <header className="owner-programs__site-dash-chart-plate-head">
+                      <div className="owner-programs__site-dash-chart-plate-titles">
+                        <h2 id="site-dash-activity-title" className="owner-programs__site-dash-chart-plate-title">
+                          Активность по дням
+                        </h2>
+                        <p className="owner-programs__site-dash-chart-plate-sub">
+                          Сумма заявок с виджета и переходов по реферальным ссылкам
+                        </p>
                       </div>
-                      <div className="owner-programs__site-dash-funnel-row">
-                        <span className="owner-programs__site-dash-funnel-label">Заявки</span>
-                        <div className="owner-programs__site-dash-funnel-bar-wrap">
-                          <div
-                            className="owner-programs__site-dash-funnel-bar owner-programs__site-dash-funnel-bar_leads"
-                            style={{ width: `${(100 * (Number(funnel.leads) || 0)) / funnelMax}%` }}
-                          />
-                        </div>
-                        <span className="owner-programs__site-dash-funnel-num">{formatInt(funnel.leads)}</span>
-                      </div>
-                      <div className="owner-programs__site-dash-funnel-row">
-                        <span className="owner-programs__site-dash-funnel-label">Продажи</span>
-                        <div className="owner-programs__site-dash-funnel-bar-wrap">
-                          <div
-                            className="owner-programs__site-dash-funnel-bar owner-programs__site-dash-funnel-bar_sales"
-                            style={{ width: `${(100 * (Number(funnel.sales) || 0)) / funnelMax}%` }}
-                          />
-                        </div>
-                        <span className="owner-programs__site-dash-funnel-num">{formatInt(funnel.sales)}</span>
-                      </div>
+                    </header>
+                    <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
+                      {byDay.length === 0 ? (
+                        <p className="owner-programs__site-dash-empty">Нет данных за выбранный период.</p>
+                      ) : (
+                        <DaySeriesChart
+                          byDay={byDay}
+                          values={activitySeries}
+                          gradId="site-dash-grad-activity"
+                          formatY={formatInt}
+                          tooltipMetricLabel="Активность"
+                          ariaLabel="График активности по дням"
+                        />
+                      )}
                     </div>
                   </div>
+                </article>
+                <div className="owner-programs__site-dash-row-kpis" aria-label="Переходы и заявки за период">
+                  <SiteDashKpiCard
+                    label="Переходов"
+                    value={formatInt(kpis.visits_count)}
+                    hint="По ссылкам участников"
+                  />
+                  <SiteDashKpiCard label="Заявок" value={formatInt(kpis.leads_count)} hint="Отправки с виджета" />
                 </div>
-              </article>
+              </div>
+
+              <div className="owner-programs__site-dash-analytics-row">
+                <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-sales-title">
+                  <div className="owner-programs__site-dash-chart-plate">
+                    <header className="owner-programs__site-dash-chart-plate-head">
+                      <div className="owner-programs__site-dash-chart-plate-titles">
+                        <h2 id="site-dash-sales-title" className="owner-programs__site-dash-chart-plate-title">
+                          Продажи по дням
+                        </h2>
+                        <p className="owner-programs__site-dash-chart-plate-sub">Число оплаченных заказов участников программы</p>
+                      </div>
+                    </header>
+                    <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
+                      {byDay.length === 0 ? (
+                        <p className="owner-programs__site-dash-empty">Нет данных за выбранный период.</p>
+                      ) : (
+                        <DaySeriesChart
+                          byDay={byDay}
+                          values={salesSeries}
+                          gradId="site-dash-grad-sales"
+                          formatY={formatInt}
+                          tooltipMetricLabel="Продажи, шт."
+                          ariaLabel="График продаж по дням"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </article>
+                <div className="owner-programs__site-dash-row-kpis" aria-label="Продажи за период">
+                  <SiteDashKpiCard label="Продаж" value={formatInt(kpis.sales_count)} hint="Оплаченные заказы" />
+                  <SiteDashKpiCard label="Сумма продаж" value={formatMoney(kpis.sales_amount)} hint="Оплаченные, сумма" />
+                </div>
+              </div>
+
+              <div className="owner-programs__site-dash-analytics-row">
+                <article className="owner-programs__site-dash-chart-block" aria-labelledby="site-dash-comm-title">
+                  <div className="owner-programs__site-dash-chart-plate">
+                    <header className="owner-programs__site-dash-chart-plate-head">
+                      <div className="owner-programs__site-dash-chart-plate-titles">
+                        <h2 id="site-dash-comm-title" className="owner-programs__site-dash-chart-plate-title">
+                          Начисления по дням
+                        </h2>
+                        <p className="owner-programs__site-dash-chart-plate-sub">Сумма комиссий по дате начисления</p>
+                      </div>
+                    </header>
+                    <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
+                      {byDay.length === 0 ? (
+                        <p className="owner-programs__site-dash-empty">Нет данных за выбранный период.</p>
+                      ) : (
+                        <DaySeriesChart
+                          byDay={byDay}
+                          values={commissionsSeries}
+                          gradId="site-dash-grad-comm"
+                          formatY={formatMoney}
+                          tooltipMetricLabel="Начисления"
+                          ariaLabel="График начислений по дням"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </article>
+                <div className="owner-programs__site-dash-row-kpis" aria-label="Начисления и рефералы за период">
+                  <SiteDashKpiCard
+                    label="Начислено"
+                    value={formatMoney(kpis.commissions_total)}
+                    hint="Комиссии участникам"
+                  />
+                  <SiteDashKpiCard
+                    label="Рефералов"
+                    value={formatInt(kpis.referrals_count)}
+                    hint="Новые участники за период"
+                  />
+                </div>
+              </div>
             </div>
           </section>
 
@@ -759,7 +724,6 @@ export default function SiteDashboardPage() {
             <h2 id="site-dash-sales-table-title" className="owner-programs__site-dash-card-title">
               Последние продажи
             </h2>
-            <p className="owner-programs__site-dash-card-lead">Оплаченные заказы участников (до 20 последних)</p>
             {recentSales.length === 0 ? (
               <div className="owner-programs__site-dash-empty-block">
                 <p className="owner-programs__site-dash-empty-title">Пока нет оплаченных заказов</p>

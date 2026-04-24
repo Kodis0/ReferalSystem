@@ -32,6 +32,7 @@ from .models import (
     Site,
     SiteMembership,
 )
+from .owner_site_activity import log_site_member_joined
 from .services_owner_site_shell import (
     SITE_DISPLAY_NAME_CONFIG_KEY,
     SITE_SHELL_AVATAR_CONFIG_KEY,
@@ -487,6 +488,8 @@ def create_site_membership_from_signup(
             "joined_via": SiteMembership.JoinedVia.CTA_SIGNUP,
         },
     )
+    if created:
+        log_site_member_joined(site=site, actor=user, joined_via=SiteMembership.JoinedVia.CTA_SIGNUP)
     return membership, created
 
 
@@ -535,6 +538,7 @@ def join_site_membership_cta_logged_in(
         if existing2 is not None:
             return existing2, "already_joined"
         raise
+    log_site_member_joined(site=site, actor=user, joined_via=SiteMembership.JoinedVia.CTA_SIGNUP)
     return membership, "joined"
 
 

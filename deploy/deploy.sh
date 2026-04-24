@@ -25,6 +25,7 @@ PIP="${VENV_PATH}/bin/pip"
 GUNICORN="${VENV_PATH}/bin/gunicorn"
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-lumoref}"
 SYSTEMD_UNIT="${SYSTEMD_UNIT:-lumoref-gunicorn.service}"
+PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:-chromium}"
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Python venv not found at ${VENV_PATH}. Create it and install requirements first." >&2
@@ -39,6 +40,9 @@ git pull --ff-only origin "${MAIN_BRANCH}"
 
 echo "==> Backend: dependencies"
 "${PIP}" install -r backend/requirements.txt
+
+echo "==> Backend: Playwright browsers (${PLAYWRIGHT_INSTALL_ARGS})"
+"${PYTHON}" -m playwright install ${PLAYWRIGHT_INSTALL_ARGS}
 
 echo "==> Frontend: build (API URL=${REACT_APP_API_URL})"
 export REACT_APP_API_URL

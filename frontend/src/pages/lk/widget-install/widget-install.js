@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/light";
 import xml from "react-syntax-highlighter/dist/cjs/languages/hljs/xml";
-import { atomOneDarkReasonable } from "react-syntax-highlighter/dist/cjs/styles/hljs";
+import { atomOneDarkReasonable, atomOneLight } from "react-syntax-highlighter/dist/cjs/styles/hljs";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -10,8 +10,22 @@ import "../partner/partner.css";
 import "../owner-programs/owner-programs.css";
 import "./widget-install.css";
 import { siteLifecycleLabelRu } from "../owner-programs/siteDisplay";
+import { emitSiteOwnerActivity } from "../owner-programs/siteOwnerActivityBus";
 
 SyntaxHighlighter.registerLanguage("xml", xml);
+
+function useLkDocumentTheme() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const el = document.documentElement;
+      const mo = new MutationObserver(() => onChange());
+      mo.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+      return () => mo.disconnect();
+    },
+    () => document.documentElement.getAttribute("data-theme") || "dark",
+    () => "dark"
+  );
+}
 
 function SnippetCopyIcon({ copied = false }) {
   if (copied) {
@@ -71,9 +85,9 @@ const REQUIRED_CAPTURE_FIELDS = [
 ];
 
 const OPTIONAL_CAPTURE_FIELDS = [
-  { key: "name", label: "Имя", recommended: true },
-  { key: "email", label: "Email", recommended: true },
-  { key: "phone", label: "Телефон", recommended: true },
+  { key: "name", label: "Имя" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Телефон" },
   { key: "amount", label: "Сумма" },
   { key: "currency", label: "Валюта" },
   { key: "product_name", label: "Товар / тариф" },
@@ -95,6 +109,85 @@ function normalizeCaptureConfig(value) {
     }
   });
   return { enabled_optional_fields: next };
+}
+
+/** Поля захвата: плита и строки с переключателями (вместо чекбоксов). */
+function WidgetInstallCaptureFieldsPanel({ introClassName, introText, enabledOptionalFields, setCaptureConfig, children }) {
+  return (
+    <>
+      <p className={introClassName} style={{ marginBottom: 14 }}>
+        {introText}
+      </p>
+      <div className="lk-widget-install__capture-plate">
+        <div className="lk-widget-install__capture-group">
+          <div className="lk-widget-install__capture-plate-header">
+            <p className="lk-widget-install__capture-plate-title">Системные поля</p>
+          </div>
+          <div className="lk-widget-install__capture-block-wrap" data-testid="capture-required-fields">
+            {REQUIRED_CAPTURE_FIELDS.map((field) => (
+              <div key={field.key} className="lk-widget-install__capture-notification-wrap">
+                <label className="lk-widget-install__capture-simple-switch-label lk-widget-install__capture-row">
+                  <span className="lk-widget-install__capture-row-text">
+                    <span className="lk-widget-install__capture-field-name">{field.label}</span>
+                  </span>
+                  <span className="lk-widget-install__switch lk-widget-install__switch_size_m lk-widget-install__switch_end">
+                    <input
+                      type="checkbox"
+                      className="lk-widget-install__switch-input"
+                      checked
+                      readOnly
+                      disabled
+                      tabIndex={-1}
+                      aria-label={`${field.label} (всегда включено)`}
+                    />
+                    <span className="lk-widget-install__switch-slider" aria-hidden="true" />
+                  </span>
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="lk-widget-install__capture-group lk-widget-install__capture-group_optional">
+          <div className="lk-widget-install__capture-plate-header">
+            <p className="lk-widget-install__capture-plate-title">Дополнительные поля</p>
+          </div>
+          <div className="lk-widget-install__capture-block-wrap" data-testid="capture-optional-fields">
+            {OPTIONAL_CAPTURE_FIELDS.map((field) => {
+              const checked = enabledOptionalFields.includes(field.key);
+              return (
+                <div key={field.key} className="lk-widget-install__capture-notification-wrap">
+                  <label className="lk-widget-install__capture-simple-switch-label lk-widget-install__capture-row">
+                    <span className="lk-widget-install__capture-row-text">
+                      <span className="lk-widget-install__capture-field-name">{field.label}</span>
+                    </span>
+                    <span className="lk-widget-install__switch lk-widget-install__switch_size_m lk-widget-install__switch_end">
+                      <input
+                        type="checkbox"
+                        className="lk-widget-install__switch-input"
+                        checked={checked}
+                        onChange={(event) => {
+                          setCaptureConfig((current) => {
+                            const currentEnabled = current.enabled_optional_fields || [];
+                            const nextEnabled = event.target.checked
+                              ? [...currentEnabled, field.key].filter((value, index, arr) => arr.indexOf(value) === index)
+                              : currentEnabled.filter((value) => value !== field.key);
+                            return { enabled_optional_fields: nextEnabled };
+                          });
+                        }}
+                      />
+                      <span className="lk-widget-install__switch-slider" aria-hidden="true" />
+                    </span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {children}
+    </>
+  );
 }
 
 function buildAllowedOrigins(originValue) {
@@ -171,6 +264,12 @@ function withSelectedSite(url, sitePublicId) {
   return u.toString();
 }
 
+function siteDiagnosticsFetchUrl(url, sitePublicId, activityRefresh) {
+  const u = new URL(withSelectedSite(url, sitePublicId), window.location.origin);
+  if (activityRefresh) u.searchParams.set("owner_activity_refresh", "1");
+  return u.toString();
+}
+
 /** Machine error key from API: prefers `code`, falls back to legacy `detail` string. */
 function apiErrorCode(payload) {
   return payload?.code ?? payload?.detail;
@@ -218,6 +317,8 @@ function buildProjectSiteWidgetPath(integrationPayload, selectedSitePublicId, pr
 }
 
 function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyHint, steps = null, compact = false }) {
+  const lkTheme = useLkDocumentTheme();
+  const snippetHlStyle = lkTheme === "light" ? atomOneLight : atomOneDarkReasonable;
   const copied = copyHint === "Скопировано";
   const sectionClass = compact
     ? "lk-widget-install__card owner-programs__site-snippet-card"
@@ -252,11 +353,11 @@ function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyH
         <div className="lk-widget-install__snippet-card-code">
           <SyntaxHighlighter
             language="xml"
-            style={atomOneDarkReasonable}
+            style={snippetHlStyle}
             wrapLongLines
             customStyle={{
               margin: 0,
-              padding: "18px 20px",
+              padding: compact ? "16px 18px" : "18px 20px",
               background: "transparent",
               fontSize: "14px",
               lineHeight: "1.65",
@@ -280,18 +381,6 @@ function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyH
       ) : null}
     </section>
   );
-}
-
-function formatLastSeenAt(iso) {
-  if (!iso || typeof iso !== "string") return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
@@ -454,7 +543,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   }, [projectBasePath, projectIdFromRoute]);
 
   const load = useCallback(async (sitePublicIdOverride, options = {}) => {
-    const { quiet = false } = options;
+    const { quiet = false, activityRefresh = false } = options;
     const generation = ++loadGenerationRef.current;
     // When mounted under a canonical site route, the path is the only source of
     // truth — never fall back to ?site_public_id= or local state.
@@ -522,12 +611,16 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         syncSelectedSiteInUrl(intPayload.public_id, { skip: Boolean(routeSitePublicId) });
       }
       const resDiag = await fetch(
-        withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, intPayload.public_id || effectiveSitePublicId),
+        siteDiagnosticsFetchUrl(
+          API_ENDPOINTS.siteIntegrationDiagnostics,
+          intPayload.public_id || effectiveSitePublicId,
+          activityRefresh,
+        ),
         {
           method: "GET",
           headers: authHeaders(),
           credentials: "include",
-        }
+        },
       );
       if (resDiag.ok) {
         const d = await resDiag.json().catch(() => null);
@@ -667,6 +760,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       }
       setSaveHint("Сохранено");
       setTimeout(() => setSaveHint(""), 2500);
+      emitSiteOwnerActivity(String(payload?.public_id || selectedSitePublicId || "").trim());
       const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId), {
         method: "GET",
         headers: authHeaders(),
@@ -724,6 +818,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         status: "found",
         message: "Подключение найдено. Сайт подключён.",
       });
+      emitSiteOwnerActivity(String(selectedSitePublicId || payload?.public_id || "").trim());
       const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId), {
         method: "GET",
         headers: authHeaders(),
@@ -768,6 +863,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         return;
       }
       setData(payload);
+      emitSiteOwnerActivity(String(selectedSitePublicId || payload?.public_id || "").trim());
       await load();
       if (focusedConnectView) {
         const widgetPath = buildProjectSiteWidgetPath(
@@ -789,11 +885,12 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const onRefreshStatus = useCallback(async () => {
     setRefreshBusy(true);
     try {
-      await load(undefined, { quiet: true });
+      await load(undefined, { quiet: true, activityRefresh: true });
+      emitSiteOwnerActivity(String(selectedSitePublicId || "").trim());
     } finally {
       setRefreshBusy(false);
     }
-  }, [load]);
+  }, [load, selectedSitePublicId]);
 
   const statusClass =
     diag?.integration_status === "healthy"
@@ -939,10 +1036,6 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     (typeof data?.config_json?.display_name === "string" && data.config_json.display_name.trim()) ||
     "Сайт без названия";
   const primaryOrigin = String(originInput || data?.allowed_origins?.[0] || diag?.allowed_origins?.[0] || "").trim();
-  const sendingPreview = [
-    ...REQUIRED_CAPTURE_FIELDS.map((field) => field.label),
-    ...OPTIONAL_CAPTURE_FIELDS.filter((field) => enabledOptionalFields.includes(field.key)).map((field) => field.label),
-  ];
   const integrationWarnings = (diag?.integration_warnings || []).map((item) => warningDescription(item));
   const setupStatusText = setupStatusDescription(diag, lifecycleStatus);
   const installSteps = [
@@ -970,11 +1063,6 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   ];
 
   if (projectSitePresentation) {
-    const lastSeen = formatLastSeenAt(diag?.connection_check?.last_seen_at);
-    const connectionFound = connectionCheckView.tone === "ok" || diag?.connection_check?.status === "found";
-    const platformLabel = typeof data?.platform_preset === "string" ? data.platform_preset : platformPreset;
-    const summaryWarnings = integrationWarnings.slice(0, 3);
-
     return (
       <div
         className="owner-programs__page owner-programs__site-page"
@@ -984,100 +1072,29 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         {diagError ? <div className="owner-programs__error">{diagError}</div> : null}
 
         <div className="owner-programs__site-stack">
-          <section className="owner-programs__site-section" aria-labelledby="project-site-quick-status">
-            <h3 id="project-site-quick-status" className="owner-programs__site-section-title">
-              Сводка
-            </h3>
-            <p className="owner-programs__muted" style={{ marginTop: 0 }}>
-              <strong>{siteLifecycleLabelRu(lifecycleStatus)}</strong>
-              {" · "}
-              <strong>{integrationStatusLabel(diag?.integration_status)}</strong>
-              {platformLabel ? (
-                <>
-                  {" · "}
-                  <span className="owner-programs__muted">платформа: {platformLabel}</span>
-                </>
-              ) : null}
-            </p>
-            <p className="owner-programs__muted" style={{ marginTop: 8, marginBottom: summaryWarnings.length ? 8 : 0 }}>
-              {connectionFound ? "Сигнал от кода получен." : "Сигнал от кода по проверке ещё не подтверждён."}
-              {lastSeen ? ` Последний сигнал: ${lastSeen}.` : ""}
-            </p>
-            {summaryWarnings.length ? (
-              <ul className="lk-widget-install__warn-list" style={{ marginTop: 0, marginBottom: 0 }}>
-                {summaryWarnings.map((warning, index) => (
-                  <li key={`${warning}-${index}`}>{warning}</li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-
           <WidgetInstallSnippetCard
             compact
-            title="Код на сайте"
-            subtitle="Скопируйте и вставьте в шаблон сайта."
+            title="Код для вставки на сайт"
             snippet={data.widget_embed_snippet}
             onCopy={onCopySnippet}
             copyHint={copyHint}
           />
 
-          <WidgetInstallConnectionCheckCard
-            verifyLoading={verifyLoading}
-            onVerify={onVerify}
-            statusView={connectionCheckView}
-            showVerifyButton={false}
-            hideIntro
-          />
-
-          <section className="owner-programs__site-section">
+          <section className="owner-programs__site-section owner-programs__site-section_plain">
             <h3 className="owner-programs__site-section-title">Какие данные отправлять</h3>
-            <p className="owner-programs__muted" style={{ marginBottom: 10 }}>
-              Системные поля передаются всегда. Дополнительные поля можно включить для этого сайта.
-            </p>
-            <div className="lk-widget-install__field-label">Системные поля</div>
-            <div className="lk-widget-install__warn-list" data-testid="capture-required-fields">
-              {REQUIRED_CAPTURE_FIELDS.map((field) => (
-                <label key={field.key} className="lk-widget-install__field-label" style={{ display: "block", marginBottom: 8 }}>
-                  <input type="checkbox" checked readOnly disabled /> {field.label}
-                </label>
-              ))}
-            </div>
-            <div className="lk-widget-install__field-label" style={{ marginTop: 14 }}>
-              Дополнительные поля
-            </div>
-            <div className="lk-widget-install__warn-list" data-testid="capture-optional-fields">
-              {OPTIONAL_CAPTURE_FIELDS.map((field) => {
-                const checked = enabledOptionalFields.includes(field.key);
-                return (
-                  <label key={field.key} className="lk-widget-install__field-label" style={{ display: "block", marginBottom: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        setCaptureConfig((current) => {
-                          const currentEnabled = current.enabled_optional_fields || [];
-                          const nextEnabled = event.target.checked
-                            ? [...currentEnabled, field.key].filter((value, index, arr) => arr.indexOf(value) === index)
-                            : currentEnabled.filter((value) => value !== field.key);
-                          return { enabled_optional_fields: nextEnabled };
-                        });
-                      }}
-                    />{" "}
-                    {field.label}
-                    {field.recommended ? " · рекомендуем" : ""}
-                  </label>
-                );
-              })}
-            </div>
-            <p className="lk-widget-install__hint" style={{ marginTop: 10 }}>
-              Будут отправляться: {sendingPreview.join(", ")}
-            </p>
-            <div className="owner-programs__site-actions">
-              <button type="button" className="lk-widget-install__btn" disabled={saving} onClick={() => onSave()}>
-                {saving ? "Сохраняем…" : "Сохранить настройки данных"}
-              </button>
-            </div>
-            {saveHint ? <p className="lk-widget-install__hint">{saveHint}</p> : null}
+            <WidgetInstallCaptureFieldsPanel
+              introClassName="owner-programs__muted"
+              introText="Системные поля передаются всегда. Дополнительные поля можно включить для этого сайта."
+              enabledOptionalFields={enabledOptionalFields}
+              setCaptureConfig={setCaptureConfig}
+            >
+              <div className="owner-programs__site-actions">
+                <button type="button" className="lk-widget-install__btn" disabled={saving} onClick={() => onSave()}>
+                  {saving ? "Сохраняем…" : "Сохранить настройки данных"}
+                </button>
+              </div>
+              {saveHint ? <p className="lk-widget-install__hint">{saveHint}</p> : null}
+            </WidgetInstallCaptureFieldsPanel>
           </section>
         </div>
       </div>
@@ -1171,48 +1188,12 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
 
         <section className="lk-widget-install__card">
           <h2 className="lk-partner__section-title">Какие данные отправлять</h2>
-          <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
-            Системные поля передаются всегда. Дополнительные поля можно включить для этого сайта без
-            изменения публичного контракта.
-          </p>
-          <div className="lk-widget-install__field-label">Системные поля</div>
-          <div className="lk-widget-install__warn-list" data-testid="capture-required-fields">
-            {REQUIRED_CAPTURE_FIELDS.map((field) => (
-              <label key={field.key} className="lk-widget-install__field-label" style={{ display: "block", marginBottom: 8 }}>
-                <input type="checkbox" checked readOnly disabled /> {field.label}
-              </label>
-            ))}
-          </div>
-          <div className="lk-widget-install__field-label" style={{ marginTop: 14 }}>
-            Дополнительные поля
-          </div>
-          <div className="lk-widget-install__warn-list" data-testid="capture-optional-fields">
-            {OPTIONAL_CAPTURE_FIELDS.map((field) => {
-              const checked = enabledOptionalFields.includes(field.key);
-              return (
-                <label key={field.key} className="lk-widget-install__field-label" style={{ display: "block", marginBottom: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(event) => {
-                      setCaptureConfig((current) => {
-                        const currentEnabled = current.enabled_optional_fields || [];
-                        const nextEnabled = event.target.checked
-                          ? [...currentEnabled, field.key].filter((value, index, arr) => arr.indexOf(value) === index)
-                          : currentEnabled.filter((value) => value !== field.key);
-                        return { enabled_optional_fields: nextEnabled };
-                      });
-                    }}
-                  />{" "}
-                  {field.label}
-                  {field.recommended ? " · рекомендуем" : ""}
-                </label>
-              );
-            })}
-          </div>
-          <p className="lk-widget-install__hint" style={{ marginTop: 10 }}>
-            Будут отправляться: {sendingPreview.join(", ")}
-          </p>
+          <WidgetInstallCaptureFieldsPanel
+            introClassName="lk-partner__muted"
+            introText="Системные поля передаются всегда. Дополнительные поля можно включить для этого сайта без изменения публичного контракта."
+            enabledOptionalFields={enabledOptionalFields}
+            setCaptureConfig={setCaptureConfig}
+          />
         </section>
 
         <section className="lk-widget-install__card">

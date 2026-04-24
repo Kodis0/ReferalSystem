@@ -65,6 +65,13 @@ for _o in REFERRAL_CAPTURE_PUBLIC_ORIGINS:
 # Needed so the SPA can send `credentials: 'include'` for referral session capture.
 CORS_ALLOW_CREDENTIALS = True
 
+from corsheaders.defaults import default_headers
+
+# Custom headers on owner API (e.g. diagnostics activity refresh); required for browser preflight.
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-site-owner-activity-refresh",
+]
+
 # Browser widgets call `/public/v1/...` from arbitrary landing origins listed on each `Site`.
 # Those endpoints set their own `Access-Control-*` headers from `Site.allowed_origins`.
 # Exclude them from django-cors-headers so OPTIONS preflight is answered by our views

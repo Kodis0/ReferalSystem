@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import SiteShellWidgetActionsBar from "../widget-install/SiteShellWidgetActionsBar";
+import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
 const OPTIONAL_CAPTURE_FIELDS = [
   { key: "name", label: "Имя", recommended: true },
@@ -43,6 +44,13 @@ function withSelectedSite(url, sitePublicId) {
   if (!sitePublicId) return url;
   const u = new URL(url, window.location.origin);
   u.searchParams.set("site_public_id", sitePublicId);
+  return u.toString();
+}
+
+/** Query flag avoids CORS preflight issues with a custom header on GET diagnostics. */
+function siteDiagnosticsFetchUrl(url, sitePublicId, activityRefresh) {
+  const u = new URL(withSelectedSite(url, sitePublicId), window.location.origin);
+  if (activityRefresh) u.searchParams.set("owner_activity_refresh", "1");
   return u.toString();
 }
 
@@ -89,7 +97,7 @@ export default function SiteShellToolbarSubscriber({
 
   const load = useCallback(
     async (options = {}) => {
-      const { quiet = false } = options;
+      const { quiet = false, activityRefresh = false } = options;
       const gen = ++loadGen.current;
       if (!siteId) return;
       if (!quiet) {
@@ -105,18 +113,27 @@ export default function SiteShellToolbarSubscriber({
         const intPayload = await resInt.json().catch(() => ({}));
         if (gen !== loadGen.current) return;
         if (!resInt.ok) {
+          const message = apiErrorDisplayText(intPayload) || `Ошибка загрузки (${resInt.status})`;
+          if (quiet) {
+            setError(message);
+            return;
+          }
           setData(null);
           setDiag(null);
-          setError(apiErrorDisplayText(intPayload) || `Ошибка загрузки (${resInt.status})`);
+          setError(message);
           return;
         }
+        setError("");
         setData(intPayload);
         setWidgetEnabled(Boolean(intPayload.widget_enabled));
-        const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, intPayload.public_id || siteId), {
-          method: "GET",
-          headers: authHeaders(),
-          credentials: "include",
-        });
+        const resDiag = await fetch(
+          siteDiagnosticsFetchUrl(API_ENDPOINTS.siteIntegrationDiagnostics, intPayload.public_id || siteId, activityRefresh),
+          {
+            method: "GET",
+            headers: authHeaders(),
+            credentials: "include",
+          },
+        );
         if (gen !== loadGen.current) return;
         if (resDiag.ok) {
           setDiag(await resDiag.json().catch(() => null));
@@ -126,6 +143,10 @@ export default function SiteShellToolbarSubscriber({
       } catch (e) {
         console.error(e);
         if (gen !== loadGen.current) return;
+        if (quiet) {
+          setError("network");
+          return;
+        }
         setData(null);
         setDiag(null);
         setError("network");
@@ -169,6 +190,7 @@ export default function SiteShellToolbarSubscriber({
         if (typeof payload?.widget_enabled === "boolean") {
           setWidgetEnabled(Boolean(payload.widget_enabled));
         }
+        emitSiteOwnerActivity(siteId);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
           headers: authHeaders(),
@@ -199,6 +221,7 @@ export default function SiteShellToolbarSubscriber({
       const payload = await res.json().catch(() => ({}));
       if (res.ok) {
         setData(payload);
+        emitSiteOwnerActivity(siteId);
         await load();
       }
     } catch (e) {
@@ -221,6 +244,7 @@ export default function SiteShellToolbarSubscriber({
       const payload = await res.json().catch(() => ({}));
       if (res.ok) {
         setData(payload);
+        emitSiteOwnerActivity(siteId);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
           headers: authHeaders(),
@@ -240,11 +264,12 @@ export default function SiteShellToolbarSubscriber({
   const onRefreshStatus = useCallback(async () => {
     setRefreshBusy(true);
     try {
-      await load({ quiet: true });
+      await load({ quiet: true, activityRefresh: true });
+      emitSiteOwnerActivity(siteId);
     } finally {
       setRefreshBusy(false);
     }
-  }, [load]);
+  }, [load, siteId]);
 
   const handleDeleteSiteFromShell = useCallback(async () => {
     const title =
@@ -306,7 +331,9 @@ export default function SiteShellToolbarSubscriber({
     if (typeof setSiteShellToolbar !== "function") {
       return undefined;
     }
-    if (loading || error || !data) {
+    // Не учитываем `error` отдельно: после успешной загрузки сбрасываем error, а при тихом
+    // обновлении не очищаем data — иначе плашка пропадала бы при кратковременном сбое API.
+    if (loading || !data) {
       setSiteShellToolbar(null);
       return undefined;
     }
@@ -328,7 +355,6 @@ export default function SiteShellToolbarSubscriber({
     data,
     deleteSiteBusy,
     diag?.site_status,
-    error,
     loading,
     refreshBusy,
     saving,

@@ -5,7 +5,7 @@
  */
 
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
 import LkSidebar from "../pages/lk/LkSidebar";
@@ -16,12 +16,26 @@ import ProjectOverviewPage from "../pages/lk/owner-programs/ProjectOverviewPage"
 import ProjectMembersPage from "../pages/lk/owner-programs/ProjectMembersPage";
 import ProjectSettingsPage from "../pages/lk/owner-programs/ProjectSettingsPage";
 import SiteProjectLayout from "../pages/lk/owner-programs/SiteProjectLayout";
+import ProjectReferralBlockScreen from "../pages/lk/owner-programs/ProjectReferralBlockScreen";
 import ProjectWidgetInstallScreen from "../pages/lk/widget-install/ProjectWidgetInstallScreen";
 import ProjectSiteManagementScreen from "../pages/lk/widget-install/ProjectSiteManagementScreen";
 import WidgetInstallScreen from "../pages/lk/widget-install/widget-install";
 import LegacyOwnerSiteRedirect from "../pages/lk/owner-programs/LegacyOwnerSiteRedirect";
 import SiteDashboardPage from "../pages/lk/owner-programs/SiteDashboardPage";
 import { isUuidString } from "../pages/registration/postJoinNavigation";
+
+if (typeof window.ResizeObserver === "undefined") {
+  class ResizeObserver {
+    observe() {}
+
+    unobserve() {}
+
+    disconnect() {}
+  }
+
+  window.ResizeObserver = ResizeObserver;
+  global.ResizeObserver = ResizeObserver;
+}
 
 /** Mirrors lk.js `SiteShellDefaultToDashboard` for isolated route trees in tests. */
 function SiteShellDefaultToDashboardStub() {
@@ -2205,11 +2219,17 @@ describe("Canonical site identity contract", () => {
   const primarySite = "33333333-3333-3333-3333-333333333333";
   const firstSite = "44444444-4444-4444-4444-444444444444";
 
-  function mockOwnerAndIntegration({ owner, byId, defaultIntegration }) {
-    return jest.spyOn(global, "fetch").mockImplementation((url) => {
+  function mockOwnerAndIntegration({ owner, byId, defaultIntegration, pageScan }) {
+    return jest.spyOn(global, "fetch").mockImplementation((url, opts = {}) => {
       const u = String(url);
       if (u.includes("/referrals/site/owner-sites/")) {
         return Promise.resolve({ ok: true, json: async () => owner });
+      }
+      if (u.includes("/referrals/site/page-scan/")) {
+        if (typeof pageScan === "function") {
+          return Promise.resolve(pageScan(url, opts));
+        }
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
       }
       if (u.includes("/referrals/site/integration/analytics/")) {
         return Promise.resolve({
@@ -2263,6 +2283,16 @@ describe("Canonical site identity contract", () => {
     };
   }
 
+  function makePageScanPayload(blocks, platform = "tilda") {
+    return {
+      url: "https://example.com/page",
+      platform,
+      visual_import_available: true,
+      visual_mode: "screenshot",
+      blocks,
+    };
+  }
+
   function mockLegacyOwnerSiteRedirectIntegration() {
     return jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
@@ -2298,6 +2328,346 @@ describe("Canonical site identity contract", () => {
     const { pathname, search } = useLocation();
     return <span data-testid="url-snapshot">{pathname}{search}</span>;
   }
+
+  it('renders the "Блок для сайта" tab with builder foundation shell', async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("link", { name: "Блок для сайта" })).toBeInTheDocument();
+    expect(screen.getByTestId("referral-builder-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+    expect(screen.getByLabelText("URL страницы")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Импортировать дизайн" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "На весь экран" })).toBeInTheDocument();
+  });
+
+  it("imports screenshot blocks into a single page stack with inline insertion slots", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () =>
+          makePageScanPayload([
+            {
+              id: "screenshot-section-1",
+              selector: null,
+              title: "Секция 1",
+              position: 1,
+              kind: "screenshot",
+              screenshot_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+              width: 1440,
+              height: 720,
+            },
+            {
+              id: "screenshot-section-2",
+              selector: null,
+              title: "Секция 2",
+              position: 2,
+              kind: "screenshot",
+              screenshot_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+              width: 1440,
+              height: 640,
+            },
+          ]),
+      }),
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
+    });
+
+    const pageStack = screen.getByTestId("imported-page-stack-node");
+    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+    expect(screen.queryByTestId("site-scan-block-node")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("imported-site-block-node")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("screenshot-site-block-node")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("referral-insert-slot-node")).not.toBeInTheDocument();
+    expect(within(pageStack).getAllByTestId("imported-page-section")).toHaveLength(2);
+    const slotNodes = within(pageStack).getAllByTestId("imported-page-insert-slot");
+    const slotButtons = slotNodes.map((slotNode) => within(slotNode).getByText("+ Вставить реферальный блок здесь"));
+    expect(slotButtons).toHaveLength(3);
+    const images = within(pageStack).getAllByTestId("imported-page-section-image");
+    expect(images[0]).toHaveAttribute("src", expect.stringContaining("data:image/png;base64,"));
+    expect(container.querySelector("iframe")).toBeNull();
+    fireEvent.click(slotButtons[1]);
+
+    await waitFor(() => {
+      expect(within(within(pageStack).getAllByTestId("imported-page-insert-slot")[1]).getByText("+ Вставить реферальный блок здесь"))
+        .toHaveAttribute("aria-pressed", "true");
+    });
+
+    expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
+    expect(screen.getByTestId("referral-builder-inline-preview")).toBeInTheDocument();
+    expect(screen.getAllByText("Стать рефералом")).toHaveLength(1);
+  });
+
+  it("deletes the selected imported screenshot block on Delete", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () =>
+          makePageScanPayload([
+            {
+              id: "screenshot-section-1",
+              selector: null,
+              title: "Секция 1",
+              position: 1,
+              kind: "screenshot",
+              screenshot_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+              width: 1440,
+              height: 720,
+            },
+            {
+              id: "screenshot-section-2",
+              selector: null,
+              title: "Секция 2",
+              position: 2,
+              kind: "screenshot",
+              screenshot_data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z8n8AAAAASUVORK5CYII=",
+              width: 1440,
+              height: 640,
+            },
+          ]),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toBeInTheDocument();
+    });
+
+    const pageStack = screen.getByTestId("imported-page-stack-node");
+    const sectionsBeforeDelete = within(pageStack).getAllByTestId("imported-page-section");
+    expect(sectionsBeforeDelete).toHaveLength(2);
+
+    fireEvent.click(sectionsBeforeDelete[0]);
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    await waitFor(() => {
+      expect(within(pageStack).getAllByTestId("imported-page-section")).toHaveLength(1);
+    });
+
+    expect(within(pageStack).getAllByTestId("imported-page-insert-slot")).toHaveLength(2);
+  });
+
+  it("shows explicit warning when visual import is unavailable and falls back to section map", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: true,
+        json: async () => ({
+          url: "https://example.com/page",
+          platform: "tilda",
+          visual_import_available: false,
+          detail: "Visual import is not available on this server",
+          blocks: [
+            {
+              id: "rec123456789",
+              selector: "#rec123456789",
+              title: "Блок 1",
+              preview_text: "Текстовая карта секции",
+              position: 1,
+              kind: "hero",
+            },
+          ],
+        }),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("site-scan-block-node")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("imported-site-block-node")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("screenshot-site-block-node")).not.toBeInTheDocument();
+  });
+
+  it("shows a friendly scan error and keeps the referral preview node", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({ detail: "Не удалось просканировать страницу" }),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "https://bad.example/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Не удалось просканировать страницу")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+  });
+
+  it("shows backend scan detail when it is available", async () => {
+    mockOwnerAndIntegration({
+      owner: makeOwnerProjectsPayload([
+        makeProject({
+          id: projectId,
+          name: "P",
+          sites: [makeSite({ public_id: siteFromPath, project_id: projectId, project: { name: "P" } })],
+        }),
+      ]),
+      byId: {
+        [siteFromPath]: makeIntegrationPayload(siteFromPath, "Builder site"),
+      },
+      pageScan: () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({ detail: "Разрешены только адреса с http:// или https://." }),
+      }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/${projectId}/sites/${siteFromPath}/referral-block`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
+    });
+
+    await userEvent.type(screen.getByLabelText("URL страницы"), "example.com/page");
+    await userEvent.click(screen.getByRole("button", { name: "Импортировать дизайн" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Разрешены только адреса с http:// или https://.")).toBeInTheDocument();
+    });
+  });
 
   // --- 1. Direct open of canonical route renders exactly that site -----------
   it("canonical route renders exactly :sitePublicId from path", async () => {

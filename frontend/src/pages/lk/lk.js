@@ -1,11 +1,10 @@
 import { Routes, Route, Link, useNavigate, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Search, UserRound } from "lucide-react";
+import { ChevronDown, Lightbulb, UserRound } from "lucide-react";
 import LumoLogo from "../../static/images/LUMO2.svg";
 import LumoLogoBlack from "../../static/images/LUMOBlack.svg";
 import NewsIcon from "../../static/images/News.svg";
 import BugIcon from "../../static/images/Bug.svg";
-import LampIcon from "../../static/images/Lamp.svg";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
 import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
 import Settings from "./settings/settings"; // импорт компонента Settings
@@ -27,6 +26,8 @@ import ProjectMembersPage from "./owner-programs/ProjectMembersPage";
 import ProjectSettingsPage from "./owner-programs/ProjectSettingsPage";
 import ProjectInfoPage from "./owner-programs/ProjectInfoPage";
 import SiteDashboardPage from "./owner-programs/SiteDashboardPage";
+import SiteHistoryPage from "./owner-programs/SiteHistoryPage";
+import ProjectReferralBlockScreen from "./owner-programs/ProjectReferralBlockScreen";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import { isUuidString } from "../registration/postJoinNavigation";
@@ -101,6 +102,16 @@ function SupportButtonChevron() {
   );
 }
 
+/** Событие для обновления счётчика на кнопке «Идеи» без перезагрузки (например, после ответа API). */
+export const LK_IDEAS_NAV_BADGE_EVENT = "lk-ideas-nav-badge-count";
+
+function formatIdeaNavBadgeLabel(count) {
+  if (count <= 0) return "";
+  if (count > 99) return "99+";
+  if (count >= 10) return "9+";
+  return String(count);
+}
+
 function LK() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
@@ -114,6 +125,7 @@ function LK() {
   const location = useLocation();
   const { user, fetchUser } = useCurrentUser();
   const { logout } = useAuth();
+  const [ideaNavBadgeCount, setIdeaNavBadgeCount] = useState(0);
 
   const accountId = formatAccountId(user);
 
@@ -138,6 +150,19 @@ function LK() {
 
   const lkHeaderBg = lkTheme === "light" ? "#ffffff" : "#242F3D";
   const currentPath = location.pathname.toLowerCase();
+  /** Совпадает с левым краем full-bleed `.owner-programs__shell` (margin -24px к padding `.LK-content`). */
+  const headerSearchAlignShellTrack = /^\/lk\/partner\/project\/[^/]+/i.test(location.pathname);
+
+  useEffect(() => {
+    function onIdeasBadgeEvent(event) {
+      const raw = event?.detail?.count;
+      const n = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(n) || n < 0) return;
+      setIdeaNavBadgeCount(Math.min(999, Math.floor(n)));
+    }
+    window.addEventListener(LK_IDEAS_NAV_BADGE_EVENT, onIdeasBadgeEvent);
+    return () => window.removeEventListener(LK_IDEAS_NAV_BADGE_EVENT, onIdeasBadgeEvent);
+  }, []);
 
   useEffect(() => {
     function onDocClick(e) {
@@ -198,7 +223,10 @@ function LK() {
   }, [lang]);
 
   return (
-    <div className="LK" style={{ minHeight: "100vh", backgroundColor: lkTheme === "light" ? "#ffffff" : "#17212B" }}>
+    <div
+      className={`LK${headerSearchAlignShellTrack ? " LK--header-search-align-shell" : ""}`}
+      style={{ minHeight: "100vh", backgroundColor: lkTheme === "light" ? "#ffffff" : "#17212B" }}
+    >
       <header
         className="LK-header"
         style={{
@@ -223,28 +251,35 @@ function LK() {
             </Link>
           </div>
 
-          <div className="lk-header__center">
-            <label className="lk-header__search" aria-label="Поиск">
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden="true"
-                className="lk-header__search-button"
-                onMouseDown={(event) => event.preventDefault()}
-              >
-                <Search size={16} className="lk-header__search-icon" />
-              </button>
-              <input
-                ref={searchInputRef}
-                className="lk-header__search-input"
-                type="text"
-                placeholder="Поиск"
-                aria-keyshortcuts="Control+K Meta+K"
-              />
-              <span className="lk-header__search-shortcut">Ctrl K</span>
-            </label>
+          <div className="lk-header__content-strip">
+            <div className="lk-header__center">
+              <div className="lk-header__search" role="search">
+                <div
+                  className="lk-header__search-inputWrapper"
+                  onMouseDown={(event) => {
+                    if (event.target !== searchInputRef.current) {
+                      event.preventDefault();
+                    }
+                  }}
+                  onClick={() => searchInputRef.current?.focus()}
+                >
+                  <input
+                    ref={searchInputRef}
+                    id="lk-header-search"
+                    className="lk-header__search-input"
+                    type="text"
+                    placeholder="Поиск"
+                    tabIndex={0}
+                    aria-label="Поиск"
+                    aria-keyshortcuts="Control+K Meta+K"
+                  />
+                  <span className="lk-header__search-shortcut lk-header__search-shortcut_hint" aria-hidden="true">
+                    Ctrl K
+                  </span>
+                </div>
+              </div>
 
-            <div className="lk-header__nav" aria-label="Навигация">
+              <div className="lk-header__nav" aria-label="Навигация">
               <button
                 type="button"
                 className={`lk-header__nav-btn ${currentPath === "/lk/news" ? "lk-header__nav-btn_active" : ""}`}
@@ -284,7 +319,11 @@ function LK() {
               <button
                 type="button"
                 className={`lk-header__nav-btn ${currentPath === "/lk/idea" ? "lk-header__nav-btn_active" : ""}`}
-                aria-label="Предложить идею"
+                aria-label={
+                  ideaNavBadgeCount > 0
+                    ? `Предложить идею, новых: ${ideaNavBadgeCount > 99 ? "более 99" : ideaNavBadgeCount}`
+                    : "Предложить идею"
+                }
                 onClick={() => {
                   setMenuOpen(false);
                   setSupportOpen(false);
@@ -293,15 +332,27 @@ function LK() {
                   navigate("/LK/idea");
                 }}
               >
-                <img src={LampIcon} alt="" aria-hidden="true" className="lk-header__nav-icon" />
+                <span className="lk-header__nav-ideas-wrap">
+                  <Lightbulb
+                    className="lk-header__nav-icon lk-header__nav-icon_ideas"
+                    size={20}
+                    strokeWidth={1.65}
+                    aria-hidden="true"
+                  />
+                  {ideaNavBadgeCount > 0 ? (
+                    <span className="lk-header__nav-badge" aria-hidden="true">
+                      {formatIdeaNavBadgeLabel(ideaNavBadgeCount)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="lk-header__tooltip" role="tooltip">
                   Предложить идею
                 </span>
               </button>
+              </div>
             </div>
-          </div>
 
-          <div className="lk-header__right">
+            <div className="lk-header__right">
             <div className="lk-header__support" ref={supportRef}>
                 <button
                   type="button"
@@ -403,6 +454,7 @@ function LK() {
                 </button>
               </div>
             )}
+            </div>
             </div>
           </div>
         </div>
@@ -565,7 +617,9 @@ function LK() {
                 <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
                 <Route path="sites/:sitePublicId/settings" element={<ProjectSettingsPage />} />
                 <Route path="sites/:sitePublicId/dashboard" element={<SiteDashboardPage />} />
+                <Route path="sites/:sitePublicId/history" element={<SiteHistoryPage />} />
                 <Route path="sites/:sitePublicId/widget" element={<ProjectSiteManagementScreen />} />
+                <Route path="sites/:sitePublicId/referral-block" element={<ProjectReferralBlockScreen />} />
                 <Route path="sites/:sitePublicId" element={<SiteShellDefaultToDashboard />} />
                 <Route path="info" element={<ProjectInfoPage />} />
                 <Route path="site" element={<ProjectSiteManagementScreen legacyTabRoute />} />

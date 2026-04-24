@@ -8,6 +8,7 @@ import "../partner/partner.css";
 import "../settings/settings.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
+import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -152,6 +153,7 @@ export default function ProjectSettingsPage() {
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setSaveState("success");
+      emitSiteOwnerActivity(id);
       if (typeof reloadProjectHead === "function") {
         try {
           await reloadProjectHead();
