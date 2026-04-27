@@ -118,7 +118,7 @@ cd /var/www/lumoref/app/backend && ../venv/bin/python manage.py migrate
 | `DEPLOY_SSH_PRIVATE_KEY` | Приватный ключ (полный PEM), **пара к публичному ключу в `~/.ssh/authorized_keys` на сервере** |
 | `DEPLOY_PATH` | Абсолютный путь к клону репозитория на сервере, например `/var/www/lumoref/app` |
 | `REACT_APP_API_URL` | Опционально: переопределить URL API для сборки фронта (по умолчанию в скрипте `https://api.lumoref.ru`) |
-| `REACT_APP_GOOGLE_CLIENT_ID` | Опционально: **Web** OAuth Client ID (`*.apps.googleusercontent.com`) для кнопки «Вход через Google» на собранном фронте; должен совпадать с `GOOGLE_OAUTH_CLIENT_ID` в `backend/.env` на сервере |
+| `REACT_APP_GOOGLE_CLIENT_ID` | Опционально: **Web** OAuth Client ID для сборки фронта. Если секрет пустой, `deploy/deploy.sh` подставит то же значение из **`GOOGLE_OAUTH_CLIENT_ID` в `backend/.env`** на сервере (достаточно одной строки в `.env`). |
 
 Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` или ручной `workflow_dispatch`. Перед `deploy/deploy.sh` на сервере выполняется `git fetch` + `git reset --hard origin/main`, чтобы сбросить случайные правки в отслеживаемых файлах на VPS и не зависеть от устаревшей версии скрипта деплоя.
 

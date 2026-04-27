@@ -61,7 +61,7 @@ npm run dev
 ### Frontend (`frontend/.env`)
 
 - `REACT_APP_API_URL` — базовый URL API (по умолчанию `http://localhost:8000`)
-- `REACT_APP_GOOGLE_CLIENT_ID` — (опционально) Web client ID Google OAuth; должен совпадать с `GOOGLE_OAUTH_CLIENT_ID` на бэкенде. На проде задаётся при сборке: переменная окружения / секрет GitHub Actions (см. `deploy/deploy.sh`, `docs/DEPLOY_PRODUCTION.md`).
+- `REACT_APP_GOOGLE_CLIENT_ID` — (опционально) Web client ID Google OAuth; должен совпадать с `GOOGLE_OAUTH_CLIENT_ID` на бэкенде. На проде при `deploy/deploy.sh`: секрет GitHub Actions, `export` перед скриптом, **или** только `GOOGLE_OAUTH_CLIENT_ID` в серверном `backend/.env` — скрипт сам подставит его в сборку фронта (см. `docs/DEPLOY_PRODUCTION.md`).
 
 ### Backend (`backend/.env`)
 

@@ -47,6 +47,19 @@ echo "==> Backend: dependencies"
 echo "==> Backend: Playwright browsers (${PLAYWRIGHT_INSTALL_ARGS})"
 "${PYTHON}" -m playwright install ${PLAYWRIGHT_INSTALL_ARGS}
 
+# SPA needs REACT_APP_* at build time. If CI did not pass REACT_APP_GOOGLE_CLIENT_ID, reuse the
+# same Web client ID from backend/.env (single place to maintain on the server).
+if [[ -z "${REACT_APP_GOOGLE_CLIENT_ID}" ]] && [[ -f "${APP_ROOT}/backend/.env" ]]; then
+  _gline="$(grep -E '^[[:space:]]*GOOGLE_OAUTH_CLIENT_ID=' "${APP_ROOT}/backend/.env" 2>/dev/null | tail -n1 || true)"
+  if [[ -n "${_gline}" ]]; then
+    REACT_APP_GOOGLE_CLIENT_ID="${_gline#*=}"
+    REACT_APP_GOOGLE_CLIENT_ID="${REACT_APP_GOOGLE_CLIENT_ID//$'\r'/}"
+    REACT_APP_GOOGLE_CLIENT_ID="${REACT_APP_GOOGLE_CLIENT_ID#\"}"
+    REACT_APP_GOOGLE_CLIENT_ID="${REACT_APP_GOOGLE_CLIENT_ID%\"}"
+    REACT_APP_GOOGLE_CLIENT_ID="$(printf '%s' "${REACT_APP_GOOGLE_CLIENT_ID}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  fi
+fi
+
 echo "==> Frontend: build (API URL=${REACT_APP_API_URL})"
 export REACT_APP_API_URL
 printf 'REACT_APP_API_URL=%s\n' "${REACT_APP_API_URL}" > frontend/.env.production
@@ -55,7 +68,7 @@ if [[ -n "${REACT_APP_GOOGLE_CLIENT_ID}" ]]; then
   export REACT_APP_GOOGLE_CLIENT_ID
   echo "    Google Client ID: set for SPA build"
 else
-  echo "    Google Client ID: not set (SPA built without REACT_APP_GOOGLE_CLIENT_ID)"
+  echo "    Google Client ID: not set (SPA built without REACT_APP_GOOGLE_CLIENT_ID; add GOOGLE_OAUTH_CLIENT_ID to backend/.env or export REACT_APP_GOOGLE_CLIENT_ID / GitHub secret)"
 fi
 (
   cd frontend
