@@ -10,7 +10,7 @@
 # deploy user: SSH + git pull; passwordless sudo only for nginx/systemctl (recommended).
 # Gunicorn runs as www-data (see deploy/systemd/lumoref-gunicorn.service).
 #
-# Env overrides: VENV_PATH, REACT_APP_API_URL, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH
+# Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH
 
 set -euo pipefail
 
@@ -20,6 +20,8 @@ cd "${APP_ROOT}"
 
 VENV_PATH="${VENV_PATH:-/var/www/lumoref/venv}"
 REACT_APP_API_URL="${REACT_APP_API_URL:-https://api.lumoref.ru}"
+# Optional; must match GOOGLE_OAUTH_CLIENT_ID in backend/.env (same Web client ID as in Google Console).
+REACT_APP_GOOGLE_CLIENT_ID="${REACT_APP_GOOGLE_CLIENT_ID:-}"
 PYTHON="${VENV_PATH}/bin/python"
 PIP="${VENV_PATH}/bin/pip"
 GUNICORN="${VENV_PATH}/bin/gunicorn"
@@ -47,6 +49,13 @@ echo "==> Backend: Playwright browsers (${PLAYWRIGHT_INSTALL_ARGS})"
 echo "==> Frontend: build (API URL=${REACT_APP_API_URL})"
 export REACT_APP_API_URL
 printf 'REACT_APP_API_URL=%s\n' "${REACT_APP_API_URL}" > frontend/.env.production
+if [[ -n "${REACT_APP_GOOGLE_CLIENT_ID}" ]]; then
+  printf 'REACT_APP_GOOGLE_CLIENT_ID=%s\n' "${REACT_APP_GOOGLE_CLIENT_ID}" >> frontend/.env.production
+  export REACT_APP_GOOGLE_CLIENT_ID
+  echo "    Google Client ID: set for SPA build"
+else
+  echo "    Google Client ID: not set (SPA built without REACT_APP_GOOGLE_CLIENT_ID)"
+fi
 (
   cd frontend
   npm ci

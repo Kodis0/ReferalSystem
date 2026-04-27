@@ -118,8 +118,17 @@ cd /var/www/lumoref/app/backend && ../venv/bin/python manage.py migrate
 | `DEPLOY_SSH_PRIVATE_KEY` | Приватный ключ (полный PEM), **пара к публичному ключу в `~/.ssh/authorized_keys` на сервере** |
 | `DEPLOY_PATH` | Абсолютный путь к клону репозитория на сервере, например `/var/www/lumoref/app` |
 | `REACT_APP_API_URL` | Опционально: переопределить URL API для сборки фронта (по умолчанию в скрипте `https://api.lumoref.ru`) |
+| `REACT_APP_GOOGLE_CLIENT_ID` | Опционально: **Web** OAuth Client ID (`*.apps.googleusercontent.com`) для кнопки «Вход через Google» на собранном фронте; должен совпадать с `GOOGLE_OAUTH_CLIENT_ID` в `backend/.env` на сервере |
 
 Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` или ручной `workflow_dispatch`.
+
+### Google Sign-In на проде
+
+1. **Google Cloud Console** → OAuth client **Web application** → **Authorized JavaScript origins**: `https://lumoref.ru`, `https://www.lumoref.ru` (и при ручной сборке с машины — при необходимости `http://localhost:3000`).
+2. **Client secret** для текущего кода **не используется** (обмен идёт по JWT `credential` и проверке `aud` = Client ID). Хранить секрет в репозитории не нужно.
+3. На **VPS** в `backend/.env`: раскомментировать и задать `GOOGLE_OAUTH_CLIENT_ID=<тот же Client ID>`, перезапустить Gunicorn.
+4. **Сборка фронта**: `deploy/deploy.sh` подставляет `REACT_APP_GOOGLE_CLIENT_ID` в `frontend/.env.production`, если переменная задана в окружении (в т.ч. из секрета GitHub Actions выше) или перед вызовом скрипта: `export REACT_APP_GOOGLE_CLIENT_ID='…apps.googleusercontent.com'`.
+5. **OAuth consent screen**: пока приложение в статусе **Testing**, вход смогут только **Test users**. Для всех пользователей — опубликовать приложение (**In production**) и пройти проверки Google при необходимости.
 
 ### Что сделать вручную один раз
 
@@ -136,6 +145,8 @@ Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` и
 # Деплой вручную
 cd /var/www/lumoref/app
 export REACT_APP_API_URL=https://api.lumoref.ru
+# опционально, тот же ID что в backend/.env → GOOGLE_OAUTH_CLIENT_ID
+export REACT_APP_GOOGLE_CLIENT_ID='YOUR_WEB_CLIENT_ID.apps.googleusercontent.com'
 bash deploy/deploy.sh
 
 # Backend

@@ -18,11 +18,12 @@ jobs:
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          REACT_APP_GOOGLE_CLIENT_ID: ${{ secrets.REACT_APP_GOOGLE_CLIENT_ID }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          envs: DEPLOY_PATH,REACT_APP_API_URL
+          envs: DEPLOY_PATH,REACT_APP_API_URL,REACT_APP_GOOGLE_CLIENT_ID
           script_stop: true
           command_timeout: 30m
           script: |

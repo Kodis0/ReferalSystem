@@ -91,6 +91,34 @@ html:has(.registration-page) body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Вход (/login): без прокрутки документа (min-height 100vh у страницы и у cloud + padding давали лишний скролл). */
+html:has(.login-page:not(.registration-page)),
+html:has(.login-page:not(.registration-page)) body {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+#root:has(.login-page:not(.registration-page)) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.login-page:not(.registration-page) {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.login-page:not(.registration-page) .login-page__cloud {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .login-page *,
 .login-page *::before,
 .login-page *::after {
