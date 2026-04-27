@@ -4,38 +4,124 @@
   --lk-shell-sidebar: 256px;
   --lk-shell-gutter: 40px;
   --lk-content-padding-x: 24px;
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.LK::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Иначе за сеткой и в полосе scrollbar-gutter просвечивает глобальный --page-bg (#050c26), не #17212b. */
+html:has(.LK[data-lk-theme="dark"]) {
+  background: #17212b;
+  scrollbar-gutter: auto;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin: 0;
+  padding: 0;
+  scrollbar-width: none;
+  /* трек как фон шапки lkHeaderBg (#242F3D) */
+  scrollbar-color: rgba(255, 255, 255, 0.28) #242f3d;
+}
+
+html:has(.LK[data-lk-theme="dark"]) body,
+#root:has(.LK[data-lk-theme="dark"]) {
+  background: #17212b;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+html:has(.LK[data-lk-theme="light"]) {
+  background: #ffffff;
+  scrollbar-gutter: auto;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin: 0;
+  padding: 0;
+  scrollbar-width: none;
+  scrollbar-color: rgba(36, 47, 61, 0.35) #ffffff;
+}
+
+html:has(.LK[data-lk-theme="light"]) body,
+#root:has(.LK[data-lk-theme="light"]) {
+  background: #ffffff;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+html:has(.LK) {
+  overscroll-behavior: none;
+  margin: 0;
+  padding: 0;
+}
+
+#root:has(.LK) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .LK-header {
   box-sizing: border-box;
-  display: grid;
-  grid-template-columns: var(--lk-shell-grid);
+  display: block;
   width: 100%;
-  align-items: stretch;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
 }
 
+/* Одна сетка на всю ширину вьюпорта — иначе по бокам остаются пустые fr-дорожки с фоном .LK (#17212b). */
 .LK-header > .lk-header__inner {
-  grid-column: 2 / 5;
   min-width: 0;
   width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
   height: 100%;
   display: grid;
+  grid-template-columns: var(--lk-shell-grid);
   align-items: center;
   box-sizing: border-box;
-  padding: 0;
-  /* Колонки как у .lk-layout: сайдбар, зазор, контент; поиск по умолчанию с отступом как у текста в .LK-content */
-  grid-template-columns: var(--lk-shell-sidebar) var(--lk-shell-gutter) minmax(0, 1fr);
 }
 
 /* Проектный shell (full-bleed в колонке) — левый край поиска = левый край `.owner-programs__shell`. */
 .LK.LK--header-search-align-shell .lk-header__content-strip {
   padding-left: 0;
-}
-
-@supports (grid-template-columns: subgrid) {
-  .LK-header > .lk-header__inner {
-    grid-template-columns: subgrid;
-  }
 }
 
 .lk-layout {
@@ -44,22 +130,182 @@
   width: 100%;
   box-sizing: border-box;
   align-items: stretch;
+  flex: 1 1 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 .lk-layout > .lk-sidebar {
   grid-column: 2;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .lk-layout > .LK-content {
   grid-column: 4;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
   padding: 32px var(--lk-content-padding-x) 24px;
   box-sizing: border-box;
 }
 
+/* Скролл страницы: тонкая линия без кнопок-стрелок, трек как фон шапки #242f3d / белый в светлой теме. */
+html[data-lk-page],
+body[data-lk-page] {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html[data-lk-page][data-theme="dark"],
+html[data-lk-page][data-theme="dark"] body {
+  scrollbar-color: rgba(255, 255, 255, 0.28) #242f3d;
+}
+
+html[data-lk-page][data-theme="light"],
+html[data-lk-page][data-theme="light"] body {
+  scrollbar-color: rgba(36, 47, 61, 0.28) #ffffff;
+}
+
+html[data-lk-page]::-webkit-scrollbar,
+body[data-lk-page]::-webkit-scrollbar,
+html[data-lk-page] *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html[data-lk-page]::-webkit-scrollbar-button,
+body[data-lk-page]::-webkit-scrollbar-button,
+html[data-lk-page] *::-webkit-scrollbar-button,
+html[data-lk-page]::-webkit-scrollbar-button:single-button,
+body[data-lk-page]::-webkit-scrollbar-button:single-button,
+html[data-lk-page] *::-webkit-scrollbar-button:single-button,
+html[data-lk-page]::-webkit-scrollbar-button:start:decrement,
+body[data-lk-page]::-webkit-scrollbar-button:start:decrement,
+html[data-lk-page] *::-webkit-scrollbar-button:start:decrement,
+html[data-lk-page]::-webkit-scrollbar-button:end:increment,
+body[data-lk-page]::-webkit-scrollbar-button:end:increment,
+html[data-lk-page] *::-webkit-scrollbar-button:end:increment,
+html[data-lk-page]::-webkit-scrollbar-button:vertical:start:decrement,
+body[data-lk-page]::-webkit-scrollbar-button:vertical:start:decrement,
+html[data-lk-page] *::-webkit-scrollbar-button:vertical:start:decrement,
+html[data-lk-page]::-webkit-scrollbar-button:vertical:end:increment,
+body[data-lk-page]::-webkit-scrollbar-button:vertical:end:increment,
+html[data-lk-page] *::-webkit-scrollbar-button:vertical:end:increment,
+html[data-lk-page]::-webkit-scrollbar-button:horizontal:start:decrement,
+body[data-lk-page]::-webkit-scrollbar-button:horizontal:start:decrement,
+html[data-lk-page] *::-webkit-scrollbar-button:horizontal:start:decrement,
+html[data-lk-page]::-webkit-scrollbar-button:horizontal:end:increment,
+body[data-lk-page]::-webkit-scrollbar-button:horizontal:end:increment,
+html[data-lk-page] *::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  background: transparent !important;
+  appearance: none;
+}
+
+html[data-lk-page][data-theme="dark"]::-webkit-scrollbar-track,
+html[data-lk-page][data-theme="dark"] body::-webkit-scrollbar-track,
+html[data-lk-page][data-theme="dark"] *::-webkit-scrollbar-track {
+  background: #242f3d;
+  border-radius: 999px;
+}
+
+html[data-lk-page][data-theme="dark"]::-webkit-scrollbar-thumb,
+html[data-lk-page][data-theme="dark"] body::-webkit-scrollbar-thumb,
+html[data-lk-page][data-theme="dark"] *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+}
+
+html[data-lk-page][data-theme="dark"]::-webkit-scrollbar-thumb:hover,
+html[data-lk-page][data-theme="dark"] body::-webkit-scrollbar-thumb:hover,
+html[data-lk-page][data-theme="dark"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+html[data-lk-page][data-theme="light"]::-webkit-scrollbar-track,
+html[data-lk-page][data-theme="light"] body::-webkit-scrollbar-track,
+html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-track {
+  background: #ffffff;
+  border-radius: 999px;
+}
+
+html[data-lk-page][data-theme="light"]::-webkit-scrollbar-thumb,
+html[data-lk-page][data-theme="light"] body::-webkit-scrollbar-thumb,
+html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb {
+  background: rgba(36, 47, 61, 0.28);
+  border-radius: 999px;
+}
+
+html[data-lk-page][data-theme="light"]::-webkit-scrollbar-thumb:hover,
+html[data-lk-page][data-theme="light"] body::-webkit-scrollbar-thumb:hover,
+html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(36, 47, 61, 0.42);
+}
+
+.lk-page-scrollbar {
+  position: fixed;
+  top: 76px;
+  right: 0;
+  z-index: 2147483647;
+  width: 6px;
+  height: calc(100dvh - 76px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.lk-page-scrollbar[data-visible="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lk-page-scrollbar_dark {
+  background: #17212b;
+}
+
+.lk-page-scrollbar_light {
+  background: #ffffff;
+}
+
+.lk-page-scrollbar__thumb {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  min-height: 44px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: none;
+  will-change: transform;
+}
+
+.lk-page-scrollbar_dark .lk-page-scrollbar__thumb {
+  background: #242f3d;
+}
+
+.lk-page-scrollbar_dark .lk-page-scrollbar__thumb:hover {
+  background: #242f3d;
+}
+
+.lk-page-scrollbar_light .lk-page-scrollbar__thumb {
+  background: rgba(36, 47, 61, 0.3);
+}
+
+.lk-page-scrollbar_light .lk-page-scrollbar__thumb:hover {
+  background: rgba(36, 47, 61, 0.42);
+}
+
 .lk-header__left {
-  grid-column: 1;
+  grid-column: 2;
   display: flex;
   align-items: center;
   min-width: 0;
@@ -68,7 +314,7 @@
 }
 
 .lk-header__content-strip {
-  grid-column: 3;
+  grid-column: 3 / 6;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -105,12 +351,30 @@
   display: inline-flex;
   align-items: center;
   line-height: 0;
+  color: inherit;
 }
 
-.lk-header__logo {
+/* Тот же знак, что на /login и /registration (LumoGroup14Brand.svg). */
+.lk-header__brand-logo {
   display: block;
-  width: auto;
-  height: 28px;
+  box-sizing: border-box;
+  height: 25px;
+  width: calc(25px * 143 / 48);
+  max-width: min(calc(25px * 143 / 48), 92vw);
+  flex-shrink: 0;
+}
+
+.LK[data-lk-theme="light"] .lk-header__brand-logo [fill="white"] {
+  fill: #17212b;
+}
+
+.lk-header__brand-logo .login-page__brand-logo-dot {
+  transition: transform 0.38s cubic-bezier(0.33, 1, 0.32, 1);
+}
+
+.lk-header__logo-link:hover .login-page__brand-logo-dot,
+.lk-header__logo-link:focus-visible .login-page__brand-logo-dot {
+  transform: translate(0, -13px);
 }
 
 .lk-header__search {

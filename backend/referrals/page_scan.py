@@ -30,27 +30,56 @@ _MAX_STYLESHEET_BYTES = 180_000
 # Визуальный импорт: ждём реальный DOM, затем прогрев скроллом (lazy/footer) перед full-page PNG.
 # ``domcontentloaded`` on heavy SPAs can exceed 20s on slow networks; warmup still runs after navigation.
 _VISUAL_GOTO_DOMCONTENT_TIMEOUT_MS = int(os.environ.get("REFERRALS_VISUAL_GOTO_MS", "60000"))
-_VISUAL_WARMUP_NETWORK_IDLE_MS = 5_000
-_VISUAL_WARMUP_AFTER_DOM_MS = 1_000
+_VISUAL_WARMUP_NETWORK_IDLE_MS = 2_500
+_VISUAL_WARMUP_AFTER_DOM_MS = 600
 _CHROMIUM_VISUAL_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 _VISUAL_VIEWPORT_WIDTH = 1440
 _VISUAL_VIEWPORT_HEIGHT = 900
+_VISUAL_VIEWPORT_PROFILES: dict[str, dict[str, Any]] = {
+    "mobile": {
+        "width": 360,
+        "height": 740,
+        "is_mobile": True,
+        "has_touch": True,
+        "user_agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        ),
+    },
+    "tablet": {
+        "width": 768,
+        "height": 1024,
+        "is_mobile": True,
+        "has_touch": True,
+        "user_agent": (
+            "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        ),
+    },
+    "desktop": {
+        "width": _VISUAL_VIEWPORT_WIDTH,
+        "height": _VISUAL_VIEWPORT_HEIGHT,
+        "is_mobile": False,
+        "has_touch": False,
+        "user_agent": _CHROMIUM_VISUAL_USER_AGENT,
+    },
+}
 _VISUAL_SCROLL_STEP_VIEWPORT_RATIO = 0.75
-_VISUAL_SCROLL_STEP_WAIT_MS_MIN = 500
-_VISUAL_SCROLL_STEP_WAIT_MS_MAX = 800
-_VISUAL_BOTTOM_SCROLL_WAIT_MS_MIN = 1_500
-_VISUAL_BOTTOM_SCROLL_WAIT_MS_MAX = 2_500
-_VISUAL_TOP_RESET_WAIT_MS_MIN = 1_000
-_VISUAL_TOP_RESET_WAIT_MS_MAX = 1_200
-_VISUAL_STEP_IMAGE_WAIT_MS = 1_200
-_VISUAL_FINAL_IMAGE_WAIT_MS = 3_000
+_VISUAL_SCROLL_STEP_WAIT_MS_MIN = 260
+_VISUAL_SCROLL_STEP_WAIT_MS_MAX = 420
+_VISUAL_BOTTOM_SCROLL_WAIT_MS_MIN = 800
+_VISUAL_BOTTOM_SCROLL_WAIT_MS_MAX = 1_200
+_VISUAL_TOP_RESET_WAIT_MS_MIN = 360
+_VISUAL_TOP_RESET_WAIT_MS_MAX = 520
+_VISUAL_STEP_IMAGE_WAIT_MS = 650
+_VISUAL_FINAL_IMAGE_WAIT_MS = 1_400
 _VISUAL_PRELOAD_MAX_URLS_PER_STEP = 220
 _VISUAL_PRELOAD_MAX_URLS_BOTTOM = 400
-_VISUAL_PRELOAD_PER_URL_TIMEOUT_MS = 4_500
-_VISUAL_VIDEO_PRIME_WAIT_MS = 1_600
+_VISUAL_PRELOAD_PER_URL_TIMEOUT_MS = 2_500
+_VISUAL_VIDEO_PRIME_WAIT_MS = 900
 _VISUAL_TREE_WALK_CAP = 12_000
 _CHROMIUM_AUToplay_ARGS = ("--autoplay-policy=no-user-gesture-required",)
 _VISUAL_SLICE_HEIGHT = 900
@@ -191,6 +220,11 @@ def normalize_visual_scan_response(payload: dict[str, Any]) -> dict[str, Any]:
         return payload
     out = dict(payload)
     out["blocks"] = [normalize_visual_screenshot_payload_keys(b) if isinstance(b, dict) else b for b in blocks]
+    raw_previews = out.get("visual_previews")
+    if isinstance(raw_previews, dict):
+        out["visual_previews"] = {
+            k: normalize_visual_scan_response(v) if isinstance(v, dict) else v for k, v in raw_previews.items()
+        }
     return out
 
 
@@ -582,6 +616,8 @@ def _build_screenshot_block_payload(
         aia = block.get("allowInsertAfter")
     if aia is not None:
         payload["allow_insert_after"] = bool(aia)
+    if block.get("transparent_capture") is not None:
+        payload["transparent_capture"] = bool(block.get("transparent_capture"))
     return payload
 
 
@@ -941,7 +977,6 @@ def _extract_visual_screenshot_bundle(page, section_blocks: list[dict[str, Any]]
           document.querySelectorAll(semanticSelector).forEach((node) => {
             if (!(node instanceof HTMLElement)) return;
             if (node.closest('video')) return;
-            if (inChromeNav(node)) return;
             const cst = window.getComputedStyle(node);
             if (!passesVisibility(node, cst)) return;
             const er = node.getBoundingClientRect();
@@ -960,7 +995,6 @@ def _extract_visual_screenshot_bundle(page, section_blocks: list[dict[str, Any]]
           document.querySelectorAll('div,span').forEach((node) => {
             if (!(node instanceof HTMLElement)) return;
             if (node.closest('video')) return;
-            if (inChromeNav(node)) return;
             const tag = node.tagName;
             if (tag !== 'DIV' && tag !== 'SPAN') return;
             if (hasSemanticDescendant(node)) return;
@@ -1024,7 +1058,9 @@ def _extract_visual_screenshot_bundle(page, section_blocks: list[dict[str, Any]]
             const docW = Math.round(er.width);
             const docH = Math.round(er.height);
             const bi = bestSliceForRect(docLeft, docTop, docW, docH);
-            if (bi < 0 || !sectionHasVideo.has(bi)) return;
+            if (bi < 0) return;
+            if (!sectionHasVideo.has(bi) && !sectionBlocks[bi].transparent_capture) return;
+            if (inChromeNav(node) && !sectionBlocks[bi].transparent_capture) return;
             const cst = window.getComputedStyle(node);
             const href =
               node.tagName === 'A' && node instanceof HTMLAnchorElement ? String(node.href || '') : '';
@@ -1905,6 +1941,16 @@ def _warmup_page_before_visual_screenshot(page) -> dict[str, Any]:
     return bottom_probe
 
 
+def normalize_visual_preview_mode(value: str | None) -> str:
+    mode = (value or "").strip().lower()
+    return mode if mode in _VISUAL_VIEWPORT_PROFILES else "desktop"
+
+
+def visual_viewport_profile(mode: str | None) -> dict[str, Any]:
+    normalized = normalize_visual_preview_mode(mode)
+    return dict(_VISUAL_VIEWPORT_PROFILES[normalized], mode=normalized)
+
+
 def _decode_png_data_url(data_url: str) -> bytes | None:
     prefix = "data:image/png;base64,"
     if not str(data_url).startswith(prefix):
@@ -2011,6 +2057,31 @@ def _extract_visual_section_candidates(page) -> dict[str, Any]:
 
           const pickChromeBlocks = () => {
             const minW = Math.round(pageWidth * 0.6);
+            const isTransparentCssColor = (value) => {
+              const s = String(value || '').toLowerCase().replace(/\s/g, '');
+              return (
+                !s ||
+                s === 'transparent' ||
+                s === 'rgba(0,0,0,0)' ||
+                s.startsWith('rgba(0,0,0,0)') ||
+                s.startsWith('rgba(0,0,0,0.0)')
+              );
+            };
+            const isTransparentCaptureElement = (el, st) => {
+              if (!el || !st) return false;
+              const op = Number(st.opacity);
+              if (Number.isFinite(op) && op <= 0.98) return true;
+              const bgImage = String(st.backgroundImage || '').trim().toLowerCase();
+              if (bgImage && bgImage !== 'none') return false;
+              if (!isTransparentCssColor(st.backgroundColor)) return false;
+              for (const pseudo of ['::before', '::after']) {
+                const pst = window.getComputedStyle(el, pseudo);
+                const pImg = String(pst.backgroundImage || '').trim().toLowerCase();
+                if (pImg && pImg !== 'none') return false;
+                if (!isTransparentCssColor(pst.backgroundColor)) return false;
+              }
+              return true;
+            };
             const headerCandidates = [];
             const pushHeader = (el) => {
               if (!(el instanceof HTMLElement) || !visibleEnough(el)) return;
@@ -2105,6 +2176,7 @@ def _extract_visual_section_candidates(page) -> dict[str, Any]:
                 kind,
                 source: kind,
                 header_layout_fixed: kind === 'header' ? headerFixed : false,
+                transparent_capture: isTransparentCaptureElement(el, st),
                 debug_clip: { y: top, height, source: clipSrc },
               };
             };
@@ -2906,7 +2978,136 @@ def _extract_visual_tilda_blocks(page) -> list[dict[str, Any]]:
     )
 
 
-def _scan_page_visual(raw_url: str) -> dict[str, Any]:
+def _scan_page_visual_with_browser(
+    browser: Any,
+    normalized_url: str,
+    *,
+    preview_mode: str,
+    playwright_timeout_error: type[Exception],
+) -> dict[str, Any]:
+    viewport_profile = visual_viewport_profile(preview_mode)
+    context = browser.new_context(
+        viewport={"width": int(viewport_profile["width"]), "height": int(viewport_profile["height"])},
+        device_scale_factor=1,
+        user_agent=str(viewport_profile["user_agent"]),
+        locale="en-US",
+        is_mobile=bool(viewport_profile["is_mobile"]),
+        has_touch=bool(viewport_profile["has_touch"]),
+    )
+    try:
+        page = context.new_page()
+        network_diag = _attach_visual_import_network_debug(page)
+        page.goto(
+            normalized_url,
+            wait_until="domcontentloaded",
+            timeout=_VISUAL_GOTO_DOMCONTENT_TIMEOUT_MS,
+        )
+        try:
+            page.wait_for_load_state("networkidle", timeout=_VISUAL_WARMUP_NETWORK_IDLE_MS)
+        except playwright_timeout_error:
+            pass
+        page.wait_for_timeout(_VISUAL_WARMUP_AFTER_DOM_MS)
+        try:
+            page.evaluate(_PRIME_VIDEOS_FOR_CAPTURE_JS)
+        except Exception:
+            pass
+        page.wait_for_timeout(_VISUAL_VIDEO_PRIME_WAIT_MS)
+        asset_probe = _warmup_page_before_visual_screenshot(page)
+        final_url = validate_page_scan_url(page.url or normalized_url)
+        page_metrics = _extract_visual_section_candidates(page)
+        platform = "tilda" if page_metrics.get("platform") == "tilda" else "generic"
+        page_height = max(1, min(int(page_metrics.get("pageHeight") or 0), _MAX_VISUAL_PAGE_HEIGHT))
+        section_blocks = list(page_metrics.get("blocks") or [])
+        if not section_blocks:
+            section_blocks = _build_visual_slice_blocks(page_height=page_height)
+
+        visual_bundle = _extract_visual_screenshot_bundle(page, section_blocks)
+        raw_html5_videos = list(visual_bundle.get("videos") or [])
+        raw_foreground_overlays = list(visual_bundle.get("foreground_overlays") or [])
+        font_faces_css = str(visual_bundle.get("font_faces_css") or "").strip()
+        img_stats: dict[str, Any] = {}
+        try:
+            raw_stats = page.evaluate(_IMAGE_LOAD_STATS_JS)
+            if isinstance(raw_stats, dict):
+                img_stats = raw_stats
+        except Exception:
+            img_stats = {}
+        try:
+            page.evaluate(_PRIME_VIDEOS_FOR_CAPTURE_JS)
+        except Exception:
+            pass
+        page.wait_for_timeout(random.randint(450, 800))
+        _log_visual_import_network_debug(network_diag, asset_probe=asset_probe)
+        screenshot_bytes = page.screenshot(full_page=True, type="png")
+        chrome_flags = page_metrics.get("visual_chrome") if isinstance(page_metrics.get("visual_chrome"), dict) else {}
+        header_found = bool(chrome_flags.get("header"))
+        footer_found = bool(chrome_flags.get("footer"))
+        probe = Image.open(BytesIO(screenshot_bytes))
+        probe.load()
+        shot_h = max(1, int(probe.height))
+        _scale_visual_geometry_to_screenshot(
+            doc_page_height=page_height,
+            image_height=shot_h,
+            section_blocks=section_blocks,
+            raw_videos=raw_html5_videos,
+            raw_foreground=raw_foreground_overlays,
+        )
+        _log_visual_import_section_plan(
+            section_blocks,
+            doc_page_height=page_height,
+            image_height=shot_h,
+            header_found=header_found,
+            footer_found=footer_found,
+        )
+        payload_blocks, visual_video_count = _crop_visual_sections(
+            screenshot_bytes=screenshot_bytes,
+            blocks=section_blocks,
+            platform=platform,
+            page_url=final_url,
+            raw_html5_videos=raw_html5_videos,
+            raw_foreground_overlays=raw_foreground_overlays,
+            font_faces_css=font_faces_css or None,
+        )
+        if not payload_blocks:
+            section_blocks = _build_visual_slice_blocks(page_height=page_height)
+            payload_blocks, visual_video_count = _crop_visual_sections(
+                screenshot_bytes=screenshot_bytes,
+                blocks=section_blocks,
+                platform=platform,
+                page_url=final_url,
+                raw_html5_videos=raw_html5_videos,
+                raw_foreground_overlays=raw_foreground_overlays,
+                font_faces_css=font_faces_css or None,
+            )
+        if not payload_blocks:
+            raise PageScanError("visual_scan_failed")
+        _write_visual_import_debug_artifacts(
+            screenshot_bytes=screenshot_bytes,
+            payload_blocks=payload_blocks,
+            section_blocks=section_blocks,
+            page_height_doc=page_height,
+            shot_h=shot_h,
+            img_stats=img_stats,
+        )
+        _log_visual_import_payload_debug(payload_blocks)
+        return {
+            "url": final_url,
+            "platform": platform,
+            "visual_preview_mode": viewport_profile["mode"],
+            "visual_viewport": {
+                "width": int(viewport_profile["width"]),
+                "height": int(viewport_profile["height"]),
+            },
+            "visual_import_available": True,
+            "visual_mode": "screenshot",
+            "visual_video_count": visual_video_count,
+            "blocks": payload_blocks,
+        }
+    finally:
+        context.close()
+
+
+def _scan_page_visual(raw_url: str, *, preview_mode: str = "desktop") -> dict[str, Any]:
     normalized_url = validate_page_scan_url(raw_url)
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -2920,118 +3121,12 @@ def _scan_page_visual(raw_url: str) -> dict[str, Any]:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_AUToplay_ARGS))
             try:
-                context = browser.new_context(
-                    viewport={"width": _VISUAL_VIEWPORT_WIDTH, "height": _VISUAL_VIEWPORT_HEIGHT},
-                    device_scale_factor=1,
-                    user_agent=_CHROMIUM_VISUAL_USER_AGENT,
-                    locale="en-US",
+                return _scan_page_visual_with_browser(
+                    browser,
+                    normalized_url,
+                    preview_mode=preview_mode,
+                    playwright_timeout_error=PlaywrightTimeoutError,
                 )
-                try:
-                    page = context.new_page()
-                    network_diag = _attach_visual_import_network_debug(page)
-                    page.goto(
-                        normalized_url,
-                        wait_until="domcontentloaded",
-                        timeout=_VISUAL_GOTO_DOMCONTENT_TIMEOUT_MS,
-                    )
-                    try:
-                        page.wait_for_load_state("networkidle", timeout=_VISUAL_WARMUP_NETWORK_IDLE_MS)
-                    except PlaywrightTimeoutError:
-                        pass
-                    page.wait_for_timeout(_VISUAL_WARMUP_AFTER_DOM_MS)
-                    try:
-                        page.evaluate(_PRIME_VIDEOS_FOR_CAPTURE_JS)
-                    except Exception:
-                        pass
-                    page.wait_for_timeout(_VISUAL_VIDEO_PRIME_WAIT_MS)
-                    asset_probe = _warmup_page_before_visual_screenshot(page)
-                    final_url = validate_page_scan_url(page.url or normalized_url)
-                    page_metrics = _extract_visual_section_candidates(page)
-                    platform = "tilda" if page_metrics.get("platform") == "tilda" else "generic"
-                    page_height = max(1, min(int(page_metrics.get("pageHeight") or 0), _MAX_VISUAL_PAGE_HEIGHT))
-                    section_blocks = list(page_metrics.get("blocks") or [])
-                    if not section_blocks:
-                        section_blocks = _build_visual_slice_blocks(page_height=page_height)
-
-                    visual_bundle = _extract_visual_screenshot_bundle(page, section_blocks)
-                    raw_html5_videos = list(visual_bundle.get("videos") or [])
-                    raw_foreground_overlays = list(visual_bundle.get("foreground_overlays") or [])
-                    font_faces_css = str(visual_bundle.get("font_faces_css") or "").strip()
-                    img_stats: dict[str, Any] = {}
-                    try:
-                        raw_stats = page.evaluate(_IMAGE_LOAD_STATS_JS)
-                        if isinstance(raw_stats, dict):
-                            img_stats = raw_stats
-                    except Exception:
-                        img_stats = {}
-                    try:
-                        page.evaluate(_PRIME_VIDEOS_FOR_CAPTURE_JS)
-                    except Exception:
-                        pass
-                    page.wait_for_timeout(random.randint(1000, 2000))
-                    _log_visual_import_network_debug(network_diag, asset_probe=asset_probe)
-                    screenshot_bytes = page.screenshot(full_page=True, type="png")
-                    chrome_flags = page_metrics.get("visual_chrome") if isinstance(page_metrics.get("visual_chrome"), dict) else {}
-                    header_found = bool(chrome_flags.get("header"))
-                    footer_found = bool(chrome_flags.get("footer"))
-                    probe = Image.open(BytesIO(screenshot_bytes))
-                    probe.load()
-                    shot_h = max(1, int(probe.height))
-                    _scale_visual_geometry_to_screenshot(
-                        doc_page_height=page_height,
-                        image_height=shot_h,
-                        section_blocks=section_blocks,
-                        raw_videos=raw_html5_videos,
-                        raw_foreground=raw_foreground_overlays,
-                    )
-                    _log_visual_import_section_plan(
-                        section_blocks,
-                        doc_page_height=page_height,
-                        image_height=shot_h,
-                        header_found=header_found,
-                        footer_found=footer_found,
-                    )
-                    payload_blocks, visual_video_count = _crop_visual_sections(
-                        screenshot_bytes=screenshot_bytes,
-                        blocks=section_blocks,
-                        platform=platform,
-                        page_url=final_url,
-                        raw_html5_videos=raw_html5_videos,
-                        raw_foreground_overlays=raw_foreground_overlays,
-                        font_faces_css=font_faces_css or None,
-                    )
-                    if not payload_blocks:
-                        section_blocks = _build_visual_slice_blocks(page_height=page_height)
-                        payload_blocks, visual_video_count = _crop_visual_sections(
-                            screenshot_bytes=screenshot_bytes,
-                            blocks=section_blocks,
-                            platform=platform,
-                            page_url=final_url,
-                            raw_html5_videos=raw_html5_videos,
-                            raw_foreground_overlays=raw_foreground_overlays,
-                            font_faces_css=font_faces_css or None,
-                        )
-                    if not payload_blocks:
-                        raise PageScanError("visual_scan_failed")
-                    _write_visual_import_debug_artifacts(
-                        screenshot_bytes=screenshot_bytes,
-                        payload_blocks=payload_blocks,
-                        section_blocks=section_blocks,
-                        page_height_doc=page_height,
-                        shot_h=shot_h,
-                        img_stats=img_stats,
-                    )
-                    _log_visual_import_payload_debug(payload_blocks)
-                    return {
-                        "url": final_url,
-                        "platform": platform,
-                        "visual_import_available": True,
-                        "visual_mode": "screenshot",
-                        "visual_video_count": visual_video_count,
-                        "blocks": payload_blocks,
-                    }
-                finally:
-                    context.close()
             finally:
                 browser.close()
     except PlaywrightError as exc:
@@ -3042,10 +3137,58 @@ def _scan_page_visual(raw_url: str) -> dict[str, Any]:
         raise PageScanError("visual_scan_failed") from exc
 
 
-def scan_page_url(raw_url: str, *, mode: str = "map") -> dict[str, Any]:
+def _scan_page_visual_previews(raw_url: str, *, preview_mode: str = "desktop") -> dict[str, Any]:
+    normalized_url = validate_page_scan_url(raw_url)
+    active_mode = normalize_visual_preview_mode(preview_mode)
+    modes = [active_mode, *[mode for mode in ("mobile", "tablet", "desktop") if mode != active_mode]]
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:  # pragma: no cover - dependency/environment specific
+        logger.warning("Visual screenshot import is unavailable for %s: Playwright is not installed", normalized_url)
+        raise PageScanError("visual_scan_unavailable") from exc
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True, args=list(_CHROMIUM_AUToplay_ARGS))
+            try:
+                previews: dict[str, dict[str, Any]] = {}
+                for mode_name in modes:
+                    previews[mode_name] = normalize_visual_scan_response(
+                        _scan_page_visual_with_browser(
+                            browser,
+                            normalized_url,
+                            preview_mode=mode_name,
+                            playwright_timeout_error=PlaywrightTimeoutError,
+                        )
+                    )
+                active = dict(previews[active_mode])
+                active["visual_previews"] = previews
+                return active
+            finally:
+                browser.close()
+    except PlaywrightError as exc:
+        logger.exception("Visual screenshot preview import failed for %s", normalized_url)
+        raise PageScanError("visual_scan_failed") from exc
+    except Exception as exc:
+        logger.exception("Unexpected visual screenshot preview import failure for %s", normalized_url)
+        raise PageScanError("visual_scan_failed") from exc
+
+
+def scan_page_url(
+    raw_url: str,
+    *,
+    mode: str = "map",
+    preview_mode: str = "desktop",
+    preload_preview_modes: bool = False,
+) -> dict[str, Any]:
+    preview_mode = normalize_visual_preview_mode(preview_mode)
     if mode == "visual":
         try:
-            return normalize_visual_scan_response(_scan_page_visual(raw_url))
+            if preload_preview_modes:
+                return normalize_visual_scan_response(_scan_page_visual_previews(raw_url, preview_mode=preview_mode))
+            return normalize_visual_scan_response(_scan_page_visual(raw_url, preview_mode=preview_mode))
         except PageScanError as exc:
             error_code = str(exc)
             if error_code not in {"visual_scan_unavailable", "visual_scan_failed"}:
@@ -3055,6 +3198,7 @@ def scan_page_url(raw_url: str, *, mode: str = "map") -> dict[str, Any]:
             payload = parse_scanned_page(url=final_url, html=html)
             payload["visual_import_available"] = False
             payload["visual_mode"] = "map"
+            payload["visual_preview_mode"] = preview_mode
             payload["detail"] = (
                 "Визуальный импорт недоступен на сервере. Сейчас показана карта секций."
                 if error_code == "visual_scan_unavailable"

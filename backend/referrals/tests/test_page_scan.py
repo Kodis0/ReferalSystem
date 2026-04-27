@@ -763,6 +763,30 @@ class PageScanApiTests(TestCase):
         self.assertEqual(response.data["blocks"][0]["title"], "Секция 1")
         self.assertTrue(response.data["blocks"][0]["screenshot_data_url"].startswith("data:image/png;base64,"))
         self.assertEqual(response.data["blocks"][0]["media_overlays"], [])
+        scan_visual.assert_called_once_with("https://example.com/page", preview_mode="desktop")
+
+    @patch("referrals.page_scan._scan_page_visual")
+    def test_owner_page_scan_passes_preview_mode_to_visual_scan(self, scan_visual):
+        scan_visual.return_value = {
+            "url": "https://example.com/page",
+            "platform": "generic",
+            "visual_import_available": True,
+            "visual_mode": "screenshot",
+            "visual_preview_mode": "mobile",
+            "visual_video_count": 0,
+            "blocks": [],
+        }
+        self.api.force_authenticate(self.owner)
+
+        response = self.api.post(
+            "/referrals/site/page-scan/",
+            {"url": "https://example.com/page", "mode": "visual", "preview_mode": "mobile"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["visual_preview_mode"], "mobile")
+        scan_visual.assert_called_once_with("https://example.com/page", preview_mode="mobile")
 
     def test_owner_page_scan_rejects_forbidden_url(self):
         self.api.force_authenticate(self.owner)
@@ -885,6 +909,21 @@ class PageScanVisualRegressionTests(SimpleTestCase):
             }
         )
         self.assertEqual(payload["blocks"][0]["screenshot_data_url"], "data:image/png;base64,QQ==")
+
+    def test_normalize_visual_scan_response_normalizes_visual_previews_nested_blocks(self):
+        payload = normalize_visual_scan_response(
+            {
+                "blocks": [{"id": "root", "screenshotDataUrl": "data:image/png;base64,QQ=="}],
+                "visual_previews": {
+                    "mobile": {"blocks": [{"id": "m", "screenshotDataUrl": "data:image/png;base64,AA=="}]},
+                },
+            }
+        )
+        self.assertEqual(payload["blocks"][0]["screenshot_data_url"], "data:image/png;base64,QQ==")
+        self.assertEqual(
+            payload["visual_previews"]["mobile"]["blocks"][0]["screenshot_data_url"],
+            "data:image/png;base64,AA==",
+        )
 
 
 class PageScanVisualPlaywrightRegressionTests(SimpleTestCase):

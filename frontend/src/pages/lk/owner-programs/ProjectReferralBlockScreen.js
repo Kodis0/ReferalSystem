@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { deferResizeObserverCallback } from "../../../resizeObserverDefer";
 import { flushSync } from "react-dom";
-import { Hand, Move, Type, X } from "lucide-react";
+import { Hand, Monitor, Move, Smartphone, Tablet, Type, X } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { applyNodeChanges, Background, Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -29,19 +29,43 @@ const SCAN_LOADER_STATUS_MESSAGES = [
 const DEFAULT_SCAN_META = {
   visualImportAvailable: null,
   visualMode: "",
+  visualPreviewMode: "desktop",
   detail: "",
   platform: "generic",
   visualVideoCount: 0,
 };
 
 const REFERRAL_BUILDER_WORKSPACE_VERSION = 1;
+const REFERRAL_BUILDER_PREVIEW_MODES = [
+  { id: "mobile", label: "Мобильный 360", width: 360, height: 740, Icon: Smartphone },
+  { id: "tablet", label: "Планшет", width: 768, height: 1024, Icon: Tablet },
+  { id: "desktop", label: "Десктоп", width: 1440, height: 900, Icon: Monitor },
+];
+const DEFAULT_REFERRAL_BUILDER_PREVIEW_MODE = "desktop";
+
+function normalizeReferralBuilderPreviewMode(value) {
+  return REFERRAL_BUILDER_PREVIEW_MODES.some((mode) => mode.id === value)
+    ? value
+    : DEFAULT_REFERRAL_BUILDER_PREVIEW_MODE;
+}
+
+function referralBuilderPreviewModeWidth(value) {
+  const mode = REFERRAL_BUILDER_PREVIEW_MODES.find((item) => item.id === value);
+  return mode?.width ?? REFERRAL_BUILDER_PREVIEW_MODES[REFERRAL_BUILDER_PREVIEW_MODES.length - 1].width;
+}
+
+function referralBuilderPreviewModeSizeLabel(mode) {
+  return `${mode.width} x ${mode.height} px`;
+}
 
 function buildReferralBuilderWorkspaceSnapshot({
   scanUrl,
   scannedBlocks,
+  scannedBlocksByPreviewMode,
   scanMeta,
   builderBlocks,
   selectedInsertionSlotId,
+  previewMode,
   displayNodes,
 }) {
   const flowNodePositions = {};
@@ -54,9 +78,14 @@ function buildReferralBuilderWorkspaceSnapshot({
     v: REFERRAL_BUILDER_WORKSPACE_VERSION,
     scanUrl: typeof scanUrl === "string" ? scanUrl : "",
     scannedBlocks: Array.isArray(scannedBlocks) ? scannedBlocks : [],
+    scannedBlocksByPreviewMode:
+      scannedBlocksByPreviewMode && typeof scannedBlocksByPreviewMode === "object" && !Array.isArray(scannedBlocksByPreviewMode)
+        ? scannedBlocksByPreviewMode
+        : {},
     scanMeta: scanMeta && typeof scanMeta === "object" ? { ...DEFAULT_SCAN_META, ...scanMeta } : { ...DEFAULT_SCAN_META },
     builderBlocks: Array.isArray(builderBlocks) ? builderBlocks : [],
     selectedInsertionSlotId: typeof selectedInsertionSlotId === "string" ? selectedInsertionSlotId : "",
+    previewMode: normalizeReferralBuilderPreviewMode(previewMode),
     flowNodePositions,
   };
 }
@@ -72,15 +101,23 @@ function parseReferralBuilderWorkspace(raw) {
   return {
     scanUrl: typeof raw.scanUrl === "string" ? raw.scanUrl : "",
     scannedBlocks: Array.isArray(raw.scannedBlocks) ? raw.scannedBlocks : [],
+    scannedBlocksByPreviewMode:
+      raw.scannedBlocksByPreviewMode &&
+      typeof raw.scannedBlocksByPreviewMode === "object" &&
+      !Array.isArray(raw.scannedBlocksByPreviewMode)
+        ? raw.scannedBlocksByPreviewMode
+        : {},
     scanMeta: {
       visualImportAvailable: sm.visualImportAvailable ?? DEFAULT_SCAN_META.visualImportAvailable,
       visualMode: typeof sm.visualMode === "string" ? sm.visualMode : "",
+      visualPreviewMode: normalizeReferralBuilderPreviewMode(sm.visualPreviewMode),
       detail: typeof sm.detail === "string" ? sm.detail : "",
       platform: sm.platform === "tilda" ? "tilda" : "generic",
       visualVideoCount:
         typeof sm.visualVideoCount === "number" && Number.isFinite(sm.visualVideoCount) ? sm.visualVideoCount : 0,
     },
     builderBlocks: Array.isArray(raw.builderBlocks) ? raw.builderBlocks : [],
+    previewMode: normalizeReferralBuilderPreviewMode(raw.previewMode),
     flowNodePositions:
       raw.flowNodePositions && typeof raw.flowNodePositions === "object" && !Array.isArray(raw.flowNodePositions)
         ? raw.flowNodePositions
@@ -512,7 +549,10 @@ function overlayIntersectsPx(a, b) {
   );
 }
 
-function filterVisibleForegroundOverlays(foregroundOverlays, videoOverlays, sectionW, sectionH) {
+function filterVisibleForegroundOverlays(foregroundOverlays, videoOverlays, sectionW, sectionH, includeAll = false) {
+  if (includeAll) {
+    return foregroundOverlays;
+  }
   if (!videoOverlays.length) {
     return [];
   }
@@ -655,8 +695,15 @@ function normalizeScannedBlocks(payload) {
         height: numericOr(block.height, 640),
         platform:
           typeof block.platform === "string" && block.platform.trim() ? block.platform.trim() : platform,
+        fontFacesCss:
+          typeof block.font_faces_css === "string"
+            ? block.font_faces_css
+            : typeof block.fontFacesCss === "string"
+              ? block.fontFacesCss
+              : "",
         mediaOverlays: normalizeMediaOverlays(block),
         foregroundOverlays: normalizeForegroundOverlays(block),
+        transparentCapture: Boolean(block.transparent_capture ?? block.transparentCapture),
         groupId: (() => {
           const g = block.group_id ?? block.groupId;
           return typeof g === "string" && g.trim() ? g.trim() : "";
@@ -679,17 +726,66 @@ function normalizeScannedBlocks(payload) {
     .filter(Boolean);
 }
 
-function normalizeScanMeta(payload) {
+function scannedRowHasVisualCapture(row) {
+  return (
+    Array.isArray(row) &&
+    row.some((b) => Boolean(b?.screenshotDataUrl || b?.screenshotUrl || b?.snapshotHtml))
+  );
+}
+
+/** Корневые ``blocks`` ответа page-scan для активного режима; ``visual_previews[mode]`` иногда пустой или без скриншотов при ``preload`` — тогда берём корень. */
+function pickActiveScannedBlocksForPreviewMode(normalized, previewModeId) {
+  const root = normalized.blocks;
+  const map = normalized.previewBlocksByMode || {};
+  const row = map[previewModeId];
+  if (!Array.isArray(row) || row.length === 0) {
+    return Array.isArray(root) ? root : [];
+  }
+  if (
+    normalized.visualMode === "screenshot" &&
+    scannedRowHasVisualCapture(root) &&
+    !scannedRowHasVisualCapture(row)
+  ) {
+    return root;
+  }
+  return row;
+}
+
+function normalizeScanMeta(payload, fallbackPreviewMode = DEFAULT_REFERRAL_BUILDER_PREVIEW_MODE) {
   const blocks = normalizeScannedBlocks(payload);
   const rawCount = payload?.visual_video_count;
   const visualVideoCount = typeof rawCount === "number" && Number.isFinite(rawCount) ? rawCount : 0;
+  const visualPreviewMode = normalizeReferralBuilderPreviewMode(payload?.visual_preview_mode || fallbackPreviewMode);
+  const visualModeStr = typeof payload?.visual_mode === "string" ? payload.visual_mode.trim() : "";
+  const previewBlocksByMode = {};
+  const rawPreviews =
+    payload?.visual_previews && typeof payload.visual_previews === "object" && !Array.isArray(payload.visual_previews)
+      ? payload.visual_previews
+      : {};
+  for (const mode of REFERRAL_BUILDER_PREVIEW_MODES) {
+    const previewPayload = rawPreviews[mode.id];
+    if (previewPayload && typeof previewPayload === "object") {
+      previewBlocksByMode[mode.id] = normalizeScannedBlocks(previewPayload);
+    }
+  }
+  const rootHasVisual = scannedRowHasVisualCapture(blocks);
+  const modeRow = previewBlocksByMode[visualPreviewMode];
+  if (
+    !Array.isArray(modeRow) ||
+    modeRow.length === 0 ||
+    (visualModeStr === "screenshot" && rootHasVisual && !scannedRowHasVisualCapture(modeRow))
+  ) {
+    previewBlocksByMode[visualPreviewMode] = blocks;
+  }
   return {
     blocks,
+    previewBlocksByMode,
     visualImportAvailable:
       payload?.visual_import_available === false
         ? false
         : blocks.some((block) => Boolean(block.screenshotDataUrl || block.screenshotUrl || block.snapshotHtml)),
     visualMode: typeof payload?.visual_mode === "string" ? payload.visual_mode.trim() : "",
+    visualPreviewMode,
     detail: typeof payload?.detail === "string" ? payload.detail.trim() : "",
     platform: payload?.platform === "tilda" ? "tilda" : "generic",
     visualVideoCount,
@@ -741,6 +837,7 @@ function ReferralPreviewNode() {
 function SiteImportedBlockNode({ data }) {
   const selectorLabel = data.selector || (data.id ? `#${data.id}` : "selector unavailable");
   const isSelected = Boolean(data?.isSelected);
+  const previewMode = normalizeReferralBuilderPreviewMode(data?.previewMode);
   const handleClick = useCallback(() => {
     if (typeof data?.onSelectBlock === "function" && data?.blockId) {
       data.onSelectBlock(data.blockId);
@@ -758,8 +855,11 @@ function SiteImportedBlockNode({ data }) {
 
   return (
     <div
-      className={`owner-programs__imported-site-block-node${isSelected ? " is-selected" : ""}`}
+      className={`owner-programs__imported-site-block-node owner-programs__imported-site-block-node--${previewMode}${
+        isSelected ? " is-selected" : ""
+      }`}
       data-testid="imported-site-block-node"
+      data-preview-mode={previewMode}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       role="button"
@@ -816,6 +916,41 @@ function ForegroundScreenshotCrop({ screenshotSrc, sourceWidth, sourceHeight, la
           transform: `translate(${-x0}px, ${-y0}px)`,
         }}
       />
+    </div>
+  );
+}
+
+function foregroundTextStyle(layer) {
+  const st = layer?.style && typeof layer.style === "object" ? layer.style : {};
+  return {
+    left: `${layer.x}px`,
+    top: `${layer.y}px`,
+    width: `${Math.max(1, layer.width)}px`,
+    minHeight: `${Math.max(1, layer.height)}px`,
+    color: st.color || "#ffffff",
+    fontFamily: st.fontFamily || "inherit",
+    fontSize: st.fontSize || "16px",
+    fontWeight: st.fontWeight || "inherit",
+    lineHeight: st.lineHeight || "normal",
+    textAlign: st.textAlign || "inherit",
+    letterSpacing: st.letterSpacing || "normal",
+    textTransform: st.textTransform || "none",
+    background: "transparent",
+  };
+}
+
+function ForegroundTextOverlay({ layer }) {
+  if (!layer?.text) {
+    return null;
+  }
+  return (
+    <div
+      className="owner-programs__imported-section-foreground-text"
+      style={foregroundTextStyle(layer)}
+      data-testid="imported-section-foreground-text"
+      aria-hidden="true"
+    >
+      {layer.text}
     </div>
   );
 }
@@ -894,12 +1029,21 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
     const mediaOverlays = Array.isArray(block.mediaOverlays) ? block.mediaOverlays : [];
     return mediaOverlays.filter((overlay) => overlay && overlay.type === "video");
   }, [block.mediaOverlays]);
+  const isTransparentCapture = block.transparentCapture === true;
   const visibleForegroundOverlays = useMemo(() => {
     const foregroundOverlays = Array.isArray(block.foregroundOverlays) ? block.foregroundOverlays : [];
-    return filterVisibleForegroundOverlays(foregroundOverlays, videoOverlays, sourceWidth, sourceHeight);
-  }, [block.foregroundOverlays, videoOverlays, sourceWidth, sourceHeight]);
+    return filterVisibleForegroundOverlays(
+      foregroundOverlays,
+      videoOverlays,
+      sourceWidth,
+      sourceHeight,
+      isTransparentCapture,
+    );
+  }, [block.foregroundOverlays, videoOverlays, sourceWidth, sourceHeight, isTransparentCapture]);
   const layerPointerEvents = overlayPointerEventsNone ? "none" : "auto";
   const screenshotSrc = block.screenshotDataUrl || block.screenshot_data_url || block.screenshotUrl || "";
+  const hideScreenshotForTransparentCapture = isTransparentCapture && visibleForegroundOverlays.length > 0;
+  const fontFacesCss = typeof block.fontFacesCss === "string" ? block.fontFacesCss.trim() : "";
 
   const videoElements = videoOverlays.map((overlay) => (
     <video
@@ -915,25 +1059,29 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
       controls={false}
       draggable={false}
       style={{
-        left: `${overlay.x}px`,
+        left: `${Math.max(0, overlay.x - 1)}px`,
         top: `${overlay.y}px`,
-        width: `${overlay.width}px`,
-        height: `${overlay.height}px`,
+        width: `${overlay.width + 2}px`,
+        height: `${overlay.height + 1}px`,
         zIndex: 1,
         pointerEvents: layerPointerEvents,
       }}
     />
   ));
 
-  const foregroundCropElements = visibleForegroundOverlays.map((layer) => (
-    <ForegroundScreenshotCrop
-      key={`${block.id}-foreground-crop-${layer.overlayIndex}`}
-      screenshotSrc={screenshotSrc}
-      sourceWidth={sourceWidth}
-      sourceHeight={sourceHeight}
-      layer={layer}
-    />
-  ));
+  const foregroundElements = visibleForegroundOverlays.map((layer) =>
+    layer.type === "text" ? (
+      <ForegroundTextOverlay key={`${block.id}-foreground-text-${layer.overlayIndex}`} layer={layer} />
+    ) : (
+      <ForegroundScreenshotCrop
+        key={`${block.id}-foreground-crop-${layer.overlayIndex}`}
+        screenshotSrc={screenshotSrc}
+        sourceWidth={sourceWidth}
+        sourceHeight={sourceHeight}
+        layer={layer}
+      />
+    ),
+  );
 
   const sectionKind = typeof block.kind === "string" ? block.kind : "";
 
@@ -957,6 +1105,7 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
           DEBUG_VISUAL_IMPORT_LAYERS ? " owner-programs__imported-screenshot-section--debug-layers" : ""
         }`}
       >
+        {fontFacesCss ? <style data-testid="imported-section-font-faces">{fontFacesCss}</style> : null}
         {DEBUG_VISUAL_IMPORT_LAYERS ? (
           <div className="owner-programs__imported-screenshot-section__debug-scale" aria-hidden="true">
             scale {layerScale.toFixed(2)}
@@ -974,13 +1123,15 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
             clip {String(block.debug_clip?.source ?? block.debugClip?.source ?? "—")}
           </div>
         ) : null}
-        <img
-          className="owner-programs__imported-section-screenshot"
-          src={screenshotSrc}
-          alt=""
-          draggable={false}
-          data-testid="imported-page-section-image"
-        />
+        {hideScreenshotForTransparentCapture ? null : (
+          <img
+            className="owner-programs__imported-section-screenshot"
+            src={screenshotSrc}
+            alt=""
+            draggable={false}
+            data-testid="imported-page-section-image"
+          />
+        )}
         <div
           className="owner-programs__imported-screenshot-section__layer"
           data-testid="imported-screenshot-overlay-layer"
@@ -991,7 +1142,7 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
           }}
         >
           {videoElements}
-          {foregroundCropElements}
+          {foregroundElements}
         </div>
       </div>
     </div>
@@ -1000,6 +1151,8 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
 
 function ImportedPageStackNode({ data }) {
   const blocks = useMemo(() => (Array.isArray(data?.blocks) ? data.blocks : []), [data?.blocks]);
+  const previewMode = normalizeReferralBuilderPreviewMode(data?.previewMode);
+  const previewWidth = referralBuilderPreviewModeWidth(previewMode);
   const orderedSlotIds = useMemo(() => collectInsertionSlotIdsInOrder(blocks), [blocks]);
   const selectedInsertionSlotId =
     typeof data?.selectedInsertionSlotId === "string" && data.selectedInsertionSlotId
@@ -1116,7 +1269,12 @@ function ImportedPageStackNode({ data }) {
   });
 
   return (
-    <div className="imported-page-stack-node" data-testid="imported-page-stack-node">
+    <div
+      className={`imported-page-stack-node imported-page-stack-node--${previewMode}`}
+      data-testid="imported-page-stack-node"
+      data-preview-mode={previewMode}
+      style={{ "--imported-page-stack-width": `${previewWidth}px` }}
+    >
       <div className="imported-page-stack-node__body">{bodyChildren}</div>
     </div>
   );
@@ -1451,8 +1609,16 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
   const [scanUrl, setScanUrl] = useState("");
   const [scanStatus, setScanStatus] = useState("idle");
   const [scannedBlocks, setScannedBlocks] = useState([]);
+  const [scannedBlocksByPreviewMode, setScannedBlocksByPreviewMode] = useState({});
   const [scanError, setScanError] = useState("");
   const [scanMeta, setScanMeta] = useState(DEFAULT_SCAN_META);
+  const [previewMode, setPreviewMode] = useState(DEFAULT_REFERRAL_BUILDER_PREVIEW_MODE);
+  const previewModeRef = useRef(previewMode);
+  const pendingPreviewModeLoadsRef = useRef(new Set());
+  const pendingPreviewModeActivationRef = useRef(null);
+  useEffect(() => {
+    previewModeRef.current = previewMode;
+  }, [previewMode]);
   const [scanLoaderPhase, setScanLoaderPhase] = useState(0);
   const [scanLoadSession, setScanLoadSession] = useState(0);
   const [selectedInsertionSlotId, setSelectedInsertionSlotId] = useState(null);
@@ -1501,10 +1667,19 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
         const normalized = parseReferralBuilderWorkspace(raw);
         if (normalized) {
           setScanUrl(normalized.scanUrl || "");
-          setScannedBlocks(normalized.scannedBlocks);
+          const previewBlocks =
+            normalized.scannedBlocksByPreviewMode && typeof normalized.scannedBlocksByPreviewMode === "object"
+              ? normalized.scannedBlocksByPreviewMode
+              : {};
+          const activePreviewBlocks = Array.isArray(previewBlocks[normalized.previewMode])
+            ? previewBlocks[normalized.previewMode]
+            : normalized.scannedBlocks;
+          setScannedBlocks(activePreviewBlocks);
+          setScannedBlocksByPreviewMode(previewBlocks);
           setScanMeta({ ...DEFAULT_SCAN_META, ...normalized.scanMeta });
+          setPreviewMode(normalized.previewMode);
           setBuilderBlocks(normalized.builderBlocks);
-          const shots = (normalized.scannedBlocks || []).filter((b) => b.screenshotDataUrl || b.screenshotUrl);
+          const shots = (activePreviewBlocks || []).filter((b) => b.screenshotDataUrl || b.screenshotUrl);
           const validSlots = new Set(collectInsertionSlotIdsInOrder(shots));
           const want = normalized.selectedInsertionSlotId;
           setSelectedInsertionSlotId(
@@ -1778,6 +1953,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
               onAddBlockAtSlot: handleAddBuilderBlockOfType,
               textEditEnabled: isTextMode,
               overlayPointerEventsNone: isMoveMode,
+              previewMode,
             },
           },
         ];
@@ -1796,6 +1972,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
             blockId: block.id,
             isSelected: selectedBlockId === block.id,
             onSelectBlock: handleSelectBlock,
+            previewMode,
           },
         };
       });
@@ -1825,6 +2002,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
       isScreenshotImport,
       scannedBlocks,
       screenshotBlocks,
+      previewMode,
       selectedBlockId,
       selectedBuilderBlockId,
       selectedInsertionSlotId,
@@ -1885,9 +2063,11 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     const snapshot = buildReferralBuilderWorkspaceSnapshot({
       scanUrl,
       scannedBlocks,
+      scannedBlocksByPreviewMode,
       scanMeta,
       builderBlocks,
       selectedInsertionSlotId: selectedInsertionSlotId || "",
+      previewMode,
       displayNodes: displayNodesNow,
     });
     const json = JSON.stringify(snapshot);
@@ -1918,7 +2098,9 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     workspaceBootstrap,
     scanUrl,
     scannedBlocks,
+    scannedBlocksByPreviewMode,
     scanMeta,
+    previewMode,
     builderBlocks,
     selectedInsertionSlotId,
     nodes,
@@ -1941,8 +2123,9 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
         isScreenshotImport,
         blockIds: scannedBlocks.map((b) => b.id),
         shotIds: screenshotBlocks.map((b) => b.id),
+        previewMode,
       }),
-    [isScreenshotImport, scannedBlocks, screenshotBlocks],
+    [isScreenshotImport, scannedBlocks, screenshotBlocks, previewMode],
   );
 
   useLayoutEffect(() => {
@@ -2199,7 +2382,10 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
           return;
         }
         if (typeof inst.setCenter === "function") {
-          inst.setCenter(IMPORTED_PAGE_STACK_X + 320, 300, { zoom: POST_IMPORT_SCREENSHOT_ZOOM, duration: 0 });
+          inst.setCenter(IMPORTED_PAGE_STACK_X + referralBuilderPreviewModeWidth(previewMode) / 2, 300, {
+            zoom: POST_IMPORT_SCREENSHOT_ZOOM,
+            duration: 0,
+          });
           return;
         }
         if (typeof inst.setViewport === "function") {
@@ -2216,7 +2402,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [scanMeta.visualMode, scanStatus, screenshotBlocks.length]);
+  }, [previewMode, scanMeta.visualMode, scanStatus, screenshotBlocks.length]);
 
   useEffect(() => {
     if (scanStatus !== "loading") {
@@ -2242,14 +2428,128 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     expandWorkspaceSmooth();
   }, [collapseWorkspaceSmooth, expandWorkspaceSmooth]);
 
-  const handleScanSubmit = useCallback(
-    async (event) => {
-      event.preventDefault();
-      const nextUrl = scanUrl.trim();
+  const loadPreviewModeInBackground = useCallback(async (nextUrl, nextPreviewMode) => {
+    const normalizedPreviewMode = normalizeReferralBuilderPreviewMode(nextPreviewMode);
+    const cleanUrl = String(nextUrl || "").trim();
+    if (!cleanUrl) {
+      if (pendingPreviewModeActivationRef.current === normalizedPreviewMode) {
+        pendingPreviewModeActivationRef.current = null;
+        setScanStatus("error");
+        setScanError("Укажите URL страницы.");
+      }
+      return;
+    }
+    if (pendingPreviewModeLoadsRef.current.has(normalizedPreviewMode)) {
+      return;
+    }
+    pendingPreviewModeLoadsRef.current.add(normalizedPreviewMode);
+    try {
+      const response = await fetch(API_ENDPOINTS.sitePageScan, {
+        method: "POST",
+        headers: ownerSitesAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          url: cleanUrl,
+          mode: "visual",
+          preview_mode: normalizedPreviewMode,
+          preload_preview_modes: false,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (pendingPreviewModeActivationRef.current === normalizedPreviewMode) {
+          setScanStatus("error");
+          setScanError(typeof payload?.detail === "string" ? payload.detail : SCAN_ERROR_MESSAGE);
+        }
+        return;
+      }
+      const normalized = normalizeScanMeta(payload, normalizedPreviewMode);
+      const nextPreviewBlocksByMode = normalized.previewBlocksByMode || {};
+      const activeBlocks = pickActiveScannedBlocksForPreviewMode(normalized, normalizedPreviewMode);
+      setScannedBlocksByPreviewMode((current) => ({ ...current, [normalizedPreviewMode]: activeBlocks }));
+      if (
+        previewModeRef.current === normalizedPreviewMode ||
+        pendingPreviewModeActivationRef.current === normalizedPreviewMode
+      ) {
+        pendingPreviewModeActivationRef.current = null;
+        setPreviewMode(normalizedPreviewMode);
+        setScannedBlocks(activeBlocks);
+        setScanMeta({
+          visualImportAvailable: normalized.visualImportAvailable,
+          visualMode: normalized.visualMode,
+          visualPreviewMode: normalized.visualPreviewMode,
+          detail: normalized.detail,
+          platform: normalized.platform,
+          visualVideoCount: normalized.visualVideoCount,
+        });
+        const shots = activeBlocks.filter((b) => b.screenshotDataUrl || b.screenshotUrl);
+        setSelectedInsertionSlotId(firstVisibleInsertionSlotId(shots) || null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
+        setSelectedBlockId("");
+        setScanStatus("success");
+        setScanError("");
+      }
+    } catch (error) {
+      if (pendingPreviewModeActivationRef.current === normalizedPreviewMode) {
+        setScanStatus("error");
+        setScanError(error instanceof Error && error.message ? error.message : SCAN_ERROR_MESSAGE);
+      }
+    } finally {
+      pendingPreviewModeLoadsRef.current.delete(normalizedPreviewMode);
+      if (pendingPreviewModeActivationRef.current === normalizedPreviewMode) {
+        pendingPreviewModeActivationRef.current = null;
+      }
+    }
+  }, []);
+
+  const handlePreviewModeChange = useCallback(
+    (nextMode) => {
+      const normalized = normalizeReferralBuilderPreviewMode(nextMode);
+      captureFlowViewportAnchor();
+      const cachedBlocks = Array.isArray(scannedBlocksByPreviewMode[normalized])
+        ? scannedBlocksByPreviewMode[normalized]
+        : null;
+      if (cachedBlocks) {
+        pendingPreviewModeActivationRef.current = null;
+        setScannedBlocks(cachedBlocks);
+        setScanMeta((current) => ({ ...current, visualPreviewMode: normalized }));
+        const shots = cachedBlocks.filter((b) => b.screenshotDataUrl || b.screenshotUrl);
+        setSelectedInsertionSlotId(firstVisibleInsertionSlotId(shots) || null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
+        setSelectedBlockId("");
+        setPreviewMode((current) => {
+          if (current === normalized) {
+            return current;
+          }
+          return normalized;
+        });
+      } else {
+        pendingPreviewModeActivationRef.current = normalized;
+        setPreviewMode(normalized);
+        setScanMeta((current) => ({ ...current, visualPreviewMode: normalized }));
+        setScannedBlocks([]);
+        setSelectedInsertionSlotId(null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
+        setSelectedBlockId("");
+        setScanStatus("loading");
+        setScanError("");
+        void loadPreviewModeInBackground(scanUrl.trim(), normalized);
+      }
+    },
+    [captureFlowViewportAnchor, loadPreviewModeInBackground, scanUrl, scannedBlocksByPreviewMode],
+  );
+
+  const executeVisualScan = useCallback(
+    async (nextUrl, nextPreviewMode, { clearExisting = true } = {}) => {
+      const normalizedPreviewMode = normalizeReferralBuilderPreviewMode(nextPreviewMode);
       if (!nextUrl) {
         setScanStatus("error");
         setScanError("Укажите URL страницы.");
         setScannedBlocks([]);
+        setScannedBlocksByPreviewMode({});
         setSelectedInsertionSlotId(null);
         setInsertAfterBuilderBlockId(null);
         setIsBlockPickerOpen(false);
@@ -2262,47 +2562,12 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
       setScanLoadSession((session) => session + 1);
       setScanStatus("loading");
       setScanError("");
-      setScannedBlocks([]);
-      setScanMeta(DEFAULT_SCAN_META);
-      setSelectedInsertionSlotId(null);
-      setInsertAfterBuilderBlockId(null);
-      setIsBlockPickerOpen(false);
-      setSelectedBlockId("");
-      setBuilderBlocks([]);
-      setSelectedBuilderBlockId("");
-
-      try {
-        const response = await fetch(API_ENDPOINTS.sitePageScan, {
-          method: "POST",
-          headers: ownerSitesAuthHeaders(),
-          credentials: "include",
-          body: JSON.stringify({ url: nextUrl, mode: "visual" }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(typeof payload?.detail === "string" ? payload.detail : SCAN_ERROR_MESSAGE);
-        }
-        const normalized = normalizeScanMeta(payload);
-        setScannedBlocks(normalized.blocks);
-        setScanMeta({
-          visualImportAvailable: normalized.visualImportAvailable,
-          visualMode: normalized.visualMode,
-          detail: normalized.detail,
-          platform: normalized.platform,
-          visualVideoCount: normalized.visualVideoCount,
-        });
-        const shots = normalized.blocks.filter((b) => b.screenshotDataUrl || b.screenshotUrl);
-        setSelectedInsertionSlotId(firstVisibleInsertionSlotId(shots) || null);
-        setInsertAfterBuilderBlockId(null);
-        setIsBlockPickerOpen(false);
-        setSelectedBlockId("");
-        setBuilderBlocks([]);
-        setSelectedBuilderBlockId("");
-        setScanStatus("success");
-      } catch (error) {
-        setScanStatus("error");
-        setScanError(error instanceof Error && error.message ? error.message : SCAN_ERROR_MESSAGE);
-        setScanMeta(DEFAULT_SCAN_META);
+      if (clearExisting) {
+        setScannedBlocks([]);
+        setScannedBlocksByPreviewMode({});
+      }
+      if (clearExisting) {
+        setScanMeta({ ...DEFAULT_SCAN_META, visualPreviewMode: normalizedPreviewMode });
         setSelectedInsertionSlotId(null);
         setInsertAfterBuilderBlockId(null);
         setIsBlockPickerOpen(false);
@@ -2310,8 +2575,78 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
         setBuilderBlocks([]);
         setSelectedBuilderBlockId("");
       }
+
+      try {
+        const response = await fetch(API_ENDPOINTS.sitePageScan, {
+          method: "POST",
+          headers: ownerSitesAuthHeaders(),
+          credentials: "include",
+          body: JSON.stringify({
+            url: nextUrl,
+            mode: "visual",
+            preview_mode: normalizedPreviewMode,
+            preload_preview_modes: false,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof payload?.detail === "string" ? payload.detail : SCAN_ERROR_MESSAGE);
+        }
+        const normalized = normalizeScanMeta(payload, normalizedPreviewMode);
+        const nextPreviewBlocksByMode = normalized.previewBlocksByMode || {};
+        const activeBlocks = pickActiveScannedBlocksForPreviewMode(normalized, normalizedPreviewMode);
+        setScannedBlocks(activeBlocks);
+        setScannedBlocksByPreviewMode((current) =>
+          clearExisting ? nextPreviewBlocksByMode : { ...current, ...nextPreviewBlocksByMode },
+        );
+        setScanMeta({
+          visualImportAvailable: normalized.visualImportAvailable,
+          visualMode: normalized.visualMode,
+          visualPreviewMode: normalized.visualPreviewMode,
+          detail: normalized.detail,
+          platform: normalized.platform,
+          visualVideoCount: normalized.visualVideoCount,
+        });
+        const shots = activeBlocks.filter((b) => b.screenshotDataUrl || b.screenshotUrl);
+        setSelectedInsertionSlotId(firstVisibleInsertionSlotId(shots) || null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
+        setSelectedBlockId("");
+        if (clearExisting) {
+          setBuilderBlocks([]);
+          setSelectedBuilderBlockId("");
+          for (const mode of REFERRAL_BUILDER_PREVIEW_MODES) {
+            if (mode.id !== normalizedPreviewMode) {
+              void loadPreviewModeInBackground(nextUrl, mode.id);
+            }
+          }
+        }
+        setScanStatus("success");
+      } catch (error) {
+        setScanStatus("error");
+        setScanError(error instanceof Error && error.message ? error.message : SCAN_ERROR_MESSAGE);
+        if (clearExisting) {
+          setScanMeta({ ...DEFAULT_SCAN_META, visualPreviewMode: normalizedPreviewMode });
+          setSelectedInsertionSlotId(null);
+          setInsertAfterBuilderBlockId(null);
+          setIsBlockPickerOpen(false);
+          setSelectedBlockId("");
+          setBuilderBlocks([]);
+          setSelectedBuilderBlockId("");
+        } else {
+          setScanMeta((current) => ({ ...current, visualPreviewMode: normalizedPreviewMode }));
+        }
+      }
     },
-    [scanUrl],
+    [loadPreviewModeInBackground],
+  );
+
+  const handleScanSubmit = useCallback(
+    async (event) => {
+      event.preventDefault();
+      await executeVisualScan(scanUrl.trim(), previewMode);
+    },
+    [executeVisualScan, previewMode, scanUrl],
   );
 
   const expandLabel = isExpanded ? "Свернуть" : "На весь экран";
@@ -2345,27 +2680,53 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
         data-testid="referral-builder-canvas"
       >
         <div className="owner-programs__referral-builder-scan-overlay">
-          <form className="owner-programs__referral-builder-scan-form" onSubmit={handleScanSubmit}>
-            <label className="owner-programs__referral-builder-scan-input-wrap" htmlFor="site-page-scan-url">
-              <input
-                id="site-page-scan-url"
-                className="owner-programs__referral-builder-scan-input"
-                type="url"
-                inputMode="url"
-                placeholder="https://example.com/page"
-                aria-label="URL страницы"
-                value={scanUrl}
-                onChange={(event) => setScanUrl(event.target.value)}
-              />
-            </label>
-            <button
-              type="submit"
-              className="owner-programs__referral-builder-scan-button"
-              disabled={isScanning}
+          <div className="owner-programs__referral-builder-scan-row">
+            <form className="owner-programs__referral-builder-scan-form" onSubmit={handleScanSubmit}>
+              <label className="owner-programs__referral-builder-scan-input-wrap" htmlFor="site-page-scan-url">
+                <input
+                  id="site-page-scan-url"
+                  className="owner-programs__referral-builder-scan-input"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://example.com/page"
+                  aria-label="URL страницы"
+                  value={scanUrl}
+                  onChange={(event) => setScanUrl(event.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                className="owner-programs__referral-builder-scan-button"
+                disabled={isScanning}
+              >
+                {isScanning ? "Импорт…" : "Импорт дизайна"}
+              </button>
+            </form>
+            <div
+              className="owner-programs__referral-builder-preview-switch nodrag nopan"
+              role="group"
+              aria-label="Режим просмотра"
             >
-              {isScanning ? "Импорт…" : "Импорт дизайна"}
-            </button>
-          </form>
+              {REFERRAL_BUILDER_PREVIEW_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  className={`owner-programs__referral-builder-preview-switch__btn${
+                    previewMode === mode.id ? " is-active" : ""
+                  }`}
+                  aria-pressed={previewMode === mode.id ? "true" : "false"}
+                  aria-label={mode.label}
+                  title={`${mode.label}: ${referralBuilderPreviewModeSizeLabel(mode)}`}
+                  onClick={() => handlePreviewModeChange(mode.id)}
+                >
+                  <mode.Icon className="owner-programs__referral-builder-preview-switch__icon" aria-hidden="true" size={15} />
+                  <span className="owner-programs__referral-builder-preview-switch__size" aria-hidden="true">
+                    {referralBuilderPreviewModeSizeLabel(mode)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
           {scanError ? <div className="owner-programs__referral-builder-scan-error">{scanError}</div> : null}
           {scanStatus === "success" &&
           scanMeta.visualMode === "screenshot" &&

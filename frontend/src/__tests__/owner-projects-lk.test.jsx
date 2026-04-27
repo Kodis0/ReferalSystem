@@ -2373,6 +2373,10 @@ describe("Canonical site identity contract", () => {
     expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
     expect(screen.getByLabelText("URL страницы")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Импорт дизайна" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Режим просмотра" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Мобильный 360" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Планшет" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Десктоп" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "На весь экран" })).toBeInTheDocument();
   });
 
@@ -2443,7 +2447,17 @@ describe("Canonical site identity contract", () => {
       expect(document.documentElement).toHaveAttribute("data-lk-referral-builder-expanded");
     });
 
-    const pageStack = screen.getByTestId("imported-page-stack-node");
+    let pageStack = screen.getByTestId("imported-page-stack-node");
+    expect(pageStack).toHaveAttribute("data-preview-mode", "desktop");
+    await userEvent.click(screen.getByRole("button", { name: "Мобильный 360" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toHaveAttribute("data-preview-mode", "mobile");
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Планшет" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("imported-page-stack-node")).toHaveAttribute("data-preview-mode", "tablet");
+    });
+    pageStack = screen.getByTestId("imported-page-stack-node");
     expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("referral-builder-blocks-dock")).not.toBeInTheDocument();
     expect(screen.queryByTestId("site-scan-block-node")).not.toBeInTheDocument();
@@ -2792,38 +2806,35 @@ describe("Canonical site identity contract", () => {
     expect(videos[0].loop).toBe(true);
     expect(videos[0].playsInline).toBe(true);
 
-    const fg = within(pageStack).getAllByTestId("imported-section-foreground-crop");
-    expect(fg).toHaveLength(2);
-    expect(within(fg[0]).queryByText("RECENT LAUNCH")).not.toBeInTheDocument();
-    expect(within(fg[1]).queryByText("REWATCH")).not.toBeInTheDocument();
+    const fgText = within(pageStack).getByTestId("imported-section-foreground-text");
+    expect(fgText).toHaveTextContent("RECENT LAUNCH");
+    expect(fgText).toHaveStyle({ background: "transparent" });
 
     const cropImages = within(pageStack).getAllByTestId("imported-section-foreground-crop-image");
-    expect(cropImages).toHaveLength(2);
+    expect(cropImages).toHaveLength(1);
     const sectionImg = within(pageStack).getByTestId("imported-page-section-image");
     expect(cropImages[0]).toHaveAttribute("src", sectionImg.getAttribute("src"));
-    expect(cropImages[0].style.transform).toMatch(/translate\(-115px,\s*-446px\)/);
-    expect(cropImages[1].style.transform).toMatch(/translate\(-111px,\s*-558px\)/);
+    expect(cropImages[0].style.transform).toMatch(/translate\(-111px,\s*-558px\)/);
 
-    expect(fg[0]).toHaveAttribute("data-foreground-type", "text");
-    expect(fg[1]).toHaveAttribute("data-foreground-type", "button");
-    expect(fg[0]).toHaveClass("owner-programs__imported-section-foreground-crop--text");
-    expect(fg[1]).toHaveClass("owner-programs__imported-section-foreground-crop--button");
+    const fg = within(pageStack).getByTestId("imported-section-foreground-crop");
+    expect(fg).toHaveAttribute("data-foreground-type", "button");
+    expect(fg).toHaveClass("owner-programs__imported-section-foreground-crop--button");
 
     const overlayLayer = within(pageStack).getByTestId("imported-screenshot-overlay-layer");
     expect(overlayLayer.getAttribute("style") || "").toMatch(/width:\s*1440px/);
     expect(overlayLayer.getAttribute("style") || "").toMatch(/height:\s*720px/);
     expect(overlayLayer.getAttribute("style") || "").toMatch(/transform:\s*scale\(/);
     expect(overlayLayer.contains(videos[0])).toBe(true);
-    expect(overlayLayer.contains(fg[0])).toBe(true);
+    expect(overlayLayer.contains(fgText)).toBe(true);
 
-    expect(videos[0].style.width).toBe("1440px");
+    expect(videos[0].style.width).toBe("1442px");
     expect(videos[0].style.left).toBe("0px");
     expect(videos[0].style.left).not.toContain("%");
 
-    expect(fg[0].style.left).toBe("115px");
-    expect(fg[0].style.width).toBe("576px");
-    expect(fg[1].style.left).toBe("111px");
-    expect(fg[1].style.width).toBe("181px");
+    expect(fgText.style.left).toBe("115px");
+    expect(fgText.style.width).toBe("576px");
+    expect(fg.style.left).toBe("111px");
+    expect(fg.style.width).toBe("181px");
 
     const sectionRoot = container.querySelector(".owner-programs__imported-screenshot-section");
     expect(sectionRoot).toBeTruthy();

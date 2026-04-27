@@ -46,6 +46,12 @@ class PageScanRequestSerializer(serializers.Serializer):
         required=False,
         default="map",
     )
+    preview_mode = serializers.ChoiceField(
+        choices=("mobile", "tablet", "desktop"),
+        required=False,
+        default="desktop",
+    )
+    preload_preview_modes = serializers.BooleanField(required=False, default=False)
 
 
 def build_widget_embed_snippet(

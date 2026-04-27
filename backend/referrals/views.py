@@ -693,6 +693,8 @@ class SiteOwnerPageScanView(APIView):
             payload = scan_page_url(
                 serializer.validated_data["url"],
                 mode=serializer.validated_data.get("mode") or "map",
+                preview_mode=serializer.validated_data.get("preview_mode") or "desktop",
+                preload_preview_modes=bool(serializer.validated_data.get("preload_preview_modes")),
             )
         except PageScanError:
             return Response(
