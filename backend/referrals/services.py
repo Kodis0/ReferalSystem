@@ -11,6 +11,7 @@ import logging
 import re
 import secrets
 import string
+import time
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, NamedTuple, Optional, Tuple
 from urllib.parse import urlparse
@@ -1670,17 +1671,17 @@ def check_site_http_reachability(site: Site, *, timeout: float = 8.0) -> dict[st
     primary_origin, _ = owner_site_list_origin_display(site)
     raw = (primary_origin or "").strip()
     if not raw:
-        return {"reachable": False, "reason": "no_origin", "checked_url": None, "http_status": None}
+        return {"reachable": False, "reason": "no_origin", "checked_url": None, "http_status": None, "latency_ms": None}
 
     url = raw if "://" in raw else f"https://{raw}"
     try:
         parsed = urlparse(url)
     except Exception:
-        return {"reachable": False, "reason": "bad_url", "checked_url": url, "http_status": None}
+        return {"reachable": False, "reason": "bad_url", "checked_url": url, "http_status": None, "latency_ms": None}
 
     scheme = (parsed.scheme or "").lower()
     if scheme not in ("http", "https") or not (parsed.netloc or "").strip():
-        return {"reachable": False, "reason": "unsupported_scheme", "checked_url": url, "http_status": None}
+        return {"reachable": False, "reason": "unsupported_scheme", "checked_url": url, "http_status": None, "latency_ms": None}
 
     req = Request(
         url,
@@ -1688,27 +1689,34 @@ def check_site_http_reachability(site: Site, *, timeout: float = 8.0) -> dict[st
         headers={"User-Agent": "ReferalSystem-Reachability/1.0"},
     )
     try:
+        t0 = time.perf_counter()
         with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — URL from owner's Site.allowed_origins
             code = resp.getcode()
-            return {"reachable": True, "reason": None, "checked_url": url, "http_status": int(code)}
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            return {"reachable": True, "reason": None, "checked_url": url, "http_status": int(code), "latency_ms": elapsed_ms}
     except HTTPError as e:
         # Server responded (including 4xx/5xx) — host is reachable over HTTP.
-        return {"reachable": True, "reason": None, "checked_url": url, "http_status": int(e.code)}
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        return {"reachable": True, "reason": None, "checked_url": url, "http_status": int(e.code), "latency_ms": elapsed_ms}
     except URLError as e:
         reason = getattr(e, "reason", e)
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
         return {
             "reachable": False,
             "reason": "network_error",
             "checked_url": url,
             "http_status": None,
+            "latency_ms": elapsed_ms,
             "error": str(reason) if reason is not None else "unreachable",
         }
     except Exception as e:  # pragma: no cover — defensive
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
         return {
             "reachable": False,
             "reason": "probe_error",
             "checked_url": url,
             "http_status": None,
+            "latency_ms": elapsed_ms,
             "error": str(e),
         }
 

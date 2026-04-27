@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { cloneElement, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ChevronDown, Globe, Search } from "lucide-react";
 import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "../dashboard/dashboard.css";
@@ -14,6 +15,9 @@ import {
   SITE_REACHABILITY_POLL_MS,
   withSitePublicIdQuery,
 } from "./siteReachability";
+import SiteShellWidgetActionsBar from "../widget-install/SiteShellWidgetActionsBar";
+import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "./domainCountryFlagSvg";
+import { useSiteShellIntegrationActions } from "./useSiteShellIntegrationActions";
 
 function ServicesGridIcon() {
   return (
@@ -85,21 +89,89 @@ function countryCodeFromDomain(value) {
   return "";
 }
 
+/** Строка origin/хоста для определения страны флага (не только `primary_origin`). */
+function siteOriginForCountryFlag(site, domainLabel) {
+  const o = typeof site?.primary_origin === "string" ? site.primary_origin.trim() : "";
+  if (o) return o;
+  const l = typeof site?.primary_origin_label === "string" ? site.primary_origin_label.trim() : "";
+  if (l) return l;
+  if (typeof domainLabel === "string" && domainLabel.trim() && domainLabel !== "Домен не задан") {
+    return domainLabel.trim();
+  }
+  return "";
+}
+
 function emojiFlagFromCountryCode(countryCode) {
   if (!/^[A-Z]{2}$/.test(countryCode)) return "";
   const base = 127397;
   return String.fromCodePoint(...countryCode.split("").map((letter) => base + letter.charCodeAt(0)));
 }
 
-function ServiceCountryFlag({ domain }) {
+function ServiceCountryFlag({ domain, fallback = null, title: titleProp = "" }) {
+  const tip = typeof titleProp === "string" && titleProp.trim() ? { title: titleProp.trim() } : {};
   const countryCode = countryCodeFromDomain(domain);
-  const flag = emojiFlagFromCountryCode(countryCode);
-  if (!flag) return null;
+  if (!countryCode) {
+    if (fallback != null && isValidElement(fallback)) {
+      return cloneElement(fallback, tip);
+    }
+    return fallback;
+  }
+  const upper = countryCode.toUpperCase();
+  const useSvg = SUPPORTED_DOMAIN_FLAG_SVG_CODES.has(upper);
+  const emoji = emojiFlagFromCountryCode(upper);
+  if (!useSvg && !emoji) {
+    if (fallback != null && isValidElement(fallback)) {
+      return cloneElement(fallback, tip);
+    }
+    return fallback;
+  }
   return (
-    <span className="owner-programs__service-card-flag" role="img" aria-label={`Флаг страны ${countryCode}`}>
-      {flag}
+    <span
+      className={`owner-programs__service-card-flag${useSvg ? " owner-programs__service-card-flag_svg" : ""}`}
+      role="img"
+      aria-label={`Флаг страны ${upper}`}
+      {...tip}
+    >
+      {useSvg ? <DomainCountryFlagSvg countryCode={upper} /> : emoji}
     </span>
   );
+}
+
+function serviceCountryFlagGlobeFallback(globeSize) {
+  return (
+    <span className="owner-programs__service-card-flag owner-programs__service-card-flag_globe" aria-hidden>
+      <Globe size={globeSize} strokeWidth={1.75} />
+    </span>
+  );
+}
+
+/** Подсказка при наведении: задержка HTTP HEAD с сервера до основного URL сайта. */
+function serverPingFromServerTitle(site, reach) {
+  const phase = reach?.phase ?? "idle";
+  const origin = sitePrimaryDomainLabel(site);
+  const lat = typeof reach?.latencyMs === "number" ? reach.latencyMs : null;
+  const checked = typeof reach?.checkedUrl === "string" && reach.checkedUrl.trim() ? reach.checkedUrl.trim() : "";
+
+  if (!origin || phase === "no_url") {
+    return "Нет адреса для проверки с сервера";
+  }
+  if (phase === "checking") {
+    return lat != null ? `Проверка HTTP (HEAD) с сервера… (последний ответ: ${lat} мс)` : "Проверка HTTP (HEAD) с сервера…";
+  }
+  if (phase === "idle") {
+    return "Проверка с сервера ещё не запускалась";
+  }
+  if (phase === "online") {
+    if (lat != null) {
+      return checked ? `Пинг с сервера: ${lat} мс · ${checked}` : `Пинг с сервера: ${lat} мс`;
+    }
+    return checked ? `Сайт отвечает (HEAD с сервера) · ${checked}` : "Сайт отвечает на HTTP HEAD с сервера";
+  }
+  if (phase === "offline") {
+    const tail = lat != null ? ` · ${lat} мс до отказа` : "";
+    return checked ? `С сервера недоступен · ${checked}${tail}` : `С сервера недоступен${tail}`;
+  }
+  return "";
 }
 
 function authHeaders() {
@@ -112,7 +184,7 @@ function authHeaders() {
 
 function ServiceActionsIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 18 18" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 18 18" aria-hidden="true">
       <path fill="currentColor" d="M9 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-5.25 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm10.5 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
     </svg>
   );
@@ -261,6 +333,24 @@ export default function ProjectOverviewPage() {
   const siteReachabilityByIdRef = useRef({});
   const reachabilityProbeTargetsRef = useRef([]);
   const menuRef = useRef(null);
+  const menuDropdownPortalRef = useRef(null);
+  const [menuAnchorRect, setMenuAnchorRect] = useState(null);
+
+  const closeActiveSiteMenu = useCallback(() => setActiveMenuSiteId(""), []);
+  const onSiteDeletePending = useCallback((id) => setDeletingSiteId(id), []);
+  const onSiteDeleteSettled = useCallback(() => setDeletingSiteId(""), []);
+  const siteMenuIntegration = useSiteShellIntegrationActions({
+    sitePublicId: activeMenuSiteId,
+    projectIdProp: typeof projectId === "number" ? projectId : undefined,
+    projectEntry,
+    reloadProjectEntry,
+    buildProjectPath,
+    deleteContext: "overview",
+    overviewRouteSitePublicId: sitePublicId,
+    onAfterDeleteSuccess: closeActiveSiteMenu,
+    onSiteDeletePending,
+    onSiteDeleteSettled,
+  });
 
   const currentProjectSites = Array.isArray(projectEntry?.sites) ? projectEntry.sites : [];
   const visibleProjectSites = useMemo(
@@ -307,7 +397,9 @@ export default function ProjectOverviewPage() {
 
   useEffect(() => {
     function handlePointerDown(event) {
-      if (!menuRef.current || menuRef.current.contains(event.target)) return;
+      const t = event.target;
+      if (menuRef.current?.contains(t)) return;
+      if (menuDropdownPortalRef.current?.contains(t)) return;
       setActiveMenuSiteId("");
     }
 
@@ -325,6 +417,33 @@ export default function ProjectOverviewPage() {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    if (!activeMenuSiteId) {
+      setMenuAnchorRect(null);
+      return undefined;
+    }
+    const sync = () => {
+      const el = document.querySelector(`[data-testid="project-child-site-menu-trigger-${activeMenuSiteId}"]`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setMenuAnchorRect({ top: r.top, right: r.right, bottom: r.bottom, left: r.left, width: r.width, height: r.height });
+    };
+    sync();
+    window.addEventListener("scroll", sync, true);
+    window.addEventListener("resize", sync);
+    return () => {
+      window.removeEventListener("scroll", sync, true);
+      window.removeEventListener("resize", sync);
+    };
+  }, [activeMenuSiteId]);
+
+  useEffect(() => {
+    if (!activeMenuSiteId) return;
+    if (!filteredSites.some((s) => s.public_id === activeMenuSiteId)) {
+      setActiveMenuSiteId("");
+    }
+  }, [filteredSites, activeMenuSiteId]);
+
   useEffect(() => {
     const sitesForProbe = reachabilityProbeTargetsRef.current;
 
@@ -340,13 +459,16 @@ export default function ProjectOverviewPage() {
       const optimisticState = {};
 
       sitesForProbe.forEach((site) => {
-        const previousPhase = snapshot[site.public_id]?.phase || "idle";
-        optimisticState[site.public_id] = {
-          phase: sitePrimaryDomainLabel(site) ? preserveResolvedReachabilityPhase(previousPhase) || "checking" : "no_url",
-        };
-        if (optimisticState[site.public_id].phase === "idle") {
-          optimisticState[site.public_id] = { phase: "checking" };
+        const prev = snapshot[site.public_id] || {};
+        const previousPhase = prev.phase || "idle";
+        const hasOrigin = Boolean(sitePrimaryDomainLabel(site));
+        let phase = hasOrigin ? preserveResolvedReachabilityPhase(previousPhase) || "checking" : "no_url";
+        if (phase === "idle") {
+          phase = "checking";
         }
+        optimisticState[site.public_id] = hasOrigin
+          ? { ...prev, phase }
+          : { phase: "no_url", latencyMs: null, checkedUrl: null, httpStatus: null };
       });
 
       setSiteReachabilityById(optimisticState);
@@ -355,7 +477,7 @@ export default function ProjectOverviewPage() {
         sitesForProbe.map(async (site) => {
           const origin = sitePrimaryDomainLabel(site);
           if (!origin) {
-            return [site.public_id, { phase: "no_url" }];
+            return [site.public_id, { phase: "no_url", latencyMs: null, checkedUrl: null, httpStatus: null }];
           }
 
           try {
@@ -364,12 +486,34 @@ export default function ProjectOverviewPage() {
               credentials: "include",
             });
             const body = await res.json().catch(() => ({}));
+            const prevSnap = snapshot[site.public_id] || {};
             if (!res.ok) {
-              return [site.public_id, { phase: preserveResolvedReachabilityPhase(snapshot[site.public_id]?.phase) }];
+              return [
+                site.public_id,
+                {
+                  ...prevSnap,
+                  phase: preserveResolvedReachabilityPhase(prevSnap.phase || "idle"),
+                },
+              ];
             }
-            return [site.public_id, { phase: body.reachable ? "online" : "offline" }];
+            return [
+              site.public_id,
+              {
+                phase: body.reachable ? "online" : "offline",
+                latencyMs: typeof body.latency_ms === "number" ? body.latency_ms : null,
+                checkedUrl: typeof body.checked_url === "string" ? body.checked_url : null,
+                httpStatus: typeof body.http_status === "number" ? body.http_status : null,
+              },
+            ];
           } catch {
-            return [site.public_id, { phase: preserveResolvedReachabilityPhase(snapshot[site.public_id]?.phase) }];
+            const prevSnap = snapshot[site.public_id] || {};
+            return [
+              site.public_id,
+              {
+                ...prevSnap,
+                phase: preserveResolvedReachabilityPhase(prevSnap.phase || "idle"),
+              },
+            ];
           }
         }),
       );
@@ -452,6 +596,81 @@ export default function ProjectOverviewPage() {
     },
     [buildProjectPath, navigate, projectEntry?.id, projectId, reloadProjectEntry, sitePublicId],
   );
+
+  const renderServiceSiteMenuPanelBody = (site) => {
+    const title = serviceTitle(site);
+    const integrationPayload = siteMenuIntegration.data;
+    const hasIntegration = Boolean(integrationPayload);
+    const loadFailedNoPayload = Boolean(siteMenuIntegration.error) && !hasIntegration;
+    const listStatus = typeof site.status === "string" ? site.status.trim().toLowerCase() : "";
+    const lifecycleStatus =
+      siteMenuIntegration.diag?.site_status || integrationPayload?.status || (listStatus || undefined);
+    const widgetEnabled = hasIntegration ? siteMenuIntegration.widgetEnabled : Boolean(site.widget_enabled);
+    const toggleDisabledUntilReady = !hasIntegration && listStatus === "active";
+
+    return loadFailedNoPayload ? (
+      <>
+        <div className="owner-programs__service-card-menu-hint" role="note">
+          Не удалось загрузить настройки
+        </div>
+        <button
+          type="button"
+          className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_danger"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleDeleteSite(site);
+          }}
+          role="menuitem"
+          data-testid={`project-child-site-delete-${site.public_id}`}
+          disabled={deletingSiteId === site.public_id}
+        >
+          {deletingSiteId === site.public_id ? "Удаление…" : "Удалить"}
+        </button>
+      </>
+    ) : (
+      <SiteShellWidgetActionsBar
+        variant="menu"
+        deleteConfirmTitle={title}
+        deleteMenuTestId={`project-child-site-delete-${site.public_id}`}
+        actionsRef={siteMenuIntegration.actionsRef}
+        deleteSiteBusy={siteMenuIntegration.deleteSiteBusy}
+        verifyLoading={siteMenuIntegration.verifyLoading}
+        refreshBusy={siteMenuIntegration.refreshBusy}
+        lifecycleStatus={lifecycleStatus}
+        widgetEnabled={widgetEnabled}
+        toggleBusy={siteMenuIntegration.saving || siteMenuIntegration.activateLoading}
+        toggleDisabledUntilReady={toggleDisabledUntilReady}
+      />
+    );
+  };
+
+  const portalSite = activeMenuSiteId
+    ? filteredSites.find((s) => s.public_id === activeMenuSiteId) ||
+      visibleProjectSites.find((s) => s.public_id === activeMenuSiteId) ||
+      currentProjectSites.find((s) => s.public_id === activeMenuSiteId) ||
+      null
+    : null;
+
+  const siteMenuPortal =
+    activeMenuSiteId && menuAnchorRect && portalSite && typeof window !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuDropdownPortalRef}
+            className="owner-programs__service-card-menu-dropdown owner-programs__service-card-menu-dropdown_portal"
+            style={{
+              position: "fixed",
+              top: menuAnchorRect.bottom + 8,
+              right: window.innerWidth - menuAnchorRect.right,
+              minWidth: 220,
+              zIndex: 6000,
+            }}
+            role="menu"
+          >
+            {renderServiceSiteMenuPanelBody(portalSite)}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div className="owner-programs__page" data-testid="project-services-page">
@@ -606,10 +825,11 @@ export default function ProjectOverviewPage() {
                   const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
                   const siteCardAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
+                  const menuOpen = activeMenuSiteId === site.public_id;
                   return (
                     <div
                       key={site.public_id}
-                      className="owner-programs__service-card"
+                      className={`owner-programs__service-card${menuOpen ? " owner-programs__service-card_menu-open" : ""}`}
                       data-testid={`project-child-site-${site.public_id}`}
                       role="link"
                       tabIndex={0}
@@ -621,65 +841,53 @@ export default function ProjectOverviewPage() {
                         }
                       }}
                     >
-                      <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
-                        <ServiceCountryFlag domain={site.primary_origin} />
-                        <div className="owner-programs__service-card-menu" onClick={(event) => event.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="owner-programs__service-card-menu-trigger"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setActiveMenuSiteId((value) => (value === site.public_id ? "" : site.public_id));
-                            }}
-                            aria-haspopup="menu"
-                            aria-expanded={activeMenuSiteId === site.public_id}
-                            data-testid={`project-child-site-menu-trigger-${site.public_id}`}
-                            disabled={deletingSiteId === site.public_id}
-                          >
-                            <ServiceActionsIcon />
-                          </button>
-                          {activeMenuSiteId === site.public_id ? (
-                            <div className="owner-programs__service-card-menu-dropdown" role="menu">
-                              <button
-                                type="button"
-                                className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_danger"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleDeleteSite(site);
-                                }}
-                                role="menuitem"
-                                data-testid={`project-child-site-delete-${site.public_id}`}
-                                disabled={deletingSiteId === site.public_id}
-                              >
-                                {deletingSiteId === site.public_id ? "Удаление…" : "Удалить"}
-                              </button>
-                            </div>
-                          ) : null}
+                      <div className="owner-programs__service-card-top-row">
+                        <div className="owner-programs__service-card-hero">
+                          <div className="owner-programs__service-card-avatar">
+                            {siteCardAvatarUrl ? (
+                              <img
+                                src={siteCardAvatarUrl}
+                                alt=""
+                                className="owner-programs__service-card-avatar-img"
+                              />
+                            ) : (
+                              <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
+                          <ServiceCountryFlag
+                            domain={siteOriginForCountryFlag(site, domain)}
+                            fallback={serviceCountryFlagGlobeFallback(18)}
+                            title={serverPingFromServerTitle(site, siteReachabilityById[site.public_id])}
+                          />
+                          <div className="owner-programs__service-card-menu" onClick={(event) => event.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="owner-programs__service-card-menu-trigger"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setActiveMenuSiteId((value) => (value === site.public_id ? "" : site.public_id));
+                              }}
+                              aria-haspopup="menu"
+                              aria-expanded={activeMenuSiteId === site.public_id}
+                              data-testid={`project-child-site-menu-trigger-${site.public_id}`}
+                              disabled={
+                                deletingSiteId === site.public_id ||
+                                (siteMenuIntegration.deleteSiteBusy && activeMenuSiteId === site.public_id)
+                              }
+                            >
+                              <ServiceActionsIcon />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <div className="owner-programs__service-card-top">
-                        <div className="owner-programs__service-card-avatar">
-                          {siteCardAvatarUrl ? (
-                            <img
-                              src={siteCardAvatarUrl}
-                              alt=""
-                              className="owner-programs__service-card-avatar-img"
-                            />
-                          ) : (
-                            <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
-                          )}
-                        </div>
-                        <div className="owner-programs__service-card-copy">
-                          <p className="owner-programs__service-card-title">{title}</p>
-                          <p className="owner-programs__service-card-domain">{domain}</p>
-                        </div>
+                      <div className="owner-programs__service-card-headline">
+                        <span className={status.cardDotClassName} aria-hidden="true" />
+                        <span className="owner-programs__service-card-headline-title">{title}</span>
                       </div>
-                      <div className="owner-programs__service-card-meta">
-                        <span className="owner-programs__service-card-status">
-                          <span className={status.cardDotClassName} aria-hidden="true" />
-                          <span>{status.label}</span>
-                        </span>
-                        <span>{site.platform_preset || "—"}</span>
+                      <div className="owner-programs__service-card-specs" title={[domain, status.label, site.platform_preset || "—"].join(" · ")}>
+                        {[domain, status.label, site.platform_preset || "—"].join(" · ")}
                       </div>
                     </div>
                   );
@@ -694,10 +902,11 @@ export default function ProjectOverviewPage() {
                   const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
                   const siteListAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
+                  const menuOpen = activeMenuSiteId === site.public_id;
                   return (
                     <div
                       key={site.public_id}
-                      className="owner-programs__services-list-row"
+                      className={`owner-programs__services-list-row${menuOpen ? " owner-programs__services-list-row_menu-open" : ""}`}
                       data-testid={`project-child-site-${site.public_id}`}
                       role="link"
                       tabIndex={0}
@@ -724,7 +933,7 @@ export default function ProjectOverviewPage() {
                       </div>
                       <div className="owner-programs__services-list-middle">
                         <div className={status.listDotClassName} aria-hidden="true" />
-                        <div className="owner-programs__services-list-copy">
+                        <div className="owner-programs__services-list-middle-main">
                           <p className="owner-programs__services-list-title">{title}</p>
                           <p className="owner-programs__services-list-domain">{domain}</p>
                         </div>
@@ -732,7 +941,11 @@ export default function ProjectOverviewPage() {
                       <div className="owner-programs__services-list-bottom">
                         <div className="owner-programs__services-list-end">
                           <div className="owner-programs__services-list-flag-wrap">
-                            <ServiceCountryFlag domain={site.primary_origin} />
+                            <ServiceCountryFlag
+                              domain={siteOriginForCountryFlag(site, domain)}
+                              fallback={serviceCountryFlagGlobeFallback(16)}
+                              title={serverPingFromServerTitle(site, siteReachabilityById[site.public_id])}
+                            />
                           </div>
                           <div
                             className="owner-programs__service-card-menu owner-programs__services-list-menu"
@@ -749,27 +962,13 @@ export default function ProjectOverviewPage() {
                               aria-haspopup="menu"
                               aria-expanded={activeMenuSiteId === site.public_id}
                               data-testid={`project-child-site-menu-trigger-${site.public_id}`}
-                              disabled={deletingSiteId === site.public_id}
+                              disabled={
+                                deletingSiteId === site.public_id ||
+                                (siteMenuIntegration.deleteSiteBusy && activeMenuSiteId === site.public_id)
+                              }
                             >
                               <ServiceActionsIcon />
                             </button>
-                            {activeMenuSiteId === site.public_id ? (
-                              <div className="owner-programs__service-card-menu-dropdown" role="menu">
-                                <button
-                                  type="button"
-                                  className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_danger"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleDeleteSite(site);
-                                  }}
-                                  role="menuitem"
-                                  data-testid={`project-child-site-delete-${site.public_id}`}
-                                  disabled={deletingSiteId === site.public_id}
-                                >
-                                  {deletingSiteId === site.public_id ? "Удаление…" : "Удалить"}
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -781,6 +980,7 @@ export default function ProjectOverviewPage() {
           ) : null}
         </>
       ) : null}
+      {siteMenuPortal}
     </div>
   );
 }

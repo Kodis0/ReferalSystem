@@ -3,6 +3,9 @@ import { CirclePause, CirclePlay, PlugZap, RefreshCw, Trash2 } from "lucide-reac
 /**
  * Кнопки в шапке сайта (удалить / вкл-выкл сбор / проверить / обновить).
  * Общий для `widget-install` и `SiteShellToolbarSubscriber`.
+ *
+ * @param {"toolbar"|"menu"} [props.variant] — `menu`: пункты как в выпадающем меню карточки сайта.
+ * @param {string} [props.deleteConfirmTitle] — подпись для confirm при удалении (например имя из списка сайтов).
  */
 export default function SiteShellWidgetActionsBar({
   actionsRef,
@@ -12,6 +15,12 @@ export default function SiteShellWidgetActionsBar({
   lifecycleStatus,
   widgetEnabled,
   toggleBusy,
+  variant = "toolbar",
+  deleteConfirmTitle,
+  /** Для меню карточки сайта — сохраняем `project-child-site-delete-*` в тестах */
+  deleteMenuTestId,
+  /** Пока нет payload интеграции, переключение виджета для `active` — no-op без `data`; блокируем кнопку. */
+  toggleDisabledUntilReady = false,
 }) {
   const captureRunning = lifecycleStatus === "active" && widgetEnabled;
   const toggleLabel = (() => {
@@ -21,29 +30,93 @@ export default function SiteShellWidgetActionsBar({
   })();
   const ToggleIcon = captureRunning ? CirclePause : CirclePlay;
   const actionBusy = verifyLoading || refreshBusy || deleteSiteBusy || toggleBusy;
+  const iconSize = variant === "menu" ? 18 : 22;
+
+  if (variant === "menu") {
+    return (
+      <>
+        <button
+          type="button"
+          className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row owner-programs__service-card-menu-item_danger"
+          onClick={() => actionsRef.current.onDeleteSite?.(deleteConfirmTitle)}
+          disabled={actionBusy}
+          role="menuitem"
+          aria-label="Удалить сайт"
+          data-testid={deleteMenuTestId || "site-shell-action-delete"}
+        >
+          <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
+            <Trash2 size={iconSize} strokeWidth={2} />
+          </span>
+          <span>Удалить сайт</span>
+        </button>
+        <button
+          type="button"
+          className={`owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row${captureRunning ? " owner-programs__service-card-menu-item_active" : ""}`}
+          onClick={() => actionsRef.current.onUnifiedToggle?.()}
+          disabled={actionBusy || toggleDisabledUntilReady}
+          role="menuitem"
+          aria-label={toggleLabel}
+          data-testid="site-shell-action-toggle-capture"
+        >
+          <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
+            <ToggleIcon size={iconSize} strokeWidth={2} />
+          </span>
+          <span>{toggleLabel}</span>
+        </button>
+        <button
+          type="button"
+          className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row"
+          onClick={() => actionsRef.current.onVerify?.()}
+          disabled={actionBusy}
+          role="menuitem"
+          aria-label={verifyLoading ? "Проверяем подключение…" : "Проверить подключение"}
+          data-testid="site-shell-action-verify"
+        >
+          <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
+            <PlugZap size={iconSize} strokeWidth={2} />
+          </span>
+          <span>{verifyLoading ? "Проверка…" : "Проверить подключение"}</span>
+        </button>
+        <button
+          type="button"
+          className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row"
+          onClick={() => actionsRef.current.onRefreshStatus?.()}
+          disabled={actionBusy}
+          role="menuitem"
+          aria-label={refreshBusy ? "Обновление статуса…" : "Обновить статус"}
+          data-testid="site-shell-action-refresh"
+        >
+          <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
+            <RefreshCw size={iconSize} strokeWidth={2} className={refreshBusy ? "owner-programs__icon-action-spin" : ""} />
+          </span>
+          <span>{refreshBusy ? "Обновление…" : "Обновить статус"}</span>
+        </button>
+      </>
+    );
+  }
 
   return (
     <>
       <button
         type="button"
         className="owner-programs__icon-action owner-programs__icon-action_danger"
-        onClick={() => actionsRef.current.onDeleteSite?.()}
+        onClick={() => actionsRef.current.onDeleteSite?.(deleteConfirmTitle)}
         disabled={actionBusy}
         aria-label="Удалить сайт"
         data-testid="site-shell-action-delete"
       >
-        <Trash2 size={22} strokeWidth={2} aria-hidden />
+        <Trash2 size={iconSize} strokeWidth={2} aria-hidden />
       </button>
       <button
         type="button"
         className={`owner-programs__icon-action${captureRunning ? " owner-programs__icon-action_on" : ""}`}
         onClick={() => actionsRef.current.onUnifiedToggle?.()}
-        disabled={actionBusy}
+        disabled={actionBusy || toggleDisabledUntilReady}
         aria-label={toggleLabel}
         title={toggleLabel}
         data-testid="site-shell-action-toggle-capture"
       >
-        <ToggleIcon size={22} strokeWidth={2} aria-hidden />
+        <ToggleIcon size={iconSize} strokeWidth={2} aria-hidden />
       </button>
       <button
         type="button"
@@ -54,7 +127,7 @@ export default function SiteShellWidgetActionsBar({
         title="Проверить подключение"
         data-testid="site-shell-action-verify"
       >
-        <PlugZap size={22} strokeWidth={2} aria-hidden />
+        <PlugZap size={iconSize} strokeWidth={2} aria-hidden />
       </button>
       <button
         type="button"
@@ -65,7 +138,7 @@ export default function SiteShellWidgetActionsBar({
         title="Обновить статус"
         data-testid="site-shell-action-refresh"
       >
-        <RefreshCw size={22} strokeWidth={2} className={refreshBusy ? "owner-programs__icon-action-spin" : ""} aria-hidden />
+        <RefreshCw size={iconSize} strokeWidth={2} className={refreshBusy ? "owner-programs__icon-action-spin" : ""} aria-hidden />
       </button>
     </>
   );

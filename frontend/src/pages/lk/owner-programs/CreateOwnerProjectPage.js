@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "./CreateOwnerProjectPage.css";
+import { PROJECT_OWNER_DESCRIPTION_MAX_CHARS } from "./projectOwnerFormLimits";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -186,7 +187,7 @@ export default function CreateOwnerProjectPage() {
         display_name: displayName.trim(),
         avatar_data_url: avatarPreview.trim(),
       };
-      const d = description.trim();
+      const d = description.trim().slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS);
       if (d) body.description = d;
 
       const res = await fetch(API_ENDPOINTS.projectCreate, {
@@ -301,9 +302,11 @@ export default function CreateOwnerProjectPage() {
                   className="inputField"
                   name="description"
                   value={description}
-                  onChange={(ev) => setDescription(ev.target.value)}
+                  onChange={(ev) =>
+                    setDescription(ev.target.value.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS))
+                  }
                   autoComplete="off"
-                  maxLength={2000}
+                  maxLength={PROJECT_OWNER_DESCRIPTION_MAX_CHARS}
                 />
               </div>
             </div>

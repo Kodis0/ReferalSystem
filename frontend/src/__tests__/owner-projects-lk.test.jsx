@@ -710,7 +710,7 @@ describe("ProjectOverviewPage", () => {
     expect(screen.getByTestId(`project-child-site-${siteId}`)).toBeInTheDocument();
     expect(screen.getByLabelText("Флаг страны RU")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("В сети · текущий")).toBeInTheDocument();
+      expect(screen.getByTestId(`project-child-site-${siteId}`)).toHaveTextContent("В сети · текущий");
     });
   });
 });
@@ -1707,6 +1707,9 @@ describe("SiteProjectLayout child sites", () => {
     });
 
     await userEvent.click(screen.getByTestId(`project-child-site-menu-trigger-${siteB}`));
+    await waitFor(() => {
+      expect(screen.getByTestId(`project-child-site-delete-${siteB}`)).toBeInTheDocument();
+    });
     await userEvent.click(screen.getByTestId(`project-child-site-delete-${siteB}`));
 
     await waitFor(() => {
@@ -1784,6 +1787,7 @@ describe("SiteProjectLayout child sites", () => {
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
             <Route path="overview" element={<ProjectOverviewPage />} />
+            <Route path="sites" element={<ProjectOverviewPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1794,6 +1798,9 @@ describe("SiteProjectLayout child sites", () => {
     });
 
     await userEvent.click(screen.getByTestId(`project-child-site-menu-trigger-${siteA}`));
+    await waitFor(() => {
+      expect(screen.getByTestId(`project-child-site-delete-${siteA}`)).toBeInTheDocument();
+    });
     await userEvent.click(screen.getByTestId(`project-child-site-delete-${siteA}`));
 
     await waitFor(() => {

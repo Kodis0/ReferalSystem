@@ -45,6 +45,7 @@ class SiteOwnerReachabilityApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(r.data["reachable"])
         self.assertEqual(r.data["reason"], "no_origin")
+        self.assertIsNone(r.data.get("latency_ms"))
 
     @patch("urllib.request.urlopen")
     def test_reachability_head_ok(self, mock_urlopen):
@@ -65,6 +66,9 @@ class SiteOwnerReachabilityApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data["reachable"])
         self.assertEqual(r.data["http_status"], 200)
+        self.assertIn("latency_ms", r.data)
+        self.assertIsInstance(r.data["latency_ms"], int)
+        self.assertGreaterEqual(r.data["latency_ms"], 0)
 
     @patch("urllib.request.urlopen")
     def test_reachability_http_error_still_reachable(self, mock_urlopen):
@@ -86,6 +90,8 @@ class SiteOwnerReachabilityApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data["reachable"])
         self.assertEqual(r.data["http_status"], 404)
+        self.assertIsInstance(r.data.get("latency_ms"), int)
+        self.assertGreaterEqual(r.data["latency_ms"], 0)
 
     @patch("urllib.request.urlopen")
     def test_reachability_network_error(self, mock_urlopen):
@@ -102,6 +108,8 @@ class SiteOwnerReachabilityApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(r.data["reachable"])
         self.assertEqual(r.data["reason"], "network_error")
+        self.assertIsInstance(r.data.get("latency_ms"), int)
+        self.assertGreaterEqual(r.data["latency_ms"], 0)
 
 
 class CheckSiteHttpReachabilityUnitTests(TestCase):
@@ -115,3 +123,4 @@ class CheckSiteHttpReachabilityUnitTests(TestCase):
         out = check_site_http_reachability(site)
         self.assertFalse(out["reachable"])
         self.assertEqual(out["reason"], "no_origin")
+        self.assertIsNone(out.get("latency_ms"))

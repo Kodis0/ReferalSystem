@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "./CreateOwnerProjectPage.css";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
+import { PROJECT_OWNER_DESCRIPTION_MAX_CHARS } from "./projectOwnerFormLimits";
 
 function authHeaders() {
   const token = localStorage.getItem("access_token");
@@ -76,7 +77,11 @@ export default function ProjectInfoPage() {
       }
       const meta = projectMetaFromPayload(payload);
       setName(meta.name);
-      setDescription(meta.description);
+      setDescription(
+        typeof meta.description === "string"
+          ? meta.description.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS)
+          : "",
+      );
     } catch (err) {
       console.error(err);
       setError("Сетевая ошибка, попробуйте позже");
@@ -96,14 +101,15 @@ export default function ProjectInfoPage() {
     setError("");
     try {
       const url = hasProjectId ? API_ENDPOINTS.projectDetail(numericProjectId) : withSelectedSite(API_ENDPOINTS.siteIntegration, siteId);
+      const descTrimmed = description.trim().slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS);
       const body = hasProjectId
         ? {
             display_name: name.trim(),
-            description: description.trim(),
+            description: descTrimmed,
           }
         : {
             display_name: name.trim(),
-            description: description.trim(),
+            description: descTrimmed,
           };
       const res = await fetch(url, {
         method: "PATCH",
@@ -121,7 +127,11 @@ export default function ProjectInfoPage() {
       }
       const meta = projectMetaFromPayload(payload);
       setName(meta.name);
-      setDescription(meta.description);
+      setDescription(
+        typeof meta.description === "string"
+          ? meta.description.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS)
+          : "",
+      );
       if (hasSiteId) {
         emitSiteOwnerActivity(siteId);
       }
@@ -199,9 +209,11 @@ export default function ProjectInfoPage() {
                     className="inputField"
                     name="description"
                     value={description}
-                    onChange={(ev) => setDescription(ev.target.value)}
+                    onChange={(ev) =>
+                      setDescription(ev.target.value.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS))
+                    }
                     autoComplete="off"
-                    maxLength={2000}
+                    maxLength={PROJECT_OWNER_DESCRIPTION_MAX_CHARS}
                   />
                 </div>
               </div>
