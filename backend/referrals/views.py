@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -40,6 +41,7 @@ from .serializers import (
     serialize_owner_project_metadata,
 )
 from .services import (
+    REFERRAL_BUILDER_WORKSPACE_KEY,
     SITE_SHELL_AVATAR_CONFIG_KEY,
     SITE_CAPTURE_CONFIG_KEY,
     SITE_DISPLAY_NAME_CONFIG_KEY,
@@ -562,10 +564,16 @@ class SiteOwnerIntegrationView(APIView):
                 cfg[SITE_SHELL_DESCRIPTION_CONFIG_KEY] = site_desc
             else:
                 cfg.pop(SITE_SHELL_DESCRIPTION_CONFIG_KEY, None)
+        if "referral_builder_workspace" in data:
+            wb = data.get("referral_builder_workspace")
+            if wb is None or wb == {}:
+                cfg.pop(REFERRAL_BUILDER_WORKSPACE_KEY, None)
+            elif isinstance(wb, dict):
+                cfg[REFERRAL_BUILDER_WORKSPACE_KEY] = wb
         data_for_project = {k: v for k, v in data.items() if k not in ("display_name", "description", "site_description")}
         project_updates = _project_metadata_updates_from_owner_payload(data_for_project, cfg)
         project = None
-        if project_updates or "config_json" in data:
+        if project_updates or "config_json" in data or "referral_builder_workspace" in data:
             project = create_project_for_site(site)
         if project_updates and project is not None:
             for field, value in project_updates.items():
@@ -586,6 +594,7 @@ class SiteOwnerIntegrationView(APIView):
             or "display_name" in data
             or "description" in data
             or "site_description" in data
+            or "referral_builder_workspace" in data
             or project_updates
         ):
             _apply_project_metadata_dual_write(
@@ -814,7 +823,8 @@ class SiteOwnerIntegrationActivateView(APIView):
 class SiteOwnerSiteActivityListView(APIView):
     """
     Paginated owner activity log for one Site (LK «История»).
-    Query: ``site_public_id`` (required), ``page`` (1-based), ``page_size`` (max 100).
+    Query: ``site_public_id`` (required), ``page`` (1-based), ``page_size`` (max 100),
+    optional ``date`` (YYYY-MM-DD) to restrict rows to that calendar day in the active timezone.
     """
 
     permission_classes = [IsAuthenticated]
@@ -838,6 +848,11 @@ class SiteOwnerSiteActivityListView(APIView):
             page_size = 20
         page_size = max(1, min(page_size, 100))
         qs = SiteOwnerActivityLog.objects.filter(site=site)
+        date_raw = (request.query_params.get("date") or "").strip()
+        if date_raw:
+            d = parse_date(date_raw)
+            if d is not None:
+                qs = qs.filter(created_at__date=d)
         paginator = Paginator(qs, page_size)
         p = paginator.get_page(page)
         return Response(

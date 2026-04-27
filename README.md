@@ -61,6 +61,7 @@ npm run dev
 ### Frontend (`frontend/.env`)
 
 - `REACT_APP_API_URL` — базовый URL API (по умолчанию `http://localhost:8000`)
+- `REACT_APP_GOOGLE_CLIENT_ID` — (опционально) Web client ID Google OAuth; должен совпадать с `GOOGLE_OAUTH_CLIENT_ID` на бэкенде
 
 ### Backend (`backend/.env`)
 
@@ -68,6 +69,7 @@ npm run dev
 - `DJANGO_DEBUG` — режим отладки (`True/False`)
 - `DJANGO_ALLOWED_HOSTS` — разрешенные хосты через запятую
 - `FRONTEND_URL` — URL фронтенда для CORS
+- `GOOGLE_OAUTH_CLIENT_ID` — (опционально) тот же Web client ID, что и `REACT_APP_GOOGLE_CLIENT_ID`, для проверки JWT при входе через Google
 - `DB_ENGINE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` — параметры БД
 
 По умолчанию backend может работать на SQLite для быстрого локального старта.

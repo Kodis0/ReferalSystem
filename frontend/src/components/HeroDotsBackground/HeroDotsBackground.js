@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+
+import { deferResizeObserverCallback } from "../../resizeObserverDefer";
 import "./HeroDotsBackground.css";
 
 const DOT_COUNT = 100;
@@ -140,8 +142,13 @@ function HeroDotsBackground({ className = "", theme = "dark" }) {
       rafRef.current = requestAnimationFrame(draw);
     }
 
+    let resizeDeferId = 0;
     const onResize = () => {
-      setSize();
+      clearTimeout(resizeDeferId);
+      resizeDeferId = deferResizeObserverCallback(() => {
+        resizeDeferId = 0;
+        setSize();
+      });
     };
     const onMouseMove = (e) => {
       const rect = container.getBoundingClientRect();
@@ -156,6 +163,7 @@ function HeroDotsBackground({ className = "", theme = "dark" }) {
     rafRef.current = requestAnimationFrame(draw);
 
     return () => {
+      clearTimeout(resizeDeferId);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
       container.removeEventListener("mousemove", onMouseMove);

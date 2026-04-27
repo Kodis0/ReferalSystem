@@ -3572,9 +3572,18 @@
   --background-color: #17212b;
   --main-color: #7177f8;
   --hist-page-active-bg: rgba(148, 163, 184, 0.14);
-  --hist-page-active-border: rgba(148, 163, 184, 0.35);
   --hist-radius: 12px;
   --hist-font: "Stem", "Tahoma", "Arial", sans-serif;
+  /* те же токены, что на странице личных данных — для react-datepicker / поля даты */
+  --lk-form-line-color: #2c3743;
+  --lk-form-text-color: #fff;
+  --lk-form-text-secondary: #7f91a4;
+  --lk-form-surface: #242f3d;
+  --lk-form-radius-medium: 8px;
+  --lk-form-transition: border-color 0.2s ease-in-out;
+  --lk-form-font-medium: 500 14px/24px "Stem", "Tahoma", "Arial", sans-serif;
+  position: relative;
+  z-index: 0;
   /* пропорции как default-table-row-grid 6fr 3fr 6fr (без 4-й колонки) */
   max-width: 100%;
 }
@@ -3611,7 +3620,7 @@
 .owner-programs__histRow {
   display: flex;
   width: 100%;
-  gap: 20px;
+  gap: 32px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--hist-row-divider);
   align-items: center;
@@ -3634,6 +3643,349 @@
   border-bottom: 1px solid var(--hist-header-divider);
 }
 
+.owner-programs__histRow_head_filters {
+  align-items: stretch;
+}
+
+/* Подписи «Событие» / «Пользователь» по вертикали по центру ячейки, ширина колонок как у строк данных */
+.owner-programs__histRow_head_filters > .owner-programs__histCell_event.owner-programs__histCell_headerCell,
+.owner-programs__histRow_head_filters > .owner-programs__histCell_user.owner-programs__histCell_headerCell {
+  display: flex;
+  align-items: center;
+}
+
+.owner-programs__histHeaderDateFilter {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.owner-programs__histHeaderDateFilter .lk-settings-personal-page__datepicker-wrapper {
+  width: 100%;
+}
+
+.owner-programs__history-mobileDateBar {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.owner-programs__history-mobileDateBar .lk-settings-personal-page__datepicker-wrapper {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Портал календаря внутри блока истории — стили поля как #lk-settings-personal-page */
+.owner-programs__history-datepicker-portal {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  left: 0;
+  top: 0;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-wrapper {
+  display: block !important;
+  width: 100%;
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input {
+  width: 100%;
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  border-radius: var(--lk-form-radius-medium);
+  border: 1px solid var(--lk-form-line-color);
+  background: transparent;
+  transition: var(--lk-form-transition);
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input-inner:focus-within {
+  border-color: rgba(113, 119, 248, 0.75);
+  box-shadow: 0 0 0 2px rgba(113, 119, 248, 0.2);
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input-field {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  padding: 0 40px 0 16px;
+  border: none;
+  border-radius: var(--lk-form-radius-medium);
+  background: transparent;
+  color: var(--lk-form-text-color);
+  font: var(--lk-form-font-medium);
+  font-family: inherit;
+  outline: none;
+  cursor: text;
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input-field::placeholder {
+  color: var(--lk-form-text-secondary);
+  opacity: 0.85;
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.owner-programs__history .lk-settings-personal-page__date-input-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--lk-form-text-secondary);
+  flex-shrink: 0;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper {
+  z-index: 40;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker {
+  font-family: "Stem", "Tahoma", "Arial", sans-serif;
+  border: 1px solid var(--lk-form-line-color);
+  border-radius: 12px;
+  background: var(--lk-form-surface);
+  color: var(--lk-form-text-color);
+  box-shadow: 0 4px 12px rgba(5, 12, 38, 0.12);
+  overflow: hidden;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__triangle {
+  display: none !important;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__header {
+  background: transparent;
+  border-bottom: 1px solid var(--lk-form-line-color);
+  padding: 0;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__header--custom {
+  padding: 0;
+  border: none;
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--lk-form-radius-medium);
+  background: transparent;
+  color: var(--lk-form-text-color);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-caption {
+  margin: 0;
+  flex: 1 1 auto;
+  text-align: left;
+  font: 500 14px/24px "Stem", "Tahoma", "Arial", sans-serif;
+  color: var(--lk-form-text-color);
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-month {
+  text-transform: capitalize;
+}
+
+.owner-programs__history .lk-settings-personal-page__dp-year {
+  margin-left: 6px;
+  color: var(--lk-form-text-secondary);
+  font-weight: 500;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day-names {
+  display: flex;
+  justify-content: space-around;
+  margin: 0;
+  padding: 0 8px 6px;
+  background: transparent;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day-name {
+  width: 2.25rem;
+  margin: 0;
+  font: 500 12px/14px "Stem", "Tahoma", "Arial", sans-serif;
+  color: var(--lk-form-text-secondary);
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__month {
+  margin: 0;
+  padding: 4px 8px 10px;
+  background: transparent;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__week {
+  display: flex;
+  justify-content: space-around;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day {
+  width: 2.25rem;
+  line-height: 2.25rem;
+  margin: 2px;
+  border-radius: var(--lk-form-radius-medium);
+  font: 500 14px/2.25rem "Stem", "Tahoma", "Arial", sans-serif;
+  color: var(--lk-form-text-color);
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day:hover:not(.react-datepicker__day--disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--outside-month {
+  color: rgba(127, 145, 164, 0.45);
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--keyboard-selected:not(.react-datepicker__day--selected) {
+  background: rgba(113, 119, 248, 0.15);
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--selected,
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--in-selecting-range,
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--in-range {
+  background: rgba(113, 119, 248, 0.35) !important;
+  color: #fff !important;
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--today {
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(113, 119, 248, 0.65);
+}
+
+.owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+[data-theme="light"] .owner-programs__history .lk-settings-personal-page__date-input-inner {
+  background: #fff;
+}
+
+[data-theme="light"] .owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker {
+  background: #fff;
+  color: #0f172a;
+}
+
+[data-theme="light"] .owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day {
+  color: #0f172a;
+}
+
+[data-theme="light"] .owner-programs__history .lk-settings-personal-page__datepicker-popper .react-datepicker__day:hover:not(.react-datepicker__day--disabled) {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .owner-programs__history .lk-settings-personal-page__dp-nav:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+/* Триггер фильтра даты — как sort + sortTitle + sortArrow в референсе */
+.owner-programs__histHeaderDateFilter__pickerWrap .lk-settings-personal-page__datepicker-wrapper {
+  display: inline-block !important;
+  width: auto;
+}
+
+/* У react-datepicker у обёртки/контейнера часто серая рамка — убираем вокруг кнопки «Дата» */
+.owner-programs__histHeaderDateFilter__pickerWrap.lk-settings-personal-page__date-wrap {
+  width: auto;
+  max-width: 100%;
+}
+
+.owner-programs__histHeaderDateFilter__pickerWrap .react-datepicker-wrapper,
+.owner-programs__histHeaderDateFilter__pickerWrap .react-datepicker__input-container {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.owner-programs__histDateTrigger {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  font: 400 13px/16px var(--hist-font);
+  color: inherit;
+  text-align: left;
+  max-width: 100%;
+  outline: none;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.owner-programs__histDateTrigger:focus,
+.owner-programs__histDateTrigger:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.owner-programs__histDateTrigger:hover:not(:disabled) .owner-programs__histText_grey {
+  color: var(--main-color);
+}
+
+.owner-programs__histDateTrigger:hover:not(:disabled) .owner-programs__histSortArrow {
+  color: var(--main-color);
+}
+
+.owner-programs__histDateTrigger:hover:not(:disabled) .owner-programs__histDateTrigger__value {
+  color: var(--main-color);
+}
+
+.owner-programs__histDateTrigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.owner-programs__histDateTrigger__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary-color);
+  font-weight: 400;
+}
+
 .owner-programs__histRow_body {
   align-items: flex-start;
 }
@@ -3647,17 +3999,17 @@
   box-sizing: border-box;
 }
 
-/* 6 : 3 : 6 */
+/* ~6 : 3.5 : 6.5 — чуть шире «Событие» и «Пользователь», больше воздуха между колонками (gap у .histRow) */
 .owner-programs__histCell_date {
-  flex: 2 1 0;
+  flex: 12 1 0;
 }
 
 .owner-programs__histCell_event {
-  flex: 1 1 0;
+  flex: 7 1 0;
 }
 
 .owner-programs__histCell_user {
-  flex: 2 1 0;
+  flex: 13 1 0;
 }
 
 .owner-programs__histCell_full {
@@ -3669,6 +4021,24 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.owner-programs__histSortArrow {
+  flex-shrink: 0;
+  display: block;
+  color: #777991;
+}
+
+.owner-programs__histDateTrigger__labelWithArrow {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.owner-programs__histDateTrigger .owner-programs__histSortArrow {
+  margin-left: 4px;
+  overflow: hidden;
 }
 
 .owner-programs__histText {
@@ -3714,13 +4084,16 @@
 
 .owner-programs__histEventRow {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
 }
 
 .owner-programs__histEventRow .owner-programs__histText_body {
   flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .owner-programs__histInlineExpand {
@@ -3822,14 +4195,13 @@
   height: 40px;
   padding: 0 10px;
   border-radius: 8px;
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
   color: var(--text-secondary-color);
   font: 500 13px/20px var(--hist-font);
   cursor: pointer;
   transition:
     background-color 0.2s ease,
-    border-color 0.2s ease,
     color 0.2s ease;
 }
 
@@ -3839,7 +4211,7 @@
 }
 
 .owner-programs__history-pageNum_active {
-  border-color: var(--hist-page-active-border);
+  border: none;
   background: var(--hist-page-active-bg);
   color: var(--text-color);
   cursor: default;
@@ -4379,13 +4751,6 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   backdrop-filter: blur(2px);
   box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
   box-sizing: border-box;
-}
-
-/* Колонка «Блоки» (173px) слева — сдвигаем зум-панель, чтобы не перекрывалась */
-.owner-programs__referral-builder-canvas:has(.owner-programs__referral-builder-blocks-dock)
-  .owner-programs__referral-builder-flow
-  .react-flow__panel.owner-programs__referral-builder-flow-toolbar {
-  margin-left: 181px;
 }
 
 .owner-programs__referral-builder-zoom-container {
@@ -5074,36 +5439,196 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   padding: 0 22px;
 }
 
-/* --- Editable builder block (внутри imported page stack) --- */
+/* --- Editable builder block (внутри imported page stack) ---
+   Ширина и выделение как у .imported-page-section: без внешней рамки, только inset при выборе. */
 .editable-referral-block-preview {
   position: relative;
   z-index: 6;
-  margin: 20px 28px 8px;
-  border-radius: 20px;
+  margin: 0;
+  border-radius: 0;
   outline: none;
   cursor: pointer;
-  transition:
-    box-shadow 0.18s ease,
-    border-color 0.18s ease;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-sizing: border-box;
+  width: 100%;
+  border: none;
   background: #ffffff;
   overflow: hidden;
+  transition: box-shadow 0.18s ease;
+}
+
+.editable-referral-block-preview[data-site-styled="true"] {
+  background: var(--erb-site-bg);
+  border-radius: 0;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"] {
+  overflow: visible;
 }
 
 .editable-referral-block-preview.is-selected {
-  border-color: rgba(99, 102, 241, 0.85);
-  box-shadow:
-    0 0 0 3px rgba(99, 102, 241, 0.28),
-    0 18px 44px rgba(15, 23, 42, 0.12);
+  box-shadow: inset 0 0 0 3px rgba(59, 130, 246, 0.72);
+}
+
+.editable-referral-block-preview__stack {
+  position: relative;
+}
+
+.editable-referral-block-preview__template-shell--text-capture {
+  pointer-events: none;
+}
+
+.editable-referral-block-preview__text-placement {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  cursor: text;
+  background: transparent;
+}
+
+.editable-referral-block-preview__floating-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.editable-referral-block-preview__floating-layer {
+  position: absolute;
+  transform: translate(-6px, -6px);
+  pointer-events: auto;
+}
+
+.editable-referral-block-preview__floating-shell {
+  position: relative;
+  display: inline-block;
+  width: max-content;
+  max-width: none;
+}
+
+.editable-referral-block-preview__floating-shell.is-selected {
+  outline: 1px solid #2563eb;
+  outline-offset: 0;
+}
+
+.editable-referral-block-preview__floating-shell.is-sized {
+  width: auto;
+}
+
+.editable-referral-block-preview__floating-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 1px solid #2563eb;
+  border-radius: 1px;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.editable-referral-block-preview__floating-handle--nw {
+  left: -4px;
+  top: -4px;
+  cursor: nwse-resize;
+}
+
+.editable-referral-block-preview__floating-handle--ne {
+  right: -4px;
+  top: -4px;
+  cursor: nesw-resize;
+}
+
+.editable-referral-block-preview__floating-handle--sw {
+  left: -4px;
+  bottom: -4px;
+  cursor: nesw-resize;
+}
+
+.editable-referral-block-preview__floating-handle--se {
+  right: -4px;
+  bottom: -4px;
+  cursor: nwse-resize;
+}
+
+.editable-referral-block-preview__floating-baseline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 1px;
+  background: #2563eb;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.editable-referral-block-preview__floating-size {
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+  z-index: 2;
+}
+
+.editable-referral-block-preview__floating-text {
+  min-width: 1px;
+  max-width: none;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 600;
+  outline: none;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.editable-referral-block-preview__floating-shell.is-sized .editable-referral-block-preview__floating-text {
+  width: 100%;
+  height: 100%;
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+
+.editable-referral-block-preview__surface--dark .editable-referral-block-preview__floating-text {
+  background: transparent;
+  color: #0f172a;
+  border: none;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__floating-text[data-empty="true"] {
+  min-width: 1ch;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__floating-text {
+  caret-color: #0f172a;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__floating-text:focus {
+  outline: none;
 }
 
 .editable-referral-block-preview__surface--light {
-  color: #0f172a;
+  color: var(--erb-site-text, #0f172a);
 }
 
 .editable-referral-block-preview__surface--dark {
-  color: #f8fafc;
-  background: rgba(15, 23, 42, 0.04);
+  color: var(--erb-site-text, #f8fafc);
+  background: var(--erb-site-surface, rgba(15, 23, 42, 0.04));
 }
 
 .editable-referral-block-preview__hero {
@@ -5152,6 +5677,35 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   gap: 0;
 }
 
+.editable-referral-block-preview__minimal {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.editable-referral-block-preview__promo {
+  padding: 24px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--erb-site-surface, rgba(248, 250, 252, 0.72));
+}
+
+.editable-referral-block-preview__promo-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editable-referral-block-preview__surface--dark .editable-referral-block-preview__promo {
+  background: var(--erb-site-surface, rgba(2, 6, 23, 0.2));
+}
+
 @media (max-width: 520px) {
   .editable-referral-block-preview__split {
     grid-template-columns: 1fr;
@@ -5168,12 +5722,12 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 
 .editable-referral-block-preview__split-col--muted {
   border-left: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(248, 250, 252, 0.85);
+  background: var(--erb-site-surface, rgba(248, 250, 252, 0.85));
 }
 
 .editable-referral-block-preview__surface--dark .editable-referral-block-preview__split-col--muted {
   border-left-color: rgba(148, 163, 184, 0.25);
-  background: rgba(2, 6, 23, 0.2);
+  background: var(--erb-site-surface, rgba(2, 6, 23, 0.2));
 }
 
 .editable-referral-block-preview__badge {
@@ -5182,10 +5736,11 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   min-height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  background: rgba(79, 70, 229, 0.1);
-  color: #4338ca;
+  background: color-mix(in srgb, var(--erb-site-accent, #6366f1) 12%, transparent);
+  color: var(--erb-site-accent, #4338ca);
   font-size: 12px;
   font-weight: 700;
+  font-family: var(--erb-site-body-font, inherit);
 }
 
 .editable-referral-block-preview__badge--muted {
@@ -5194,8 +5749,8 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 }
 
 .editable-referral-block-preview__surface--dark .editable-referral-block-preview__badge {
-  background: rgba(129, 140, 248, 0.2);
-  color: #c7d2fe;
+  background: color-mix(in srgb, var(--erb-site-accent, #818cf8) 22%, transparent);
+  color: color-mix(in srgb, var(--erb-site-accent, #c7d2fe) 85%, #ffffff);
 }
 
 .editable-referral-block-preview__title {
@@ -5203,7 +5758,9 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   font-size: 28px;
   font-weight: 800;
   line-height: 1.15;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--erb-site-heading-letter-spacing, -0.03em);
+  font-family: var(--erb-site-heading-font, inherit);
+  text-transform: var(--erb-site-heading-transform, none);
 }
 
 .editable-referral-block-preview__title--sm {
@@ -5218,11 +5775,12 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   margin: 0;
   font-size: 15px;
   line-height: 1.55;
-  color: #475569;
+  color: var(--erb-site-muted-text, #475569);
+  font-family: var(--erb-site-body-font, inherit);
 }
 
 .editable-referral-block-preview__surface--dark .editable-referral-block-preview__desc {
-  color: #cbd5e1;
+  color: var(--erb-site-muted-text, #cbd5e1);
 }
 
 .editable-referral-block-preview__desc--sm {
@@ -5233,12 +5791,13 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   min-height: 46px;
   padding: 0 22px;
   border: none;
-  border-radius: 12px;
-  background: var(--erb-accent, #6366f1);
-  color: #ffffff;
+  border-radius: var(--erb-site-radius-button, 12px);
+  background: var(--erb-accent, var(--erb-site-button-bg, #6366f1));
+  color: var(--erb-site-button-text, #ffffff);
   font-size: 14px;
   font-weight: 700;
   cursor: default;
+  font-family: var(--erb-site-body-font, inherit);
 }
 
 .editable-referral-block-preview__btn--sm {
@@ -5247,89 +5806,306 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   font-size: 13px;
 }
 
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__title,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__desc,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__terms,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__badge,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__btn-label {
+  cursor: text;
+  caret-color: #111827;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__surface--dark .editable-referral-block-preview__title,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__surface--dark .editable-referral-block-preview__desc,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__surface--dark .editable-referral-block-preview__terms,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__surface--dark .editable-referral-block-preview__badge,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__surface--dark .editable-referral-block-preview__btn-label {
+  caret-color: #f8fafc;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__title:focus,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__desc:focus,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__terms:focus,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__badge:focus,
+.editable-referral-block-preview[data-text-edit-enabled="true"] .editable-referral-block-preview__btn-label:focus {
+  outline: 1px dashed rgba(129, 140, 248, 0.8);
+  outline-offset: 2px;
+}
+
+.editable-referral-block-preview[data-text-edit-enabled="true"]
+  :not(.editable-referral-block-preview__floating-text)[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  opacity: 0.72;
+}
+
 .editable-referral-block-preview__terms {
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
-  color: #64748b;
+  color: var(--erb-site-muted-text, #64748b);
+  font-family: var(--erb-site-body-font, inherit);
 }
 
 .editable-referral-block-preview__surface--dark .editable-referral-block-preview__terms {
-  color: #94a3b8;
+  color: var(--erb-site-muted-text, #94a3b8);
 }
 
 .editable-referral-block-preview__terms--sm {
   font-size: 11px;
 }
 
-/* Боковая панель «Блоки»: ширина и фон как у workspace-chrome__tab */
+/* Попап выбора блоков */
 .owner-programs__referral-builder-blocks-dock {
   position: absolute;
   left: 0;
   top: 0;
+  right: 0;
   bottom: 0;
-  z-index: 6;
-  box-sizing: border-box;
-  width: 173px;
-  padding: 12px 12px 16px;
-  border-radius: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px;
+  background: rgba(7, 12, 22, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.owner-programs__referral-builder-canvas:has(.owner-programs__referral-builder-blocks-dock)
+  > .owner-programs__referral-builder-scan-overlay {
+  z-index: 20;
+  filter: blur(6px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.owner-programs__referral-builder-blocks-dock__panel {
+  width: min(1080px, calc(100vw - 120px));
+  min-height: 740px;
+  max-height: min(780px, calc(100vh - 120px));
+  overflow: hidden;
+  border-radius: 24px;
   border: none;
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-  background: #242f3d;
-  box-shadow: none;
-  pointer-events: auto;
+  background: linear-gradient(180deg, rgba(36, 47, 61, 0.98) 0%, rgba(25, 34, 46, 0.98) 100%);
+  box-shadow:
+    0 42px 82px rgba(2, 6, 23, 0.42),
+    0 20px 48px rgba(2, 6, 23, 0.28);
+  padding: 24px;
   display: flex;
   flex-direction: column;
 }
 
-.owner-programs__referral-builder-blocks-dock__title {
-  margin: 0 0 12px;
-  font-size: 13px;
-  line-height: 16px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  text-transform: none;
-  color: #ffffff;
-  white-space: nowrap;
+.owner-programs__referral-builder-blocks-dock__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
-.owner-programs__referral-builder-blocks-dock__hint {
-  margin: 0 0 10px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: rgba(251, 191, 36, 0.95);
+.owner-programs__referral-builder-blocks-dock__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+
+.owner-programs__referral-builder-blocks-dock__subtitle {
+  margin: 6px 0 0;
+  color: rgba(203, 213, 225, 0.92);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.owner-programs__referral-builder-blocks-dock__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.6);
+  color: #e2e8f0;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.owner-programs__referral-builder-blocks-dock__close:hover {
+  background: rgba(51, 65, 85, 0.72);
+  color: #ffffff;
+}
+
+.owner-programs__referral-builder-blocks-dock__close:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.9);
+  outline-offset: 2px;
+}
+
+.owner-programs__referral-builder-blocks-dock__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .owner-programs__referral-builder-blocks-dock__btn {
   display: flex;
-  width: 100%;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: flex-start;
-  margin-bottom: 2px;
-  padding: 8px 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: #ffffff;
-  font-size: 13px;
-  line-height: 16px;
-  font-weight: 800;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(99, 102, 241, 0.24);
+  background: rgba(36, 47, 61, 0.95);
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 700;
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: none;
 }
 
-.owner-programs__referral-builder-blocks-dock__btn:last-child {
-  margin-bottom: 0;
+.owner-programs__referral-builder-blocks-dock__btn-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 122px;
+  border-radius: 8px;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  background: rgba(15, 23, 42, 0.45);
+  padding: 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-top {
+  display: block;
+  width: 100%;
+  height: 16px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.34);
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-body {
+  flex: 1 1 auto;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.62);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-chip {
+  display: block;
+  width: 88px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(129, 140, 248, 0.72);
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-line {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(203, 213, 225, 0.62);
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-line--lg {
+  width: 86%;
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-line--sm {
+  width: 62%;
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-preview-cta {
+  width: 112px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.95);
+}
+
+[data-preview-kind="referralBanner"] .owner-programs__referral-builder-blocks-dock__btn-preview {
+  min-height: 122px;
+}
+
+[data-preview-kind="referralBanner"] .owner-programs__referral-builder-blocks-dock__btn-preview-body {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 10px;
+}
+
+[data-preview-kind="referralCard"] .owner-programs__referral-builder-blocks-dock__btn-preview {
+  min-height: 132px;
+}
+
+[data-preview-kind="referralSplit"] .owner-programs__referral-builder-blocks-dock__btn-preview {
+  min-height: 132px;
+}
+
+[data-preview-kind="referralSplit"] .owner-programs__referral-builder-blocks-dock__btn-preview-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  gap: 8px;
+}
+
+[data-preview-kind="referralSplit"] .owner-programs__referral-builder-blocks-dock__btn-preview-chip {
+  grid-column: 1 / span 2;
+}
+
+[data-preview-kind="referralMinimal"] .owner-programs__referral-builder-blocks-dock__btn-preview {
+  min-height: 108px;
+}
+
+[data-preview-kind="referralPromo"] .owner-programs__referral-builder-blocks-dock__btn-preview {
+  border-color: rgba(129, 140, 248, 0.6);
+  background: rgba(30, 41, 59, 0.62);
+}
+
+[data-preview-kind="referralPromo"] .owner-programs__referral-builder-blocks-dock__btn-preview-top {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+.owner-programs__referral-builder-blocks-dock__btn-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(203, 213, 225, 0.88);
+  font-weight: 600;
 }
 
 .owner-programs__referral-builder-blocks-dock__btn:hover {
-  background: rgba(148, 163, 184, 0.12);
-  color: #ffffff;
+  border-color: rgba(129, 140, 248, 0.75);
+  background: rgba(51, 65, 85, 0.95);
 }
 
-/* Инспектор: как колонка «Блоки» — прижат к правому краю canvas, на всю высоту */
+.owner-programs__referral-builder-blocks-dock__btn:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.94);
+  outline-offset: 2px;
+}
+
+/* Инспектор: узкий сайдбар у края canvas; скролл у всей панели — без пустого flex-низа */
 .owner-programs__referral-builder-inspector {
   position: absolute;
   right: 0;
@@ -5337,67 +6113,87 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   bottom: 0;
   z-index: 6;
   box-sizing: border-box;
-  width: 280px;
-  padding: 12px 12px 16px;
-  display: flex;
-  flex-direction: column;
+  width: 264px;
+  padding: 8px 10px 10px;
+  display: block;
   border-radius: 0;
   border: none;
   border-left: 1px solid rgba(148, 163, 184, 0.18);
   background: #242f3d;
   box-shadow: none;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   pointer-events: auto;
 }
 
-.owner-programs__referral-builder-inspector__head {
-  flex: 0 0 auto;
-  padding: 0 0 12px;
-  margin: 0 0 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+.owner-programs__referral-builder-inspector__header {
+  padding: 0 0 8px;
+  margin: 0 0 2px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .owner-programs__referral-builder-inspector__title {
   margin: 0;
   font-size: 13px;
-  line-height: 16px;
+  line-height: 1.2;
   font-weight: 800;
   letter-spacing: 0.01em;
   color: #ffffff;
 }
 
-.owner-programs__referral-builder-inspector__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding: 12px 0 0;
-  margin: 0;
+.owner-programs__referral-builder-inspector__subtitle {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.9);
 }
 
 .owner-programs__referral-builder-inspector__empty {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
   font-weight: 600;
   color: rgba(203, 213, 225, 0.88);
 }
 
-.owner-programs__referral-builder-inspector__field {
-  margin-bottom: 14px;
+.owner-programs__referral-builder-inspector__section {
+  padding: 8px 0 6px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-.owner-programs__referral-builder-inspector__field:last-child {
+.owner-programs__referral-builder-inspector__section:first-of-type {
+  padding-top: 6px;
+  border-top: none;
+}
+
+.owner-programs__referral-builder-inspector__section-title {
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(203, 213, 225, 0.62);
+}
+
+.owner-programs__referral-builder-inspector__field {
+  margin-bottom: 6px;
+}
+
+.owner-programs__referral-builder-inspector__section .owner-programs__referral-builder-inspector__field:last-of-type {
   margin-bottom: 0;
 }
 
 .owner-programs__referral-builder-inspector__label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
+  margin-bottom: 3px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(203, 213, 225, 0.75);
+  color: rgba(203, 213, 225, 0.65);
 }
 
 .owner-programs__referral-builder-inspector__input,
@@ -5405,61 +6201,138 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 .owner-programs__referral-builder-inspector__select {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 4px 7px;
+  min-height: 26px;
   border-radius: 0;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.42);
   color: #f8fafc;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.3;
   font-family: inherit;
 }
 
+.owner-programs__referral-builder-inspector__input:focus-visible,
+.owner-programs__referral-builder-inspector__textarea:focus-visible,
+.owner-programs__referral-builder-inspector__select:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.85);
+  outline-offset: 1px;
+}
+
 .owner-programs__referral-builder-inspector__textarea {
-  min-height: 72px;
+  min-height: 0;
+  max-height: 160px;
   resize: vertical;
+  field-sizing: content;
+}
+
+@supports not (field-sizing: content) {
+  .owner-programs__referral-builder-inspector__textarea {
+    min-height: 44px;
+  }
+}
+
+.owner-programs__referral-builder-inspector__accent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.owner-programs__referral-builder-inspector__color-swatch {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.owner-programs__referral-builder-inspector__color-swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.owner-programs__referral-builder-inspector__color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 0;
+}
+
+.owner-programs__referral-builder-inspector__color-swatch::-moz-color-swatch {
+  border: none;
+}
+
+.owner-programs__referral-builder-inspector__color-swatch:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.85);
+  outline-offset: 1px;
+}
+
+.owner-programs__referral-builder-inspector__hex {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: rgba(248, 250, 252, 0.92);
+  user-select: text;
 }
 
 .owner-programs__referral-builder-inspector__actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex-wrap: nowrap;
-  gap: 2px;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 .owner-programs__referral-builder-inspector__action {
   display: flex;
-  width: 100%;
+  flex: 1 1 0;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   min-width: 0;
-  padding: 8px 0;
-  border: none;
+  padding: 5px 5px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 0;
-  background: transparent;
+  background: rgba(15, 23, 42, 0.28);
   box-shadow: none;
-  color: #ffffff;
-  font-size: 13px;
-  line-height: 16px;
+  color: rgba(248, 250, 252, 0.96);
+  font-size: 10px;
+  line-height: 1.2;
   font-weight: 800;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  text-align: left;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  text-align: center;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .owner-programs__referral-builder-inspector__action--danger {
   color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.26);
 }
 
 .owner-programs__referral-builder-inspector__action:hover {
   background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.28);
   color: #ffffff;
 }
 
 .owner-programs__referral-builder-inspector__action--danger:hover {
   color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.38);
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.owner-programs__referral-builder-inspector__action:focus-visible {
+  outline: 2px solid rgba(129, 140, 248, 0.85);
+  outline-offset: 1px;
 }
 
 @media (max-width: 1100px) {
@@ -5517,10 +6390,27 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
     margin: 0 0 8px 8px;
   }
 
-  .owner-programs__referral-builder-canvas:has(.owner-programs__referral-builder-blocks-dock)
-    .owner-programs__referral-builder-flow
-    .react-flow__panel.owner-programs__referral-builder-flow-toolbar {
-    margin-left: 181px;
+  .owner-programs__referral-builder-blocks-dock {
+    padding: 16px;
+  }
+
+  .owner-programs__referral-builder-blocks-dock__panel {
+    width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .owner-programs__referral-builder-blocks-dock__title {
+    font-size: 18px;
+  }
+
+  .owner-programs__referral-builder-blocks-dock__subtitle {
+    font-size: 13px;
+  }
+
+  .owner-programs__referral-builder-blocks-dock__grid {
+    grid-template-columns: 1fr;
   }
 
   .owner-programs__referral-builder-flow .react-flow__panel.owner-programs__referral-builder-expanded-dock {
@@ -5556,6 +6446,10 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 }
 
 @media (max-width: 720px) {
+  .owner-programs__history-mobileDateBar {
+    display: flex;
+  }
+
   .owner-programs__histTable_showHeaderMobile .owner-programs__histRow_head {
     display: none;
   }
@@ -5586,7 +6480,10 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   --background-color: #fff;
   --main-color: #7177f8;
   --hist-page-active-bg: rgba(15, 23, 42, 0.06);
-  --hist-page-active-border: rgba(15, 23, 42, 0.12);
+  --lk-form-line-color: rgba(15, 23, 42, 0.12);
+  --lk-form-text-color: #0f172a;
+  --lk-form-text-secondary: #64748b;
+  --lk-form-surface: #fff;
 }
 
 [data-theme="light"] .owner-programs__history-tableWrap {

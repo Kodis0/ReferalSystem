@@ -177,6 +177,7 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     )
     config_json = serializers.JSONField(required=False)
     capture_config = serializers.JSONField(required=False)
+    referral_builder_workspace = serializers.JSONField(required=False, allow_null=True)
     widget_enabled = serializers.BooleanField(required=False)
 
     def validate_origin(self, value: str) -> str:

@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
+import { cloneElement, forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, isValid as isValidDate, parse } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -228,7 +228,20 @@ function PersonalDateHeader({
 
 const PERSONAL_DATE_DISPLAY_FORMATS = ["dd.MM.yyyy", "d.M.yyyy", "dd.MM.yy", "d.M.yy", "yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy"];
 
-function PersonalDatePicker({ id, name, value, onChange, disabled, minDate, maxDate, placeholderText = "дд.мм.гггг", ariaLabelledBy }) {
+export function PersonalDatePicker({
+  id,
+  name,
+  value,
+  onChange,
+  disabled,
+  minDate,
+  maxDate,
+  placeholderText = "дд.мм.гггг",
+  ariaLabelledBy,
+  portalId,
+  customInput,
+  isClearable = false,
+}) {
   const defaultPeekYear = maxDate instanceof Date && !Number.isNaN(maxDate.getTime()) ? maxDate.getFullYear() : new Date().getFullYear();
   const [peekOpenToDate, setPeekOpenToDate] = useState(() => parseYmdLocal(value) || null);
 
@@ -267,6 +280,10 @@ function PersonalDatePicker({ id, name, value, onChange, disabled, minDate, maxD
     return new Date();
   }, [value, peekOpenToDate, maxDate]);
 
+  const resolvedCustomInput = customInput
+    ? cloneElement(customInput, typeof customInput.type === "string" ? {} : { id, name })
+    : null;
+
   return (
     <DatePicker
       selected={parseYmdLocal(value)}
@@ -277,9 +294,10 @@ function PersonalDatePicker({ id, name, value, onChange, disabled, minDate, maxD
       minDate={minDate}
       maxDate={maxDate}
       disabled={disabled}
-      ariaLabelledBy={ariaLabelledBy}
-      customInput={<PersonalDateInput id={id} name={name} placeholder={placeholderText} />}
-      onChangeRaw={handleChangeRaw}
+      ariaLabelledBy={customInput ? undefined : ariaLabelledBy}
+      customInput={resolvedCustomInput ?? <PersonalDateInput id={id} name={name} placeholder={placeholderText} />}
+      {...(customInput ? {} : { onChangeRaw: handleChangeRaw })}
+      isClearable={isClearable}
       openToDate={openToDate}
       renderCustomHeader={(p) => (
         <PersonalDateHeader
@@ -295,7 +313,7 @@ function PersonalDatePicker({ id, name, value, onChange, disabled, minDate, maxD
       calendarClassName="lk-settings-personal-page__datepicker-calendar"
       showPopperArrow={false}
       popperPlacement="bottom-start"
-      portalId="lk-settings-personal-page"
+      {...(portalId ? { portalId } : {})}
     />
   );
 }
@@ -487,6 +505,7 @@ export default function AccountPersonalDataPage({ user, fetchUser }) {
                   maxDate={new Date()}
                   placeholderText="дд.мм.гггг"
                   ariaLabelledBy="lk-settings-birth-date-label"
+                  portalId="lk-settings-personal-page"
                 />
               </div>
             </label>
@@ -544,6 +563,7 @@ export default function AccountPersonalDataPage({ user, fetchUser }) {
                   maxDate={new Date()}
                   placeholderText="дд.мм.гггг"
                   ariaLabelledBy="lk-settings-passport-issue-label"
+                  portalId="lk-settings-personal-page"
                 />
               </div>
             </label>

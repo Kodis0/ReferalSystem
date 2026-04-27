@@ -2445,7 +2445,7 @@ describe("Canonical site identity contract", () => {
 
     const pageStack = screen.getByTestId("imported-page-stack-node");
     expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
-    expect(screen.getByTestId("referral-builder-blocks-dock")).toBeInTheDocument();
+    expect(screen.queryByTestId("referral-builder-blocks-dock")).not.toBeInTheDocument();
     expect(screen.queryByTestId("site-scan-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("imported-site-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("screenshot-site-block-node")).not.toBeInTheDocument();
@@ -2471,6 +2471,8 @@ describe("Canonical site identity contract", () => {
         .querySelector("button.imported-page-insert-slot__button");
       expect(activeBtn).toHaveAttribute("aria-pressed", "true");
     });
+    expect(screen.getByTestId("referral-builder-blocks-dock")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Выбор блока" })).toBeInTheDocument();
 
     expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("referral-builder-inline-preview")).not.toBeInTheDocument();
@@ -2480,6 +2482,7 @@ describe("Canonical site identity contract", () => {
     await waitFor(() => {
       expect(within(pageStack).getByTestId("editable-referral-block-preview")).toBeInTheDocument();
     });
+    expect(screen.queryByTestId("referral-builder-blocks-dock")).not.toBeInTheDocument();
 
     const editable = within(pageStack).getByTestId("editable-referral-block-preview");
     expect(editable).toHaveAttribute("data-builder-block-type", "referralHero");

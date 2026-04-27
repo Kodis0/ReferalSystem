@@ -34,7 +34,7 @@ export default function useAuth() {
         setUser(data.user); // ✅ обновляем state
       }
 
-      navigate("/lk/dashboard");
+      navigate("/lk/partner");
 
       return { success: true };
     } catch (error) {

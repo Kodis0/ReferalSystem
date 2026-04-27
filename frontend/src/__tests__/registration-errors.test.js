@@ -25,4 +25,15 @@ describe("formatRegistrationErrors", () => {
       "Ссылка недействительна или срок её действия истёк. Проверьте адрес или получите новую ссылку у организатора."
     );
   });
+
+  it("translates common DRF field messages to Russian", () => {
+    expect(
+      formatRegistrationErrors({
+        email: ["This field may not be blank."],
+        password: ["This field may not be blank."],
+      })
+    ).toBe(
+      "Email: Это поле обязательно для заполнения.\nПароль: Это поле обязательно для заполнения."
+    );
+  });
 });

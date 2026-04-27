@@ -34,6 +34,7 @@ from .models import (
 )
 from .owner_site_activity import log_site_member_joined
 from .services_owner_site_shell import (
+    REFERRAL_BUILDER_WORKSPACE_KEY,
     SITE_DISPLAY_NAME_CONFIG_KEY,
     SITE_SHELL_AVATAR_CONFIG_KEY,
     SITE_SHELL_DESCRIPTION_CONFIG_KEY,
@@ -78,6 +79,7 @@ _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
         SITE_DISPLAY_NAME_CONFIG_KEY,
         SITE_SHELL_DESCRIPTION_CONFIG_KEY,
         SITE_CAPTURE_CONFIG_KEY,
+        REFERRAL_BUILDER_WORKSPACE_KEY,
     }
 )
 

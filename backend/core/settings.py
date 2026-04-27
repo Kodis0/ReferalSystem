@@ -278,3 +278,6 @@ ORDER_WEBHOOK_SHARED_SECRET = os.getenv("ORDER_WEBHOOK_SHARED_SECRET", "").strip
 ORDER_WEBHOOK_DEBUG_LOGGING = (
     os.getenv("ORDER_WEBHOOK_DEBUG_LOGGING", "False").lower() == "true"
 )
+
+# Google Sign-In (GIS): Web client ID (same value as REACT_APP_GOOGLE_CLIENT_ID on the SPA).
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()

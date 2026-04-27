@@ -9,6 +9,8 @@ from .models import Site
 SITE_SHELL_AVATAR_CONFIG_KEY = "site_avatar_data_url"
 SITE_DISPLAY_NAME_CONFIG_KEY = "site_display_name"
 SITE_SHELL_DESCRIPTION_CONFIG_KEY = "site_description"
+# Owner-only draft for LK «Блок для сайта» (visual import + inserted builder blocks). Not used by the embed widget.
+REFERRAL_BUILDER_WORKSPACE_KEY = "referral_builder_workspace"
 
 
 def site_shell_avatar_data_url(site: Site) -> str:

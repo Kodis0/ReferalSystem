@@ -1,3 +1,4 @@
+import datetime
 import uuid
 
 from django.contrib.auth import get_user_model
@@ -106,6 +107,35 @@ class SiteOwnerIntegrationApiTests(TestCase):
         row = next((s for s in flat if s["public_id"] == str(site.public_id)), None)
         self.assertIsNotNone(row)
         self.assertEqual(row.get("avatar_data_url"), "data:image/png;base64,SITE")
+
+    def test_patch_referral_builder_workspace_merges_into_config_json(self):
+        project = Project.objects.create(owner=self.owner, name="P", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_rb_ws_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={"display_name": "X", "amount_selector": ".price"},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+        workspace = {
+            "v": 1,
+            "scanUrl": "https://shop.example/page",
+            "scannedBlocks": [],
+            "scanMeta": {"visualMode": "screenshot"},
+            "builderBlocks": [],
+            "flowNodePositions": {"imported-page-stack": {"x": 12, "y": 34}},
+            "selectedInsertionSlotId": "",
+        }
+        r = self.api.patch(url, {"referral_builder_workspace": workspace}, format="json")
+        self.assertEqual(r.status_code, 200)
+        site.refresh_from_db()
+        cfg = site.config_json
+        self.assertEqual(cfg.get("referral_builder_workspace"), workspace)
+        self.assertEqual(cfg.get("amount_selector"), ".price")
+        # Integration PATCH re-applies project metadata into config_json (display_name follows Project.name).
+        self.assertEqual(cfg.get("display_name"), "P")
 
     def test_get_requires_auth(self):
         r = self.api.get("/referrals/site/integration/")
@@ -1273,4 +1303,35 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIn("отображаемое имя", r.data["results"][0]["message"].lower())
         self.assertEqual(r.data["results"][0]["action"], "site_settings")
         self.assertTrue(SiteOwnerActivityLog.objects.filter(site=site).exists())
+
+    def test_site_activity_list_filters_by_date(self):
+        project = Project.objects.create(owner=self.owner, name="P", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_act_date_" + uuid.uuid4().hex,
+            allowed_origins=["https://one.example"],
+        )
+        log_old = SiteOwnerActivityLog.objects.create(
+            site=site,
+            actor=self.owner,
+            action="site_settings",
+            message="Событие в прошлом",
+            details={},
+        )
+        past = timezone.make_aware(datetime.datetime(2019, 6, 10, 8, 30, 0))
+        SiteOwnerActivityLog.objects.filter(pk=log_old.pk).update(created_at=past)
+
+        self.api.force_authenticate(self.owner)
+        r_day = self.api.get(
+            f"/referrals/site/integration/activity/?site_public_id={site.public_id}&date=2019-06-10"
+        )
+        self.assertEqual(r_day.status_code, 200)
+        self.assertEqual(r_day.data["count"], 1)
+        self.assertEqual(len(r_day.data["results"]), 1)
+        self.assertIn("прошлом", r_day.data["results"][0]["message"].lower())
+
+        r_all = self.api.get(f"/referrals/site/integration/activity/?site_public_id={site.public_id}")
+        self.assertEqual(r_all.status_code, 200)
+        self.assertGreaterEqual(r_all.data["count"], 1)
 

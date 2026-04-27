@@ -1,0 +1,297 @@
+/* intl-tel-input: тёмная тема под .login-page (регистрация / единый auth-визуал). */
+.login-page {
+  --state-color: var(--main-color);
+  /* Строки списка стран: как rgba(0,0,0,.05) на светлом — лёгкая подсветка на тёмном */
+  --iti-hover-color: rgba(255, 255, 255, 0.06);
+  --iti-border-color: var(--line-color);
+  --iti-dialcode-color: var(--text-secondary-color);
+  --iti-dropdown-bg: var(--background-color);
+  --iti-arrow-color: var(--text-secondary-color);
+  --iti-icon-color: var(--text-secondary-color);
+  /* Как в /my: типографика поля поиска стран */
+  --text-regular-medium: 400 14px / 24px var(--font-family);
+  /* На случай, если :root из iti не попал в каскад — треугольник стрелки */
+  --iti-arrow-height: 4px;
+  --iti-arrow-width: 6px;
+  --iti-triangle-border: calc(var(--iti-arrow-width) / 2);
+}
+
+.login-page .iti {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.login-page .iti__country-container {
+  padding: 0;
+  overflow: visible;
+}
+
+/* Как в /my: только флаг + стрелка внутри primary; --up добавляет сама библиотека при открытом списке. */
+.login-page .iti__selected-country {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: visible;
+}
+
+.login-page .iti__selected-country-primary {
+  box-sizing: border-box;
+  align-items: center;
+  display: flex;
+  height: 100%;
+  padding: 0 8px 0 16px;
+  user-select: none;
+  cursor: pointer;
+  font: inherit;
+  font-family: inherit !important;
+  font-size: inherit;
+  color: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  -webkit-font-smoothing: antialiased;
+  overflow: visible;
+}
+
+.login-page .iti__selected-country-primary .iti__flag {
+  flex-shrink: 0;
+}
+
+/* intl-tel-input подсвечивает primary при hover — убираем прямоугольник; список стран по-прежнему через .iti__highlight + --iti-hover-color. */
+.login-page .iti__selected-country-primary:hover,
+.login-page .iti__selected-country:has(+ .iti__dropdown-content:hover) .iti__selected-country-primary {
+  background-color: transparent !important;
+}
+
+/* Закрытый список: ▼; открытый — библиотека вешает .iti__arrow--up (▲). */
+.login-page .iti__selected-country .iti__arrow:not(.iti__arrow--up) {
+  box-sizing: content-box;
+  display: block;
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  margin-left: var(--iti-arrow-padding);
+  overflow: visible;
+  border-left: var(--iti-triangle-border) solid transparent;
+  border-right: var(--iti-triangle-border) solid transparent;
+  border-top: var(--iti-arrow-height) solid var(--iti-arrow-color);
+  border-bottom: none;
+}
+
+.login-page .iti__selected-country .iti__arrow.iti__arrow--up {
+  box-sizing: content-box;
+  display: block;
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  margin-left: var(--iti-arrow-padding);
+  overflow: visible;
+  border-top: none;
+  border-left: var(--iti-triangle-border) solid transparent;
+  border-right: var(--iti-triangle-border) solid transparent;
+  border-bottom: var(--iti-arrow-height) solid var(--iti-arrow-color);
+}
+
+.login-page .iti .iti__selected-dial-code {
+  color: var(--text-color);
+  font-weight: 600;
+  margin-left: 4px;
+  margin-right: 2px;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.login-page .iti input.iti__tel-input,
+.login-page .iti input.iti__tel-input[type="tel"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto !important;
+  background: transparent !important;
+  color: var(--text-color);
+  font-size: 14px;
+  line-height: 24px;
+  padding: 10px 0 10px 8px;
+}
+
+.login-page .iti input.iti__tel-input::placeholder {
+  color: var(--text-secondary-color-60);
+}
+
+.login-page .iti__dropdown-content {
+  background-color: var(--background-color);
+  border: 1px solid var(--line-color);
+  border-radius: var(--border-radius-medium);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 16px;
+}
+
+/* Ширина задаётся в JS по `.login-page__input-wrapper`; border входит в offsetWidth. */
+.login-page__input--phone .iti__dropdown-content {
+  box-sizing: border-box;
+  padding: 8px 0 0;
+}
+
+/* При `fixDropdownWidth: false` на дропдауне `iti--flexible-dropdown-width` — не уезжать в nowrap за пределы панели. */
+.login-page__input--phone .iti__country-list {
+  white-space: normal;
+}
+
+/* Версии iti с обёрткой (как в /my) — плоская полоса под поиск. */
+.login-page .iti__search-input-wrapper {
+  background: transparent;
+  border: none;
+  padding: 0 0 8px;
+  margin: 0;
+}
+
+/* Поле «Поиск»: как в Timeweb /my — без рамки, скругление 8px, отступы под иконку/очистку. */
+.login-page .iti__search-input,
+.login-page .iti__search-input[type="text"],
+.login-page .iti__search-input[type="search"] {
+  box-sizing: border-box;
+  display: block;
+  width: auto;
+  min-width: 0;
+  margin: 8px 10px 0;
+  vertical-align: baseline;
+  -webkit-appearance: textfield;
+  appearance: auto;
+  font: var(--text-regular-medium);
+  font-family: inherit !important;
+  color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+  text-size-adjust: 100%;
+  border-radius: var(--border-radius-medium);
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237f91a4' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px 50%;
+  background-size: 14px 14px;
+  border: none !important;
+  outline: none;
+  padding: 9px 36px 9px 34px;
+  box-shadow: none;
+  transition:
+    box-shadow var(--transition-duration) var(--transition-function),
+    background-color var(--transition-duration) var(--transition-function);
+}
+
+.login-page .iti__search-input:hover:not(:focus) {
+  box-shadow: none;
+}
+
+.login-page .iti__search-input::placeholder {
+  color: var(--text-secondary-color-60);
+}
+
+/* Регистрация / телефон: поиск на всю ширину панели; подсветка только в фокусе (не при hover). */
+.login-page__input--phone .iti__dropdown-content .iti__search-input,
+.login-page__input--phone .iti__dropdown-content .iti__search-input[type="text"],
+.login-page__input--phone .iti__dropdown-content .iti__search-input[type="search"] {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.login-page__input--phone .iti__dropdown-content .iti__search-input:focus {
+  box-shadow: 0 0 0 2px var(--main-color-20);
+  outline: none;
+}
+
+.login-page__input--phone .iti__dropdown-content .iti__search-input:not(:focus) {
+  box-shadow: none;
+}
+
+/* Если поиск внутри .iti__search-input-wrapper — отступы даёт обёртка. */
+.login-page .iti__search-input-wrapper .iti__search-input,
+.login-page .iti__search-input-wrapper .iti__search-input[type="text"],
+.login-page .iti__search-input-wrapper .iti__search-input[type="search"] {
+  margin: 0;
+  width: 100%;
+}
+
+.login-page .iti__search-icon {
+  color: var(--text-secondary-color);
+}
+
+/* Строка страны: как в /my — flex, gap 8px, padding 8px 16px, transition фона. */
+.login-page .iti__country {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  list-style: none;
+  cursor: pointer;
+  outline: none;
+  font: inherit;
+  vertical-align: baseline;
+  color: var(--text-color);
+  -webkit-font-smoothing: antialiased;
+  text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--transition-duration) var(--transition-function);
+}
+
+.login-page .iti__country-list .iti__flag,
+.login-page .iti__country-list .iti__country-name {
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.login-page .iti__country-name {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  color: var(--text-color);
+}
+
+.login-page .iti__country-name .iti__dial-code {
+  color: var(--iti-dialcode-color);
+}
+
+.login-page .iti__country-list {
+  scrollbar-color: var(--line-color) transparent;
+}
+
+.login-page .iti__no-results {
+  color: var(--text-secondary-color);
+  padding: 10px var(--iti-spacer-horizontal);
+}
+
+/* У дефолтного iti у флага box-shadow (#888) — на тёмном фоне выглядит как серая рамка при hover. */
+.login-page .iti__flag {
+  box-shadow: none;
+}
+
+.login-page .iti__country-check {
+  color: var(--main-color);
+}
+
+.login-page .iti__search-clear-bg {
+  fill: var(--text-secondary-color);
+}
+
+.login-page__input--phone .login-page__input-wrapper {
+  --login-phone-dropdown-pull: 8px; /* совпадает с padding-left: тянем дропдаун к левому краю обёртки */
+  background: var(--background-color);
+  padding-left: var(--login-phone-dropdown-pull);
+}
+
+/* Дропдаун внутри country-container; без сдвига он начинается с внутреннего края после padding обёртки. */
+.login-page__input--phone .iti--inline-dropdown .iti__dropdown-content {
+  margin-left: calc(-1 * var(--iti-border-width, 1px) - var(--login-phone-dropdown-pull)) !important;
+}
+
+.login-page__input--phone .login-page__input-wrapper:hover,
+.login-page__input--phone .login-page__input-wrapper:focus-within {
+  border-color: var(--main-color);
+}

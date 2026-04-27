@@ -465,7 +465,7 @@ describe("WidgetInstallScreen", () => {
     expect(screen.getByTestId("capture-optional-fields")).toHaveTextContent("Имя");
     expect(screen.getByTestId("capture-optional-fields")).toHaveTextContent("Email");
     expect(screen.getByTestId("capture-optional-fields")).toHaveTextContent("Телефон");
-    expect(screen.getByText(/Будут отправляться:/i)).toBeInTheDocument();
+    expect(screen.getByText("Дополнительные поля")).toBeInTheDocument();
   });
 
   it("saves capture field config via integration settings", async () => {

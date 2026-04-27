@@ -25,14 +25,26 @@ def split_fio_string(value: str) -> tuple[str, str, str]:
 class RegisterSerializer(serializers.ModelSerializer):
     # Сделаем username опциональным и уберем валидаторы уникальности на уровне сериализатора
     username = serializers.CharField(required=False, allow_blank=True, validators=[])
+    fio = serializers.CharField(required=False, allow_blank=True, max_length=400)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=32)
     site_public_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
     ref_code = serializers.CharField(required=False, allow_blank=True, write_only=True)
     ref = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ('id', 'username', 'email', 'password', 'site_public_id', 'ref_code', 'ref')
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = (
+            "id",
+            "username",
+            "email",
+            "password",
+            "fio",
+            "phone",
+            "site_public_id",
+            "ref_code",
+            "ref",
+        )
+        extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, validated_data):
         """
@@ -45,8 +57,18 @@ class RegisterSerializer(serializers.ModelSerializer):
         username = validated_data.pop("username", "") or ""
         email = validated_data.pop("email")
         password = validated_data.pop("password")
+        fio_raw = (validated_data.pop("fio", None) or "").strip()
+        phone_raw = (validated_data.pop("phone", None) or "").strip()
 
         user = CustomUser(username=username, email=email, **validated_data)
+        if fio_raw:
+            user.fio = fio_raw
+            last_name, first_name, patronymic = split_fio_string(fio_raw)
+            user.last_name = last_name
+            user.first_name = first_name
+            user.patronymic = patronymic
+        if phone_raw:
+            user.phone = phone_raw
         user.set_password(password)
         user.save()
         ensure_default_owner_project(user)
@@ -90,6 +112,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "public_id",
             "username",
             "email",
+            "phone",
             "account_type",
             "first_name",
             "last_name",

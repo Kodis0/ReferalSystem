@@ -18,6 +18,7 @@ class CustomUser(AbstractUser):
     passport_issue_date = models.DateField("дата выдачи", null=True, blank=True)
     passport_registration_address = models.TextField("адрес регистрации", blank=True, default="")
     fio = models.CharField("ФИО", max_length=400, blank=True, default="")
+    phone = models.CharField("телефон", max_length=32, blank=True, default="")
     account_type = models.CharField(
         "тип аккаунта",
         max_length=24,

@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   register: `${API_BASE}/users/register/`,
   siteCtaJoin: `${API_BASE}/users/site/join/`,
   token: `${API_BASE}/users/token/`,
+  tokenGoogle: `${API_BASE}/users/token/google/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
   myPrograms: `${API_BASE}/users/me/programs/`,

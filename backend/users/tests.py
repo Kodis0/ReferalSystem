@@ -1,5 +1,7 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 
@@ -121,3 +123,101 @@ class CurrentUserApiTests(TestCase):
         )
         r = self.api.patch("/users/me/", {"email": "taken@example.com"}, format="json")
         self.assertEqual(r.status_code, 400)
+
+
+@override_settings(GOOGLE_OAUTH_CLIENT_ID="test.apps.googleusercontent.com")
+class GoogleIdTokenLoginTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="google-match@example.com",
+            username="googlematch",
+            password="secret123",
+        )
+        self.client = APIClient()
+
+    @patch("users.google_verify.verify_google_id_token")
+    def test_google_login_returns_jwt_when_email_matches(self, mock_verify):
+        mock_verify.return_value = {
+            "email": "google-match@example.com",
+            "email_verified": True,
+            "sub": "google-sub-1",
+        }
+        r = self.client.post(
+            "/users/token/google/",
+            {"credential": "fake-jwt"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("access", r.data)
+        self.assertIn("refresh", r.data)
+        self.assertEqual(r.data["user"]["email"], "google-match@example.com")
+
+    @patch("users.google_verify.verify_google_id_token")
+    def test_google_login_case_insensitive_email(self, mock_verify):
+        mock_verify.return_value = {
+            "email": "Google-Match@Example.com",
+            "email_verified": True,
+            "sub": "google-sub-2",
+        }
+        r = self.client.post(
+            "/users/token/google/",
+            {"id_token": "fake-jwt"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["user"]["email"], "google-match@example.com")
+
+    @patch("users.google_verify.verify_google_id_token")
+    def test_google_login_unknown_email_404(self, mock_verify):
+        mock_verify.return_value = {
+            "email": "nobody@example.com",
+            "email_verified": True,
+            "sub": "google-sub-3",
+        }
+        r = self.client.post(
+            "/users/token/google/",
+            {"credential": "fake-jwt"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data.get("code"), "google_email_not_registered")
+
+    @patch("users.google_verify.verify_google_id_token", side_effect=ValueError("bad"))
+    def test_google_login_invalid_token_401(self, _mock_verify):
+        r = self.client.post(
+            "/users/token/google/",
+            {"credential": "bad-jwt"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.data.get("code"), "google_token_invalid")
+
+    @patch("users.google_verify.verify_google_id_token")
+    def test_google_login_unverified_email_403(self, mock_verify):
+        mock_verify.return_value = {
+            "email": "google-match@example.com",
+            "email_verified": False,
+            "sub": "google-sub-4",
+        }
+        r = self.client.post(
+            "/users/token/google/",
+            {"credential": "fake-jwt"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "google_email_not_verified")
+
+    def test_google_login_missing_body_400(self):
+        r = self.client.post("/users/token/google/", {}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "google_credential_missing")
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_ID="")
+    def test_google_login_not_configured_503(self):
+        r = self.client.post(
+            "/users/token/google/",
+            {"credential": "x"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.data.get("code"), "google_oauth_not_configured")

@@ -9,6 +9,7 @@
     "@testing-library/user-event": "^13.5.0",
     "@xyflow/react": "^12.10.2",
     "date-fns": "^4.1.0",
+    "intl-tel-input": "^24.8.2",
     "lucide-react": "^0.543.0",
     "react": "^19.1.1",
     "react-datepicker": "^7.6.0",

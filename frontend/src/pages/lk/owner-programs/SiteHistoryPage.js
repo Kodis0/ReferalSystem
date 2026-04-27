@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
+import { PersonalDatePicker } from "../settings/AccountPersonalDataPage";
+import "react-datepicker/dist/react-datepicker.css";
+import "../settings/settings.css";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
@@ -38,6 +41,62 @@ function hasExpandableDetails(details) {
   return details && typeof details === "object" && Object.keys(details).length > 0;
 }
 
+const SiteHistoryDateFilterTrigger = forwardRef(function SiteHistoryDateFilterTrigger(
+  {
+    value,
+    onClick,
+    disabled,
+    id,
+    name,
+    className: classNameFromPicker,
+    placeholder: _ignoredPlaceholder,
+    ...rest
+  },
+  ref,
+) {
+  const hasValue = typeof value === "string" && value.trim() !== "";
+  const className = ["owner-programs__histSort", "owner-programs__histDateTrigger", classNameFromPicker]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <button
+      type="button"
+      ref={ref}
+      id={id}
+      name={name}
+      className={className}
+      onClick={onClick}
+      disabled={disabled}
+      aria-haspopup="dialog"
+      aria-label={hasValue ? `Фильтр по дате, выбрано ${value}` : "Фильтр по дате, открыть календарь"}
+      {...rest}
+    >
+      <span className="owner-programs__histDateTrigger__labelWithArrow">
+        <span className="owner-programs__histText owner-programs__histText_s owner-programs__histText_grey owner-programs__histText_alignLeft">
+          Дата
+        </span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="8"
+          height="4"
+          fill="none"
+          viewBox="0 0 8 4"
+          className="owner-programs__histSortArrow"
+          aria-hidden="true"
+        >
+          <path fill="currentColor" d="m4 4 4-4H0l4 4Z" />
+        </svg>
+      </span>
+      {hasValue ? (
+        <span className="owner-programs__histDateTrigger__value owner-programs__histText owner-programs__histText_s" aria-hidden="true">
+          {value}
+        </span>
+      ) : null}
+    </button>
+  );
+});
+SiteHistoryDateFilterTrigger.displayName = "SiteHistoryDateFilterTrigger";
+
 export default function SiteHistoryPage() {
   const { sitePublicId: sitePublicIdParam } = useParams();
   const sitePublicId = isUuidString(sitePublicIdParam) ? sitePublicIdParam.trim() : "";
@@ -49,6 +108,7 @@ export default function SiteHistoryPage() {
   const [count, setCount] = useState(0);
   const [numPages, setNumPages] = useState(1);
   const [expandedId, setExpandedId] = useState(null);
+  const [filterDateYmd, setFilterDateYmd] = useState("");
 
   const baseUrl = useMemo(
     () => withSitePublicIdQuery(API_ENDPOINTS.siteIntegrationActivity, sitePublicId),
@@ -67,6 +127,7 @@ export default function SiteHistoryPage() {
       const u = new URL(baseUrl, window.location.origin);
       u.searchParams.set("page", String(page));
       u.searchParams.set("page_size", String(pageSize));
+      if (filterDateYmd) u.searchParams.set("date", filterDateYmd);
       const res = await fetch(u.toString(), { headers: authHeaders() });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -86,11 +147,16 @@ export default function SiteHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [baseUrl, page, pageSize, sitePublicId]);
+  }, [baseUrl, filterDateYmd, page, pageSize, sitePublicId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const onFilterDateChange = useCallback((ymd) => {
+    setFilterDateYmd(ymd);
+    setPage(1);
+  }, []);
 
   useEffect(() => {
     if (!sitePublicId) return undefined;
@@ -131,6 +197,11 @@ export default function SiteHistoryPage() {
     <div className="owner-programs__page owner-programs__site-page">
       <div className="owner-programs__history">
         <h2 className="owner-programs__history-title">История</h2>
+        <div
+          id="owner-programs-site-history-datepicker-portal"
+          className="owner-programs__history-datepicker-portal"
+          aria-hidden="true"
+        />
 
         {error ? (
           <p className="owner-programs__history-error" role="alert">
@@ -138,28 +209,43 @@ export default function SiteHistoryPage() {
           </p>
         ) : null}
 
+        <div className="owner-programs__history-mobileDateBar">
+          <div className="lk-settings-personal-page__date-wrap owner-programs__histHeaderDateFilter__pickerWrap">
+            <PersonalDatePicker
+              id="site-history-date-filter-mobile"
+              name="site_history_filter_date"
+              value={filterDateYmd}
+              onChange={onFilterDateChange}
+              maxDate={new Date()}
+              placeholderText="дд.мм.гггг"
+              portalId="owner-programs-site-history-datepicker-portal"
+              customInput={<SiteHistoryDateFilterTrigger />}
+              isClearable
+            />
+          </div>
+        </div>
+
         <div className="owner-programs__history-tableWrap">
           <div className="owner-programs__histTable owner-programs__histTable_showHeaderMobile">
-            <div className="owner-programs__histRow owner-programs__histRow_head">
+            <div className="owner-programs__histRow owner-programs__histRow_head owner-programs__histRow_head_filters">
               <div className="owner-programs__histCell owner-programs__histCell_date owner-programs__histCell_headerCell">
-                <div className="owner-programs__histSort">
-                  <span className="owner-programs__histSortTitle owner-programs__histText owner-programs__histText_s owner-programs__histText_grey owner-programs__histText_alignLeft">
-                    Дата
-                  </span>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="8"
-                    height="4"
-                    fill="none"
-                    viewBox="0 0 8 4"
-                    className="owner-programs__histSortArrow"
-                    aria-hidden="true"
-                  >
-                    <path fill="#777991" d="m4 4 4-4H0l4 4Z" />
-                  </svg>
+                <div className="owner-programs__histHeaderDateFilter">
+                  <div className="lk-settings-personal-page__date-wrap owner-programs__histHeaderDateFilter__pickerWrap">
+                    <PersonalDatePicker
+                      id="site-history-date-filter"
+                      name="site_history_filter_date"
+                      value={filterDateYmd}
+                      onChange={onFilterDateChange}
+                      maxDate={new Date()}
+                      placeholderText="дд.мм.гггг"
+                      portalId="owner-programs-site-history-datepicker-portal"
+                      customInput={<SiteHistoryDateFilterTrigger />}
+                      isClearable
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="owner-programs__histCell owner-programs__histCell_headerCell">
+              <div className="owner-programs__histCell owner-programs__histCell_event owner-programs__histCell_headerCell">
                 <span className="owner-programs__histText owner-programs__histText_s owner-programs__histText_grey owner-programs__histText_alignLeft">
                   Событие
                 </span>
@@ -195,7 +281,12 @@ export default function SiteHistoryPage() {
                       </div>
                       <div className="owner-programs__histCell owner-programs__histCell_event">
                         <div className="owner-programs__histEventRow">
-                          <p className="owner-programs__histText owner-programs__histText_body">{row.message || "—"}</p>
+                          <p
+                            className="owner-programs__histText owner-programs__histText_body"
+                            title={row.message || undefined}
+                          >
+                            {row.message || "—"}
+                          </p>
                           {expandable ? (
                             <button
                               type="button"

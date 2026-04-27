@@ -52,6 +52,8 @@ def _site_settings_fragments(validated: dict[str, Any]) -> list[str]:
         parts.append("аватар сайта")
     if "avatar_data_url" in validated:
         parts.append("аватар проекта")
+    if "referral_builder_workspace" in validated:
+        parts.append("черновик конструктора реферального блока")
     return parts
 
 

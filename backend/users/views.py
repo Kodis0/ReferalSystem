@@ -7,7 +7,8 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import generics, serializers, status
-from rest_framework.permissions import IsAuthenticated
+from django.conf import settings as django_settings
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -313,3 +314,102 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
+
+
+class GoogleIdTokenLoginView(APIView):
+    """
+    Обмен JWT Google Sign-In (поле credential) на наши access/refresh JWT.
+    Пользователь уже должен существовать с тем же подтверждённым email, что в токене Google.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        client_id = (getattr(django_settings, "GOOGLE_OAUTH_CLIENT_ID", None) or "").strip()
+        if not client_id:
+            return Response(
+                {
+                    "detail": "Вход через Google не настроен на сервере.",
+                    "code": "google_oauth_not_configured",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        credential = request.data.get("credential") or request.data.get("id_token")
+        if not credential or not isinstance(credential, str):
+            return Response(
+                {
+                    "detail": "Нужен JWT от Google (поле credential).",
+                    "code": "google_credential_missing",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .google_verify import verify_google_id_token
+
+        try:
+            idinfo = verify_google_id_token(credential.strip(), client_id)
+        except ValueError:
+            logger.warning("Google id_token verification failed")
+            return Response(
+                {
+                    "detail": "Не удалось проверить токен Google.",
+                    "code": "google_token_invalid",
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        email_raw = idinfo.get("email")
+        if not email_raw or not isinstance(email_raw, str):
+            return Response(
+                {
+                    "detail": "В токене Google нет адреса email.",
+                    "code": "google_email_missing",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not idinfo.get("email_verified", False):
+            return Response(
+                {
+                    "detail": "Email в Google не подтверждён.",
+                    "code": "google_email_not_verified",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        email = email_raw.strip()
+        try:
+            user = CustomUser.objects.get(email__iexact=email)
+        except CustomUser.DoesNotExist:
+            return Response(
+                {
+                    "detail": "Нет аккаунта с этим email. Сначала зарегистрируйтесь или войдите по паролю.",
+                    "code": "google_email_not_registered",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not user.is_active:
+            return Response(
+                {
+                    "detail": "Аккаунт отключён.",
+                    "code": "account_disabled",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        link_session_attributions_to_user(
+            session_key=request.session.session_key,
+            user=user,
+        )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "user": CurrentUserSerializer(user).data,
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -1,11 +1,20 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+import { deferResizeObserverCallback } from "../../../resizeObserverDefer";
 import { flushSync } from "react-dom";
-import { Hand, Move } from "lucide-react";
+import { Hand, Move, Type, X } from "lucide-react";
+import { useParams } from "react-router-dom";
 import { applyNodeChanges, Background, Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { API_ENDPOINTS } from "../../../config/api";
 import { ownerSitesAuthHeaders } from "./ownerSitesListApi";
+import { withSitePublicIdQuery } from "./siteReachability";
 import EditableReferralBlockPreview, { createDefaultBuilderBlockConfig } from "./EditableReferralBlockPreview";
+import {
+  buildSiteStyleProfileFromScreenshotBlock,
+  screenshotBlockForInsertionSlot,
+  themeForSiteStyleProfile,
+} from "./siteStyleProfile";
 
 const PREVIEW_CHIPS = ["до 15%", "личная ссылка", "выплаты ежемесячно"];
 const SCAN_ERROR_MESSAGE = "Не удалось просканировать страницу. Проверьте URL или попробуйте другую страницу.";
@@ -24,10 +33,67 @@ const DEFAULT_SCAN_META = {
   platform: "generic",
   visualVideoCount: 0,
 };
+
+const REFERRAL_BUILDER_WORKSPACE_VERSION = 1;
+
+function buildReferralBuilderWorkspaceSnapshot({
+  scanUrl,
+  scannedBlocks,
+  scanMeta,
+  builderBlocks,
+  selectedInsertionSlotId,
+  displayNodes,
+}) {
+  const flowNodePositions = {};
+  for (const n of displayNodes) {
+    if (n && n.id && n.position && Number.isFinite(n.position.x) && Number.isFinite(n.position.y)) {
+      flowNodePositions[n.id] = { x: n.position.x, y: n.position.y };
+    }
+  }
+  return {
+    v: REFERRAL_BUILDER_WORKSPACE_VERSION,
+    scanUrl: typeof scanUrl === "string" ? scanUrl : "",
+    scannedBlocks: Array.isArray(scannedBlocks) ? scannedBlocks : [],
+    scanMeta: scanMeta && typeof scanMeta === "object" ? { ...DEFAULT_SCAN_META, ...scanMeta } : { ...DEFAULT_SCAN_META },
+    builderBlocks: Array.isArray(builderBlocks) ? builderBlocks : [],
+    selectedInsertionSlotId: typeof selectedInsertionSlotId === "string" ? selectedInsertionSlotId : "",
+    flowNodePositions,
+  };
+}
+
+function parseReferralBuilderWorkspace(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  if (raw.v != null && raw.v !== REFERRAL_BUILDER_WORKSPACE_VERSION) {
+    return null;
+  }
+  const sm = raw.scanMeta && typeof raw.scanMeta === "object" ? raw.scanMeta : {};
+  return {
+    scanUrl: typeof raw.scanUrl === "string" ? raw.scanUrl : "",
+    scannedBlocks: Array.isArray(raw.scannedBlocks) ? raw.scannedBlocks : [],
+    scanMeta: {
+      visualImportAvailable: sm.visualImportAvailable ?? DEFAULT_SCAN_META.visualImportAvailable,
+      visualMode: typeof sm.visualMode === "string" ? sm.visualMode : "",
+      detail: typeof sm.detail === "string" ? sm.detail : "",
+      platform: sm.platform === "tilda" ? "tilda" : "generic",
+      visualVideoCount:
+        typeof sm.visualVideoCount === "number" && Number.isFinite(sm.visualVideoCount) ? sm.visualVideoCount : 0,
+    },
+    builderBlocks: Array.isArray(raw.builderBlocks) ? raw.builderBlocks : [],
+    flowNodePositions:
+      raw.flowNodePositions && typeof raw.flowNodePositions === "object" && !Array.isArray(raw.flowNodePositions)
+        ? raw.flowNodePositions
+        : {},
+    selectedInsertionSlotId: typeof raw.selectedInsertionSlotId === "string" ? raw.selectedInsertionSlotId : "",
+  };
+}
 const PAGE_COLUMN_X = -620;
 const IMPORTED_PAGE_STACK_X = -520;
 const REFERRAL_COLUMN_X = 160;
 const REFERRAL_DEFAULT_Y = 160;
+/** Зум канваса сразу после успешного визуального импорта (стек скриншотов). */
+const POST_IMPORT_SCREENSHOT_ZOOM = 1.2;
 
 const DEBUG_VISUAL_IMPORT_LAYERS = process.env.REACT_APP_DEBUG_VISUAL_IMPORT_LAYERS === "true";
 /** В Chrome Document View Transition + большой канвас часто даёт просадку FPS; по умолчанию выкл. Включить: REACT_APP_REFERRAL_BUILDER_DOCUMENT_VIEW_TRANSITION=true */
@@ -157,6 +223,20 @@ function collectInsertionSlotIdsInOrder(blocks) {
     }
   });
   return out;
+}
+
+function builderBlockMatchesInsertionSlot(block, slotId, orderedSlotIds) {
+  if (!slotId || !block) {
+    return false;
+  }
+  if (typeof block.insertionSlotId === "string" && block.insertionSlotId) {
+    return block.insertionSlotId === slotId;
+  }
+  if (Number.isInteger(block.insertionIndex) && orderedSlotIds.length > 0) {
+    const mapped = orderedSlotIds[block.insertionIndex];
+    return mapped === slotId;
+  }
+  return false;
 }
 
 function firstVisibleInsertionSlotId(blocks) {
@@ -314,6 +394,18 @@ function ReferralBuilderExpandedToolDock({ tool, onToolChange }) {
           <Move className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
           <span className="owner-programs__referral-builder-expanded-dock__label">Move</span>
           <kbd className="owner-programs__referral-builder-expanded-dock__kbd">V</kbd>
+        </button>
+        <button
+          type="button"
+          className={`owner-programs__referral-builder-expanded-dock__btn${tool === "text" ? " is-active" : ""}`}
+          onClick={() => onToolChange("text")}
+          aria-pressed={tool === "text"}
+          aria-label="Text — редактирование текста в блоках, клавиша T"
+          title="Text (T)"
+        >
+          <Type className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
+          <span className="owner-programs__referral-builder-expanded-dock__label">Text</span>
+          <kbd className="owner-programs__referral-builder-expanded-dock__kbd">T</kbd>
         </button>
         <button
           type="button"
@@ -728,17 +820,22 @@ function ForegroundScreenshotCrop({ screenshotSrc, sourceWidth, sourceHeight, la
   );
 }
 
-function InsertSlot({ slotId, active, onSelectInsertionSlot }) {
+function InsertSlot({ slotId, active, onSelectInsertionSlot, afterBuilderBlockId = null }) {
   return (
     <div
       className={`imported-page-insert-slot${active ? " is-active" : ""}`}
       data-testid="imported-page-insert-slot"
       data-slot-id={slotId}
+      data-insert-after-builder-block-id={afterBuilderBlockId || undefined}
     >
       <button
         type="button"
         className="imported-page-insert-slot__button nodrag nopan"
-        onClick={() => onSelectInsertionSlot(slotId)}
+        onClick={() => {
+          if (typeof onSelectInsertionSlot === "function") {
+            onSelectInsertionSlot(slotId, afterBuilderBlockId ?? null);
+          }
+        }}
         aria-pressed={active ? "true" : "false"}
         aria-label="Вставить реферальный блок здесь"
         title="Вставить реферальный блок здесь"
@@ -760,11 +857,19 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
       return undefined;
     }
     const el = sectionRef.current;
+    let deferId = 0;
     const observer = new ResizeObserver(([entry]) => {
-      setRenderWidth(entry.contentRect.width);
+      clearTimeout(deferId);
+      deferId = deferResizeObserverCallback(() => {
+        deferId = 0;
+        setRenderWidth(entry.contentRect.width);
+      });
     });
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      clearTimeout(deferId);
+      observer.disconnect();
+    };
   }, []);
 
   const handleClick = useCallback(() => {
@@ -782,19 +887,17 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
     [block.id, onSelectBlock],
   );
 
-  const mediaOverlays = Array.isArray(block.mediaOverlays) ? block.mediaOverlays : [];
-  const foregroundOverlays = Array.isArray(block.foregroundOverlays) ? block.foregroundOverlays : [];
-  const videoOverlays = useMemo(
-    () => mediaOverlays.filter((overlay) => overlay && overlay.type === "video"),
-    [mediaOverlays],
-  );
   const sourceWidth = numericOr(block.width, 1440);
   const sourceHeight = numericOr(block.height, 900);
   const layerScale = renderWidth && sourceWidth ? renderWidth / sourceWidth : 1;
-  const visibleForegroundOverlays = useMemo(
-    () => filterVisibleForegroundOverlays(foregroundOverlays, videoOverlays, sourceWidth, sourceHeight),
-    [foregroundOverlays, videoOverlays, sourceWidth, sourceHeight],
-  );
+  const videoOverlays = useMemo(() => {
+    const mediaOverlays = Array.isArray(block.mediaOverlays) ? block.mediaOverlays : [];
+    return mediaOverlays.filter((overlay) => overlay && overlay.type === "video");
+  }, [block.mediaOverlays]);
+  const visibleForegroundOverlays = useMemo(() => {
+    const foregroundOverlays = Array.isArray(block.foregroundOverlays) ? block.foregroundOverlays : [];
+    return filterVisibleForegroundOverlays(foregroundOverlays, videoOverlays, sourceWidth, sourceHeight);
+  }, [block.foregroundOverlays, videoOverlays, sourceWidth, sourceHeight]);
   const layerPointerEvents = overlayPointerEventsNone ? "none" : "auto";
   const screenshotSrc = block.screenshotDataUrl || block.screenshot_data_url || block.screenshotUrl || "";
 
@@ -896,7 +999,7 @@ function ImportedScreenshotSection({ block, position, selected = false, onSelect
 }
 
 function ImportedPageStackNode({ data }) {
-  const blocks = Array.isArray(data?.blocks) ? data.blocks : [];
+  const blocks = useMemo(() => (Array.isArray(data?.blocks) ? data.blocks : []), [data?.blocks]);
   const orderedSlotIds = useMemo(() => collectInsertionSlotIdsInOrder(blocks), [blocks]);
   const selectedInsertionSlotId =
     typeof data?.selectedInsertionSlotId === "string" && data.selectedInsertionSlotId
@@ -910,7 +1013,14 @@ function ImportedPageStackNode({ data }) {
   const selectedBuilderBlockId = typeof data?.selectedBuilderBlockId === "string" ? data.selectedBuilderBlockId : "";
   const onSelectBuilderBlock =
     typeof data?.onSelectBuilderBlock === "function" ? data.onSelectBuilderBlock : () => {};
+  const onInlineEditBuilderBlockField =
+    typeof data?.onInlineEditBuilderBlockField === "function" ? data.onInlineEditBuilderBlockField : () => {};
+  const textEditEnabled = data?.textEditEnabled === true;
   const overlayPointerEventsNone = data?.overlayPointerEventsNone !== false;
+  const insertAfterBuilderBlockId =
+    typeof data?.insertAfterBuilderBlockId === "string" && data.insertAfterBuilderBlockId.trim()
+      ? data.insertAfterBuilderBlockId.trim()
+      : null;
   const blocksAtSlot = (slotId) =>
     builderBlocks.filter((b) => {
       if (typeof b.insertionSlotId === "string" && b.insertionSlotId) {
@@ -922,28 +1032,61 @@ function ImportedPageStackNode({ data }) {
       }
       return false;
     });
+  const renderSlotWithBlocks = (slotId) => {
+    const slotBlocks = blocksAtSlot(slotId);
+    const hasBuilderBlocks = slotBlocks.length > 0;
+    const lastSlotBlockId = hasBuilderBlocks ? slotBlocks[slotBlocks.length - 1].id : null;
+    return (
+      <Fragment key={`slot-wrap-${slotId}`}>
+        <InsertSlot
+          slotId={slotId}
+          active={selectedInsertionSlotId === slotId && !insertAfterBuilderBlockId}
+          onSelectInsertionSlot={onSelectInsertionSlot}
+        />
+        {slotBlocks.flatMap((bBlock, index) => {
+          const nodes = [];
+          if (index > 0) {
+            const prevId = slotBlocks[index - 1].id;
+            nodes.push(
+              <InsertSlot
+                key={`insert-between-${slotId}-${prevId}`}
+                slotId={slotId}
+                afterBuilderBlockId={prevId}
+                active={selectedInsertionSlotId === slotId && insertAfterBuilderBlockId === prevId}
+                onSelectInsertionSlot={onSelectInsertionSlot}
+              />,
+            );
+          }
+          nodes.push(
+            <EditableReferralBlockPreview
+              key={bBlock.id}
+              block={bBlock}
+              selected={selectedBuilderBlockId === bBlock.id}
+              onSelect={onSelectBuilderBlock}
+              textEditEnabled={textEditEnabled}
+              onInlineEditField={onInlineEditBuilderBlockField}
+            />,
+          );
+          return nodes;
+        })}
+        {hasBuilderBlocks && lastSlotBlockId ? (
+          <InsertSlot
+            key={`insert-after-all-${slotId}`}
+            slotId={slotId}
+            afterBuilderBlockId={lastSlotBlockId}
+            active={selectedInsertionSlotId === slotId && insertAfterBuilderBlockId === lastSlotBlockId}
+            onSelectInsertionSlot={onSelectInsertionSlot}
+          />
+        ) : null}
+      </Fragment>
+    );
+  };
   const firstIsHeader = blocks[0]?.kind === "header";
 
   const bodyChildren = [];
   if (!firstIsHeader && blocks.length > 0 && shouldShowSlotBefore(blocks[0], null, firstIsHeader, 0)) {
     const sid = insertionSlotIdBefore(blocks[0]);
-    bodyChildren.push(
-      <Fragment key={`slot-wrap-${sid}`}>
-        <InsertSlot
-          slotId={sid}
-          active={selectedInsertionSlotId === sid}
-          onSelectInsertionSlot={onSelectInsertionSlot}
-        />
-        {blocksAtSlot(sid).map((bBlock) => (
-          <EditableReferralBlockPreview
-            key={bBlock.id}
-            block={bBlock}
-            selected={selectedBuilderBlockId === bBlock.id}
-            onSelect={onSelectBuilderBlock}
-          />
-        ))}
-      </Fragment>,
-    );
+    bodyChildren.push(renderSlotWithBlocks(sid));
   }
 
   blocks.forEach((block, index) => {
@@ -961,46 +1104,14 @@ function ImportedPageStackNode({ data }) {
     if (firstIsHeader && index === 0) {
       if (shouldShowSlotAfter(block, blocks[index + 1] ?? null)) {
         const sid = insertionSlotIdAfter(block);
-        bodyChildren.push(
-          <Fragment key={`slot-wrap-${sid}`}>
-            <InsertSlot
-              slotId={sid}
-              active={selectedInsertionSlotId === sid}
-              onSelectInsertionSlot={onSelectInsertionSlot}
-            />
-            {blocksAtSlot(sid).map((bBlock) => (
-              <EditableReferralBlockPreview
-                key={bBlock.id}
-                block={bBlock}
-                selected={selectedBuilderBlockId === bBlock.id}
-                onSelect={onSelectBuilderBlock}
-              />
-            ))}
-          </Fragment>,
-        );
+        bodyChildren.push(renderSlotWithBlocks(sid));
       }
       return;
     }
     const next = blocks[index + 1];
     if (shouldShowSlotAfter(block, next ?? null)) {
       const sid = insertionSlotIdAfter(block);
-      bodyChildren.push(
-        <Fragment key={`slot-wrap-${sid}`}>
-          <InsertSlot
-            slotId={sid}
-            active={selectedInsertionSlotId === sid}
-            onSelectInsertionSlot={onSelectInsertionSlot}
-          />
-          {blocksAtSlot(sid).map((bBlock) => (
-            <EditableReferralBlockPreview
-              key={bBlock.id}
-              block={bBlock}
-              selected={selectedBuilderBlockId === bBlock.id}
-              onSelect={onSelectBuilderBlock}
-            />
-          ))}
-        </Fragment>,
-      );
+      bodyChildren.push(renderSlotWithBlocks(sid));
     }
   });
 
@@ -1058,42 +1169,126 @@ function ReferralBuilderBlocksDock({ visible, onPickType }) {
   if (!visible) {
     return null;
   }
+  const libraryItems = [
+    {
+      testId: "builder-library-hero",
+      type: "referralHero",
+      title: "Hero",
+      description: "Крупный блок с заголовком, CTA и описанием программы.",
+    },
+    {
+      testId: "builder-library-banner",
+      type: "referralBanner",
+      title: "Баннер",
+      description: "Горизонтальный акцентный баннер для быстрого оффера.",
+    },
+    {
+      testId: "builder-library-card",
+      type: "referralCard",
+      title: "Карточка",
+      description: "Компактный формат с текстом и кнопкой действия.",
+    },
+    {
+      testId: "builder-library-split",
+      type: "referralSplit",
+      title: "Две колонки",
+      description: "Сравнение выгод или два сценария в одном блоке.",
+    },
+    {
+      testId: "builder-library-minimal",
+      type: "referralMinimal",
+      title: "Минималистичный",
+      description: "Лаконичный блок с заголовком, коротким текстом и одной кнопкой.",
+    },
+    {
+      testId: "builder-library-promo",
+      type: "referralPromo",
+      title: "Промо",
+      description: "Акцентный промо-блок с бейджем и усиленным оффером.",
+    },
+  ];
+
+  const handleOverlayMouseDown = (event) => {
+    if (event.target === event.currentTarget) {
+      onPickType(null);
+    }
+  };
+
   return (
-    <div className="owner-programs__referral-builder-blocks-dock" data-testid="referral-builder-blocks-dock">
-      <p className="owner-programs__referral-builder-blocks-dock__title">Блоки</p>
-      <button
-        type="button"
-        className="owner-programs__referral-builder-blocks-dock__btn nodrag nopan"
-        data-testid="builder-library-hero"
-        onClick={() => onPickType("referralHero")}
+    <div
+      className="owner-programs__referral-builder-blocks-dock"
+      data-testid="referral-builder-blocks-dock"
+      role="presentation"
+      onMouseDown={handleOverlayMouseDown}
+    >
+      <div
+        className="owner-programs__referral-builder-blocks-dock__panel nodrag nopan"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Выбор блока"
       >
-        Hero
-      </button>
-      <button
-        type="button"
-        className="owner-programs__referral-builder-blocks-dock__btn nodrag nopan"
-        data-testid="builder-library-banner"
-        onClick={() => onPickType("referralBanner")}
-      >
-        Баннер
-      </button>
-      <button
-        type="button"
-        className="owner-programs__referral-builder-blocks-dock__btn nodrag nopan"
-        data-testid="builder-library-card"
-        onClick={() => onPickType("referralCard")}
-      >
-        Карточка
-      </button>
-      <button
-        type="button"
-        className="owner-programs__referral-builder-blocks-dock__btn nodrag nopan"
-        data-testid="builder-library-split"
-        onClick={() => onPickType("referralSplit")}
-      >
-        Две колонки
-      </button>
+        <div className="owner-programs__referral-builder-blocks-dock__head">
+          <div>
+            <p className="owner-programs__referral-builder-blocks-dock__title">Выберите блок</p>
+            <p className="owner-programs__referral-builder-blocks-dock__subtitle">
+              Добавьте преднастроенный шаблон в выбранный слот.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="owner-programs__referral-builder-blocks-dock__close"
+            onClick={() => onPickType(null)}
+            aria-label="Закрыть окно выбора блока"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="owner-programs__referral-builder-blocks-dock__grid">
+          {libraryItems.map((item) => (
+            <button
+              key={item.type}
+              type="button"
+              className="owner-programs__referral-builder-blocks-dock__btn nodrag nopan"
+              data-testid={item.testId}
+              data-preview-kind={item.type}
+              onClick={() => onPickType(item.type)}
+            >
+              <span className="owner-programs__referral-builder-blocks-dock__btn-preview" aria-hidden="true">
+                <span className="owner-programs__referral-builder-blocks-dock__btn-preview-top" />
+                <span className="owner-programs__referral-builder-blocks-dock__btn-preview-body">
+                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-chip" />
+                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-line owner-programs__referral-builder-blocks-dock__btn-preview-line--lg" />
+                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-line owner-programs__referral-builder-blocks-dock__btn-preview-line--sm" />
+                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-cta" />
+                </span>
+              </span>
+              <span className="owner-programs__referral-builder-blocks-dock__btn-title">{item.title}</span>
+              <span className="owner-programs__referral-builder-blocks-dock__btn-text">{item.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
+  );
+}
+
+const REFERRAL_BUILDER_BLOCK_TYPE_LABELS = {
+  referralHero: "Hero",
+  referralBanner: "Баннер",
+  referralCard: "Карточка",
+  referralSplit: "Две колонки",
+  referralMinimal: "Минималистичный",
+  referralPromo: "Промо",
+};
+
+function ReferralBuilderInspectorSection({ sectionTitleId, title, children }) {
+  return (
+    <section className="owner-programs__referral-builder-inspector__section" aria-labelledby={sectionTitleId}>
+      <div id={sectionTitleId} className="owner-programs__referral-builder-inspector__section-title">
+        {title}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -1108,12 +1303,21 @@ function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig,
     onChangeConfig(selectedBlock.id, { ...cfg, ...partial });
   };
 
+  const blockTypeKey = typeof selectedBlock.type === "string" ? selectedBlock.type : "";
+  const blockTypeLabel =
+    REFERRAL_BUILDER_BLOCK_TYPE_LABELS[blockTypeKey] || (blockTypeKey ? blockTypeKey : "Блок");
+  const accentHex = cfg.accentColor?.startsWith("#") ? cfg.accentColor : "#6366f1";
+
   return (
-    <div className="owner-programs__referral-builder-inspector" data-testid="referral-builder-inspector">
-      <div className="owner-programs__referral-builder-inspector__head">
-        <h3 className="owner-programs__referral-builder-inspector__title">Свойства блока</h3>
+    <aside className="owner-programs__referral-builder-inspector" data-testid="referral-builder-inspector">
+      <div className="owner-programs__referral-builder-inspector__header">
+        <div className="owner-programs__referral-builder-inspector__title" role="heading" aria-level={2}>
+          {blockTypeLabel}
+        </div>
+        <div className="owner-programs__referral-builder-inspector__subtitle">Реферальный блок</div>
       </div>
-      <div className="owner-programs__referral-builder-inspector__scroll">
+
+      <ReferralBuilderInspectorSection sectionTitleId="builder-inspector-section-text" title="Текст">
         <div className="owner-programs__referral-builder-inspector__field">
           <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-title">
             Заголовок
@@ -1134,6 +1338,7 @@ function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig,
             id="builder-inspector-description"
             className="owner-programs__referral-builder-inspector__textarea"
             data-testid="builder-inspector-description"
+            rows={2}
             value={cfg.description}
             onChange={(e) => patch({ description: e.target.value })}
           />
@@ -1158,23 +1363,14 @@ function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig,
             id="builder-inspector-terms"
             className="owner-programs__referral-builder-inspector__textarea"
             data-testid="builder-inspector-terms"
+            rows={2}
             value={cfg.terms}
             onChange={(e) => patch({ terms: e.target.value })}
           />
         </div>
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-accent">
-            Цвет кнопки
-          </label>
-          <input
-            id="builder-inspector-accent"
-            type="color"
-            className="owner-programs__referral-builder-inspector__input"
-            data-testid="builder-inspector-accent"
-            value={cfg.accentColor?.startsWith("#") ? cfg.accentColor : "#6366f1"}
-            onChange={(e) => patch({ accentColor: e.target.value })}
-          />
-        </div>
+      </ReferralBuilderInspectorSection>
+
+      <ReferralBuilderInspectorSection sectionTitleId="builder-inspector-section-appearance" title="Оформление">
         <div className="owner-programs__referral-builder-inspector__field">
           <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-theme">
             Тема
@@ -1190,6 +1386,28 @@ function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig,
             <option value="dark">Тёмная</option>
           </select>
         </div>
+        <div className="owner-programs__referral-builder-inspector__field">
+          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-accent">
+            Акцент
+          </label>
+          <div className="owner-programs__referral-builder-inspector__accent-row">
+            <input
+              id="builder-inspector-accent"
+              type="color"
+              className="owner-programs__referral-builder-inspector__color-swatch"
+              data-testid="builder-inspector-accent"
+              value={accentHex}
+              onChange={(e) => patch({ accentColor: e.target.value })}
+              aria-label="Выбор цвета акцента"
+            />
+            <span className="owner-programs__referral-builder-inspector__hex" title={accentHex}>
+              {accentHex.replace(/^#/, "").toUpperCase()}
+            </span>
+          </div>
+        </div>
+      </ReferralBuilderInspectorSection>
+
+      <ReferralBuilderInspectorSection sectionTitleId="builder-inspector-section-actions" title="Действия">
         <div className="owner-programs__referral-builder-inspector__actions">
           <button
             type="button"
@@ -1208,12 +1426,12 @@ function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig,
             Удалить
           </button>
         </div>
-      </div>
-    </div>
+      </ReferralBuilderInspectorSection>
+    </aside>
   );
 }
 
-function ReferralBlockCanvas() {
+function ReferralBlockCanvas({ sitePublicId = "" }) {
   const [flowInstance, setFlowInstance] = useState(null);
   const flowInstanceRef = useRef(null);
   const flowCanvasWrapRef = useRef(null);
@@ -1238,6 +1456,8 @@ function ReferralBlockCanvas() {
   const [scanLoaderPhase, setScanLoaderPhase] = useState(0);
   const [scanLoadSession, setScanLoadSession] = useState(0);
   const [selectedInsertionSlotId, setSelectedInsertionSlotId] = useState(null);
+  const [insertAfterBuilderBlockId, setInsertAfterBuilderBlockId] = useState(null);
+  const [isBlockPickerOpen, setIsBlockPickerOpen] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState("");
   const [builderBlocks, setBuilderBlocks] = useState([]);
   const [selectedBuilderBlockId, setSelectedBuilderBlockId] = useState("");
@@ -1245,7 +1465,72 @@ function ReferralBlockCanvas() {
     () => scannedBlocks.filter((block) => block.screenshotDataUrl || block.screenshotUrl),
     [scannedBlocks],
   );
+  const orderedInsertionSlotIds = useMemo(
+    () => collectInsertionSlotIdsInOrder(screenshotBlocks),
+    [screenshotBlocks],
+  );
   const isScreenshotImport = scanMeta.visualMode === "screenshot" && screenshotBlocks.length > 0;
+
+  const [workspaceBootstrap, setWorkspaceBootstrap] = useState(() => (sitePublicId ? "loading" : "ready"));
+  const pendingNodePositionsFromServerRef = useRef(null);
+  const lastSentWorkspaceJsonRef = useRef("");
+
+  useEffect(() => {
+    if (!sitePublicId) {
+      setWorkspaceBootstrap("ready");
+      pendingNodePositionsFromServerRef.current = null;
+      return undefined;
+    }
+    setWorkspaceBootstrap("loading");
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(withSitePublicIdQuery(API_ENDPOINTS.siteIntegration, sitePublicId), {
+          credentials: "include",
+          headers: ownerSitesAuthHeaders(),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (cancelled) {
+          return;
+        }
+        if (!res.ok) {
+          setWorkspaceBootstrap("error");
+          return;
+        }
+        const raw = payload?.config_json?.referral_builder_workspace;
+        const normalized = parseReferralBuilderWorkspace(raw);
+        if (normalized) {
+          setScanUrl(normalized.scanUrl || "");
+          setScannedBlocks(normalized.scannedBlocks);
+          setScanMeta({ ...DEFAULT_SCAN_META, ...normalized.scanMeta });
+          setBuilderBlocks(normalized.builderBlocks);
+          const shots = (normalized.scannedBlocks || []).filter((b) => b.screenshotDataUrl || b.screenshotUrl);
+          const validSlots = new Set(collectInsertionSlotIdsInOrder(shots));
+          const want = normalized.selectedInsertionSlotId;
+          setSelectedInsertionSlotId(
+            want && validSlots.has(want) ? want : firstVisibleInsertionSlotId(shots) || null,
+          );
+          setInsertAfterBuilderBlockId(null);
+          const pos = normalized.flowNodePositions;
+          if (pos && typeof pos === "object" && Object.keys(pos).length > 0) {
+            pendingNodePositionsFromServerRef.current = pos;
+          } else {
+            pendingNodePositionsFromServerRef.current = null;
+          }
+        } else {
+          pendingNodePositionsFromServerRef.current = null;
+        }
+        setWorkspaceBootstrap("ready");
+      } catch {
+        if (!cancelled) {
+          setWorkspaceBootstrap("error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sitePublicId]);
 
   /** Центр панели в координатах flow + zoom — чтобы после смены размера канваса контент оставался на том же месте экрана. */
   const captureFlowViewportAnchor = useCallback(() => {
@@ -1319,15 +1604,20 @@ function ReferralBlockCanvas() {
   }, [captureFlowViewportAnchor, runViewTransition]);
 
   const handleSelectInsertionSlot = useCallback(
-    (slotId) => {
+    (slotId, afterBuilderBlockId = null) => {
+      const afterId =
+        typeof afterBuilderBlockId === "string" && afterBuilderBlockId.trim() ? afterBuilderBlockId.trim() : null;
+      setInsertAfterBuilderBlockId(afterId);
       if (!isScreenshotImport || isExpanded) {
         setSelectedInsertionSlotId(slotId);
+        setIsBlockPickerOpen(true);
         return;
       }
       runViewTransition(() => {
         captureFlowViewportAnchor();
         setSelectedInsertionSlotId(slotId);
         setIsExpanded(true);
+        setIsBlockPickerOpen(true);
       });
     },
     [captureFlowViewportAnchor, isExpanded, isScreenshotImport, runViewTransition],
@@ -1343,27 +1633,75 @@ function ReferralBlockCanvas() {
 
   const handleAddBuilderBlockOfType = useCallback(
     (type) => {
+      if (!type) {
+        setIsBlockPickerOpen(false);
+        setInsertAfterBuilderBlockId(null);
+        return;
+      }
       let slotId = selectedInsertionSlotId;
       if (!slotId && screenshotBlocks.length > 0) {
         slotId = firstVisibleInsertionSlotId(screenshotBlocks);
         setSelectedInsertionSlotId(slotId || null);
       }
+      const afterTargetId = insertAfterBuilderBlockId;
       const id = newBuilderBlockId();
+      const anchorBlock = screenshotBlockForInsertionSlot(slotId || "", screenshotBlocks);
+      const siteStyleProfile = anchorBlock ? buildSiteStyleProfileFromScreenshotBlock(anchorBlock) : null;
+      const baseCfg = createDefaultBuilderBlockConfig();
+      const config =
+        siteStyleProfile != null
+          ? {
+              ...baseCfg,
+              siteStyleProfile,
+              theme: themeForSiteStyleProfile(siteStyleProfile),
+              accentColor: siteStyleProfile.colors?.accent || baseCfg.accentColor,
+            }
+          : { ...baseCfg };
       const next = {
         id,
         type,
         insertionSlotId: slotId || "",
-        config: createDefaultBuilderBlockConfig(),
+        config,
       };
-      setBuilderBlocks((prev) => [...prev, next]);
+      setBuilderBlocks((prev) => {
+        const resolvedSlot = slotId || "";
+        if (typeof afterTargetId === "string" && afterTargetId && resolvedSlot) {
+          const afterIdx = prev.findIndex((b) => b.id === afterTargetId);
+          if (afterIdx >= 0) {
+            const ref = prev[afterIdx];
+            if (builderBlockMatchesInsertionSlot(ref, resolvedSlot, orderedInsertionSlotIds)) {
+              return [...prev.slice(0, afterIdx + 1), next, ...prev.slice(afterIdx + 1)];
+            }
+          }
+        }
+        return [...prev, next];
+      });
       setSelectedBuilderBlockId(id);
       setSelectedBlockId("");
+      setInsertAfterBuilderBlockId(null);
+      setIsBlockPickerOpen(false);
     },
-    [screenshotBlocks, selectedInsertionSlotId],
+    [insertAfterBuilderBlockId, orderedInsertionSlotIds, screenshotBlocks, selectedInsertionSlotId],
   );
 
   const handleChangeBuilderBlockConfig = useCallback((blockId, nextConfig) => {
     setBuilderBlocks((prev) => prev.map((b) => (b.id === blockId ? { ...b, config: nextConfig } : b)));
+  }, []);
+  const handleInlineEditBuilderBlockField = useCallback((blockId, field, value) => {
+    const key = String(field || "").trim();
+    if (!key) {
+      return;
+    }
+    setBuilderBlocks((prev) =>
+      prev.map((block) => {
+        if (block.id !== blockId) {
+          return block;
+        }
+        const nextCfg = { ...(block.config ?? createDefaultBuilderBlockConfig()) };
+        nextCfg[key] = value;
+        return { ...block, config: nextCfg };
+      }),
+    );
   }, []);
 
   const handleDuplicateBuilderBlock = useCallback((blockId) => {
@@ -1375,10 +1713,18 @@ function ReferralBlockCanvas() {
       }
       createdId = newBuilderBlockId();
       const source = prev[idx];
+      const baseCfg = { ...(source.config ?? createDefaultBuilderBlockConfig()) };
+      const rawLayers = baseCfg.floatingTextLayers;
+      const nextLayers = Array.isArray(rawLayers)
+        ? rawLayers.map((layer) => ({
+            ...layer,
+            id: newBuilderBlockId(),
+          }))
+        : rawLayers;
       const clone = {
         ...source,
         id: createdId,
-        config: { ...(source.config ?? createDefaultBuilderBlockConfig()) },
+        config: { ...baseCfg, floatingTextLayers: nextLayers },
       };
       return [...prev.slice(0, idx + 1), clone, ...prev.slice(idx + 1)];
     });
@@ -1392,6 +1738,7 @@ function ReferralBlockCanvas() {
   const handleDeleteBuilderBlock = useCallback((blockId) => {
     setBuilderBlocks((prev) => prev.filter((b) => b.id !== blockId));
     setSelectedBuilderBlockId((current) => (current === blockId ? "" : current));
+    setInsertAfterBuilderBlockId((cur) => (cur === blockId ? null : cur));
   }, []);
   const nodeTypes = useMemo(
     () => ({
@@ -1404,7 +1751,8 @@ function ReferralBlockCanvas() {
   );
 
   const isHandMode = isExpanded && expandedCanvasTool === "hand";
-  const isMoveMode = !isHandMode;
+  const isTextMode = isExpanded && expandedCanvasTool === "text";
+  const isMoveMode = !isHandMode && !isTextMode;
 
   const freshNodes = useMemo(
     () => {
@@ -1419,13 +1767,16 @@ function ReferralBlockCanvas() {
             data: {
               blocks: screenshotBlocks,
               selectedInsertionSlotId,
+              insertAfterBuilderBlockId,
               onSelectInsertionSlot: handleSelectInsertionSlot,
               selectedBlockId,
               onSelectBlock: handleSelectBlock,
               builderBlocks,
               selectedBuilderBlockId,
               onSelectBuilderBlock: handleSelectBuilderBlock,
+              onInlineEditBuilderBlockField: handleInlineEditBuilderBlockField,
               onAddBlockAtSlot: handleAddBuilderBlockOfType,
+              textEditEnabled: isTextMode,
               overlayPointerEventsNone: isMoveMode,
             },
           },
@@ -1469,6 +1820,8 @@ function ReferralBlockCanvas() {
       handleSelectBlock,
       handleSelectBuilderBlock,
       handleSelectInsertionSlot,
+      handleInlineEditBuilderBlockField,
+      insertAfterBuilderBlockId,
       isScreenshotImport,
       scannedBlocks,
       screenshotBlocks,
@@ -1476,12 +1829,31 @@ function ReferralBlockCanvas() {
       selectedBuilderBlockId,
       selectedInsertionSlotId,
       isMoveMode,
+      isTextMode,
     ],
   );
 
   const [nodes, setNodes] = useState([]);
 
   useLayoutEffect(() => {
+    const pending = pendingNodePositionsFromServerRef.current;
+    if (pending && freshNodes.length) {
+      const prevFromDisk = freshNodes
+        .map((n) => {
+          const p = pending[n.id];
+          if (p && typeof p === "object" && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+            return { ...n, position: { x: p.x, y: p.y } };
+          }
+          return null;
+        })
+        .filter(Boolean);
+      if (prevFromDisk.length) {
+        pendingNodePositionsFromServerRef.current = null;
+        setNodes(() => mergeFlowNodePositions(prevFromDisk, freshNodes));
+        return;
+      }
+      pendingNodePositionsFromServerRef.current = null;
+    }
     setNodes((prev) => mergeFlowNodePositions(prev, freshNodes));
   }, [freshNodes]);
 
@@ -1493,6 +1865,66 @@ function ReferralBlockCanvas() {
   );
 
   const displayNodes = nodes.length > 0 ? nodes : freshNodes;
+
+  const workspaceFlowGeometryKey = useMemo(() => {
+    const dn = nodes.length > 0 ? nodes : freshNodes;
+    try {
+      return JSON.stringify(
+        dn.map((n) => (n?.id ? { id: n.id, x: n.position?.x, y: n.position?.y } : null)),
+      );
+    } catch {
+      return "";
+    }
+  }, [nodes, freshNodes]);
+
+  useEffect(() => {
+    if (!sitePublicId || workspaceBootstrap !== "ready") {
+      return undefined;
+    }
+    const displayNodesNow = nodes.length > 0 ? nodes : freshNodes;
+    const snapshot = buildReferralBuilderWorkspaceSnapshot({
+      scanUrl,
+      scannedBlocks,
+      scanMeta,
+      builderBlocks,
+      selectedInsertionSlotId: selectedInsertionSlotId || "",
+      displayNodes: displayNodesNow,
+    });
+    const json = JSON.stringify(snapshot);
+    if (json === lastSentWorkspaceJsonRef.current) {
+      return undefined;
+    }
+    const tid = window.setTimeout(async () => {
+      try {
+        const res = await fetch(withSitePublicIdQuery(API_ENDPOINTS.siteIntegration, sitePublicId), {
+          method: "PATCH",
+          credentials: "include",
+          headers: ownerSitesAuthHeaders(),
+          body: JSON.stringify({
+            site_public_id: sitePublicId,
+            referral_builder_workspace: snapshot,
+          }),
+        });
+        if (res.ok) {
+          lastSentWorkspaceJsonRef.current = json;
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 2000);
+    return () => window.clearTimeout(tid);
+  }, [
+    sitePublicId,
+    workspaceBootstrap,
+    scanUrl,
+    scannedBlocks,
+    scanMeta,
+    builderBlocks,
+    selectedInsertionSlotId,
+    nodes,
+    freshNodes,
+    workspaceFlowGeometryKey,
+  ]);
 
   const selectedBuilderBlock = useMemo(
     () => builderBlocks.find((b) => b.id === selectedBuilderBlockId) ?? null,
@@ -1615,6 +2047,12 @@ function ReferralBlockCanvas() {
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
+        if (isBlockPickerOpen) {
+          event.preventDefault();
+          setIsBlockPickerOpen(false);
+          setInsertAfterBuilderBlockId(null);
+          return;
+        }
         collapseWorkspaceSmooth();
         return;
       }
@@ -1632,6 +2070,11 @@ function ReferralBlockCanvas() {
       if (event.code === "KeyH") {
         event.preventDefault();
         setExpandedCanvasTool("hand");
+        return;
+      }
+      if (event.code === "KeyT") {
+        event.preventDefault();
+        setExpandedCanvasTool("text");
       }
     };
 
@@ -1677,7 +2120,7 @@ function ReferralBlockCanvas() {
         window.requestAnimationFrame(applyScroll);
       });
     };
-  }, [isExpanded, collapseWorkspaceSmooth]);
+  }, [isExpanded, collapseWorkspaceSmooth, isBlockPickerOpen]);
 
   const logNodeDragStart = useCallback((_event, node) => {
     if (DEBUG_REFERRAL_BUILDER_DRAG) console.log("drag start", node.id);
@@ -1702,6 +2145,7 @@ function ReferralBlockCanvas() {
         event.preventDefault();
         setBuilderBlocks((current) => current.filter((block) => block.id !== selectedBuilderBlockId));
         setSelectedBuilderBlockId("");
+        setInsertAfterBuilderBlockId(null);
         return;
       }
 
@@ -1715,6 +2159,7 @@ function ReferralBlockCanvas() {
       setScannedBlocks(nextScanned);
       setBuilderBlocks((bb) => remapBuilderBlocksAfterScreenshotRemove(bb, nextShots));
       setSelectedBlockId("");
+      setInsertAfterBuilderBlockId(null);
       const validSlots = new Set(collectInsertionSlotIdsInOrder(nextShots));
       setSelectedInsertionSlotId((cur) => {
         if (cur && validSlots.has(cur)) {
@@ -1747,13 +2192,31 @@ function ReferralBlockCanvas() {
     if (scanStatus !== "success") {
       return undefined;
     }
+    if (scanMeta.visualMode === "screenshot" && screenshotBlocks.length > 0) {
+      const applyPostImportZoom = () => {
+        const inst = flowInstanceRef.current;
+        if (!inst) {
+          return;
+        }
+        if (typeof inst.setCenter === "function") {
+          inst.setCenter(IMPORTED_PAGE_STACK_X + 320, 300, { zoom: POST_IMPORT_SCREENSHOT_ZOOM, duration: 0 });
+          return;
+        }
+        if (typeof inst.setViewport === "function") {
+          inst.setViewport({ x: 0, y: 0, zoom: POST_IMPORT_SCREENSHOT_ZOOM }, { duration: 0 });
+        }
+      };
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(applyPostImportZoom);
+      });
+    }
     const timeoutId = window.setTimeout(() => {
       setScanStatus("idle");
     }, 2000);
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [scanStatus]);
+  }, [scanMeta.visualMode, scanStatus, screenshotBlocks.length]);
 
   useEffect(() => {
     if (scanStatus !== "loading") {
@@ -1771,6 +2234,8 @@ function ReferralBlockCanvas() {
 
   const handleToggleExpanded = useCallback(() => {
     if (isExpandedRef.current) {
+      setIsBlockPickerOpen(false);
+      setInsertAfterBuilderBlockId(null);
       collapseWorkspaceSmooth();
       return;
     }
@@ -1786,6 +2251,8 @@ function ReferralBlockCanvas() {
         setScanError("Укажите URL страницы.");
         setScannedBlocks([]);
         setSelectedInsertionSlotId(null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
         setSelectedBlockId("");
         setBuilderBlocks([]);
         setSelectedBuilderBlockId("");
@@ -1798,6 +2265,8 @@ function ReferralBlockCanvas() {
       setScannedBlocks([]);
       setScanMeta(DEFAULT_SCAN_META);
       setSelectedInsertionSlotId(null);
+      setInsertAfterBuilderBlockId(null);
+      setIsBlockPickerOpen(false);
       setSelectedBlockId("");
       setBuilderBlocks([]);
       setSelectedBuilderBlockId("");
@@ -1824,6 +2293,8 @@ function ReferralBlockCanvas() {
         });
         const shots = normalized.blocks.filter((b) => b.screenshotDataUrl || b.screenshotUrl);
         setSelectedInsertionSlotId(firstVisibleInsertionSlotId(shots) || null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
         setSelectedBlockId("");
         setBuilderBlocks([]);
         setSelectedBuilderBlockId("");
@@ -1833,6 +2304,8 @@ function ReferralBlockCanvas() {
         setScanError(error instanceof Error && error.message ? error.message : SCAN_ERROR_MESSAGE);
         setScanMeta(DEFAULT_SCAN_META);
         setSelectedInsertionSlotId(null);
+        setInsertAfterBuilderBlockId(null);
+        setIsBlockPickerOpen(false);
         setSelectedBlockId("");
         setBuilderBlocks([]);
         setSelectedBuilderBlockId("");
@@ -1904,7 +2377,10 @@ function ReferralBlockCanvas() {
             </div>
           ) : null}
         </div>
-        <ReferralBuilderBlocksDock visible={showScreenshotBuilderChrome} onPickType={handleAddBuilderBlockOfType} />
+        <ReferralBuilderBlocksDock
+          visible={showScreenshotBuilderChrome && isBlockPickerOpen}
+          onPickType={handleAddBuilderBlockOfType}
+        />
         <ReferralBuilderBlockInspector
           visible={showScreenshotBuilderChrome}
           selectedBlock={selectedBuilderBlock}
@@ -1925,7 +2401,7 @@ function ReferralBlockCanvas() {
           maxZoom={3}
           panOnScroll
           zoomOnScroll
-          panOnDrag={isHandMode ? [0, 1, 2] : [1, 2]}
+          panOnDrag={isHandMode ? [0, 1, 2] : isTextMode ? false : [1, 2]}
           selectionOnDrag={false}
           nodesConnectable={false}
           nodesDraggable={isMoveMode}
@@ -1940,6 +2416,8 @@ function ReferralBlockCanvas() {
             setSelectedBlockId("");
             setSelectedBuilderBlockId("");
             setSelectedInsertionSlotId(null);
+            setInsertAfterBuilderBlockId(null);
+            setIsBlockPickerOpen(false);
           }}
         >
           <Background variant="dots" gap={40} size={1} color="rgba(148, 163, 184, 0.28)" />
@@ -1983,12 +2461,14 @@ function ReferralBlockCanvas() {
 }
 
 export default function ProjectReferralBlockScreen() {
+  const { sitePublicId } = useParams();
+  const resolvedSitePublicId = sitePublicId ? String(sitePublicId).trim() : "";
   return (
     <section
       className="owner-programs__page owner-programs__site-page owner-programs__referral-builder-page"
       data-testid="referral-builder-shell"
     >
-      <ReferralBlockCanvas />
+      <ReferralBlockCanvas sitePublicId={resolvedSitePublicId} />
     </section>
   );
 }
