@@ -66,7 +66,7 @@ Docker для прод-рантайма не требуется: venv + systemd 
 
 | Файл | Назначение |
 |------|------------|
-| `deploy/deploy.sh` | Идемпотентный деплой: `git pull`, pip, `npm ci` + build, `migrate`, `collectstatic`, при необходимости обновление nginx и рестарт Gunicorn |
+| `deploy/deploy.sh` | Идемпотентный деплой: `git fetch` + `git reset --hard origin/main` (локальные правки **в отслеживаемых файлах** на VPS сбрасываются; `backend/.env` не в git), pip, `npm ci` + build, `migrate`, `collectstatic`, при необходимости обновление nginx и рестарт Gunicorn |
 | `deploy/nginx/lumoref.conf` | Прод nginx + TLS (после выдачи сертификатов) |
 | `deploy/nginx/lumoref.http-bootstrap.conf` | Только HTTP до появления сертификатов |
 | `deploy/systemd/lumoref-gunicorn.service` | Unit для Gunicorn |

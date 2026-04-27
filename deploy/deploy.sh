@@ -34,11 +34,12 @@ if [[ ! -x "${PYTHON}" ]]; then
   exit 1
 fi
 
-echo "==> Git: pull latest"
+echo "==> Git: sync to origin (discard local edits to tracked files)"
 MAIN_BRANCH="${DEPLOY_MAIN_BRANCH:-main}"
 git fetch origin "${MAIN_BRANCH}"
 git checkout "${MAIN_BRANCH}"
-git pull --ff-only origin "${MAIN_BRANCH}"
+# Avoid "would be overwritten by merge" when someone edited e.g. deploy.sh on the VPS.
+git reset --hard "origin/${MAIN_BRANCH}"
 
 echo "==> Backend: dependencies"
 "${PIP}" install -r backend/requirements.txt
