@@ -7,7 +7,7 @@
 #   /var/www/lumoref/venv         — Python venv (VENV_PATH)
 #   backend/.env                  — production secrets (never committed)
 #
-# deploy user: SSH + git pull; passwordless sudo only for nginx/systemctl (recommended).
+# deploy user: SSH + git sync; passwordless sudo only for nginx/systemctl (recommended).
 # Gunicorn runs as www-data (see deploy/systemd/lumoref-gunicorn.service).
 #
 # Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH

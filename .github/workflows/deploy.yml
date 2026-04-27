@@ -30,6 +30,12 @@ jobs:
             set -euo pipefail
             test -n "${DEPLOY_PATH:-}"
             cd "${DEPLOY_PATH}"
+            # Bootstrap: VPS may still run an old deploy.sh that uses `git pull` and fails on
+            # dirty tracked files. Reset to origin first so the current deploy.sh always runs.
+            MAIN_BRANCH="${DEPLOY_MAIN_BRANCH:-main}"
+            git fetch origin "${MAIN_BRANCH}"
+            git checkout "${MAIN_BRANCH}"
+            git reset --hard "origin/${MAIN_BRANCH}"
             chmod +x deploy/deploy.sh
             bash deploy/deploy.sh
 

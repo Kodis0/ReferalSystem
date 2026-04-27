@@ -120,7 +120,7 @@ cd /var/www/lumoref/app/backend && ../venv/bin/python manage.py migrate
 | `REACT_APP_API_URL` | Опционально: переопределить URL API для сборки фронта (по умолчанию в скрипте `https://api.lumoref.ru`) |
 | `REACT_APP_GOOGLE_CLIENT_ID` | Опционально: **Web** OAuth Client ID (`*.apps.googleusercontent.com`) для кнопки «Вход через Google» на собранном фронте; должен совпадать с `GOOGLE_OAUTH_CLIENT_ID` в `backend/.env` на сервере |
 
-Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` или ручной `workflow_dispatch`.
+Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` или ручной `workflow_dispatch`. Перед `deploy/deploy.sh` на сервере выполняется `git fetch` + `git reset --hard origin/main`, чтобы сбросить случайные правки в отслеживаемых файлах на VPS и не зависеть от устаревшей версии скрипта деплоя.
 
 ### Google Sign-In на проде
 
