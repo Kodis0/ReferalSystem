@@ -7,6 +7,7 @@ export const API_ENDPOINTS = {
   token: `${API_BASE}/users/token/`,
   tokenGoogle: `${API_BASE}/users/token/google/`,
   tokenVkStart: `${API_BASE}/users/token/vk/start/`,
+  tokenTelegramStart: `${API_BASE}/users/token/telegram/start/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
   supportTickets: `${API_BASE}/users/me/support-tickets/`,

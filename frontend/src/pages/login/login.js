@@ -44,6 +44,15 @@ function vkErrorMessageRu(code) {
   return byCode[code] || "";
 }
 
+function telegramErrorMessageRu(code) {
+  const byCode = {
+    tg_oauth_not_configured: "Вход через Telegram не настроен на сервере.",
+    tg_auth_invalid: "Не удалось подтвердить вход Telegram. Откройте вход снова.",
+    account_disabled: "Аккаунт отключён.",
+  };
+  return byCode[code] || "";
+}
+
 function formatLoginApiErrors(data) {
   if (!data || typeof data !== "object") return "";
   if (typeof data.code === "string" && data.code.startsWith("google_")) {
@@ -145,6 +154,17 @@ function PasskeyIcon() {
       <path
         fill="#454CEE"
         d="M8.08 10.43a3.84 3.84 0 1 0 0-7.68 3.84 3.84 0 0 0 0 7.68Zm10.23 0a2.99 2.99 0 1 0-4.26 2.68v4.57l1.28 1.28 2.13-2.14-1.28-1.28 1.28-1.27-1.06-1.06a2.98 2.98 0 0 0 1.91-2.78Zm-2.98 0a.85.85 0 1 1 0-1.7.85.85 0 0 1 0 1.7Zm-3.89 1.72a5.12 5.12 0 0 0-2.08-.44H6.8a5.12 5.12 0 0 0-5.11 5.11v1.7h11.08v-4.69a4.4 4.4 0 0 1-1.33-1.68Z"
+      />
+    </svg>
+  );
+}
+
+function TelegramIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#2AABEE"
+        d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"
       />
     </svg>
   );
@@ -305,11 +325,14 @@ function Login() {
 
   useEffect(() => {
     const vkErr = searchParams.get("vk_error");
-    if (!vkErr) return undefined;
-    const text = vkErrorMessageRu(vkErr) || vkErr;
+    const tgErr = searchParams.get("tg_error");
+    const code = vkErr || tgErr;
+    if (!code) return undefined;
+    const text = vkErr ? vkErrorMessageRu(code) || code : telegramErrorMessageRu(code) || code;
     setMessage(text);
     const next = new URLSearchParams(searchParams);
     next.delete("vk_error");
+    next.delete("tg_error");
     setSearchParams(next, { replace: true });
     return undefined;
   }, [searchParams, setSearchParams]);
@@ -320,7 +343,7 @@ function Login() {
     if (!rawHash) return undefined;
     const hp = new URLSearchParams(rawHash);
     const oauth = hp.get("oauth");
-    if (oauth !== "vk") return undefined;
+    if (oauth !== "vk" && oauth !== "tg") return undefined;
     const access = hp.get("access_token");
     const refresh = hp.get("refresh_token");
     if (!access || !refresh) return undefined;
@@ -442,6 +465,11 @@ function Login() {
   const handleVkClick = () => {
     setMessage("");
     window.location.assign(API_ENDPOINTS.tokenVkStart);
+  };
+
+  const handleTelegramClick = () => {
+    setMessage("");
+    window.location.assign(API_ENDPOINTS.tokenTelegramStart);
   };
 
   const handleSubmit = async (e) => {
@@ -616,6 +644,15 @@ function Login() {
                   onClick={handleVkClick}
                 >
                   <VkIcon />
+                </button>
+                <button
+                  type="button"
+                  className="login-page__social-btn"
+                  aria-label="Войти через Telegram"
+                  disabled={loading}
+                  onClick={handleTelegramClick}
+                >
+                  <TelegramIcon />
                 </button>
                 <button
                   type="button"

@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -8,6 +11,12 @@ from .models import SupportTicket
 
 
 User = get_user_model()
+
+
+def _telegram_login_hash(bot_token: str, payload: dict[str, str]) -> str:
+    lines = "\n".join(f"{k}={payload[k]}" for k in sorted(payload.keys()))
+    secret_key = hashlib.sha256(bot_token.encode()).digest()
+    return hmac.new(secret_key, lines.encode(), hashlib.sha256).hexdigest()
 
 
 class CurrentUserApiTests(TestCase):
@@ -242,6 +251,7 @@ class VkOAuthFlowTests(TestCase):
         self.assertIn("state=", loc)
         self.assertIn("code_challenge=", loc)
         self.assertIn("code_challenge_method=S256", loc)
+        self.assertIn("scheme=dark", loc)
         self.assertTrue(c.session.get("vk_oauth_state"))
         self.assertTrue(c.session.get("vk_code_verifier"))
 
@@ -316,6 +326,73 @@ class VkOAuthFlowTests(TestCase):
         r = c.get(f"/users/token/vk/callback/?code=x&state={state}")
         self.assertEqual(r.status_code, 302)
         self.assertIn("vk_error=vk_missing_device_id", r["Location"])
+
+
+@override_settings(
+    TELEGRAM_BOT_TOKEN="123456:ABC-DEF",
+    FRONTEND_URL="http://test-frontend.example:3000",
+)
+class TelegramLoginFlowTests(TestCase):
+    def test_telegram_start_redirects_to_oauth(self):
+        c = Client()
+        r = c.get("/users/token/telegram/start/")
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("https://oauth.telegram.org/auth?"), loc)
+        self.assertIn("bot_id=123456", loc)
+        self.assertIn("return_to=", loc)
+        self.assertIn("origin=", loc)
+
+    @override_settings(TELEGRAM_BOT_TOKEN="")
+    def test_telegram_start_missing_config_redirects(self):
+        c = Client()
+        r = c.get("/users/token/telegram/start/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("tg_error=tg_oauth_not_configured", r["Location"])
+
+    def test_telegram_callback_invalid_hash(self):
+        c = Client()
+        r = c.get("/users/token/telegram/callback/?id=1&auth_date=1&first_name=X&hash=bad")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("tg_error=tg_auth_invalid", r["Location"])
+
+    def test_telegram_callback_success_redirects_with_jwt(self):
+        bot_token = "123456:ABC-DEF"
+        auth_date = str(int(time.time()))
+        base = {"id": "42", "first_name": "Ann", "auth_date": auth_date}
+        digest = _telegram_login_hash(bot_token, base)
+        c = Client()
+        r = c.get(
+            f"/users/token/telegram/callback/?id=42&first_name=Ann&auth_date={auth_date}&hash={digest}"
+        )
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("http://test-frontend.example:3000/login#"), loc)
+        self.assertIn("oauth=tg", loc)
+        self.assertIn("access_token=", loc)
+        self.assertIn("refresh_token=", loc)
+        u = User.objects.get(telegram_id=42)
+        self.assertEqual(u.email, "tg42@telegram.noreply")
+
+    def test_telegram_callback_account_disabled(self):
+        bot_token = "123456:ABC-DEF"
+        auth_date = str(int(time.time()))
+        User.objects.create_user(
+            email="tg7@telegram.noreply",
+            username="tg7",
+            password="secret123",
+            telegram_id=7,
+        )
+        User.objects.filter(pk=User.objects.get(telegram_id=7).pk).update(is_active=False)
+
+        base = {"id": "7", "first_name": "X", "auth_date": auth_date}
+        digest = _telegram_login_hash(bot_token, base)
+        c = Client()
+        r = c.get(
+            f"/users/token/telegram/callback/?id=7&first_name=X&auth_date={auth_date}&hash={digest}"
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("tg_error=account_disabled", r["Location"])
 
 
 class SupportTicketApiTests(TestCase):

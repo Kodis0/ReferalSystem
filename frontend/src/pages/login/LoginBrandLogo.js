@@ -1,12 +1,10 @@
-import { ReactComponent as LumoGroup14BrandSvg } from "../../static/images/LumoGroup14Brand.svg";
+import { LkHeaderBrandMark } from "../lk/LkHeaderBrandMark";
 
-/** Логотип в шапке облака входа/регистрации (анимация точки на букве U — см. login.css). */
+/** Тот же знак, что в шапке ЛК (Group 17: LUMO + Referrals). */
 export function LoginBrandLogo({ className } = {}) {
   return (
-    <LumoGroup14BrandSvg
+    <LkHeaderBrandMark
       className={["login-page__brand-logo", className].filter(Boolean).join(" ")}
-      aria-hidden
-      focusable="false"
     />
   );
 }

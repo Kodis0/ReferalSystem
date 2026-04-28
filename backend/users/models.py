@@ -27,6 +27,7 @@ class CustomUser(AbstractUser):
         default="individual",
         db_index=True,
     )
+    telegram_id = models.BigIntegerField("Telegram user id", null=True, blank=True, unique=True)
 
     EMAIL_FIELD = "email"
     USERNAME_FIELD = "email"

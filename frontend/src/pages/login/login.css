@@ -195,23 +195,36 @@ html:has(.login-page:not(.registration-page)) body {
   transition: opacity var(--transition-duration) var(--transition-function);
 }
 
+/* Совпадает с .lk-header__brand-mark: viewBox 437×48, +8px под сдвиг «Referrals» при hover */
 .login-page__brand-logo {
   display: block;
   box-sizing: border-box;
   height: 25px;
-  width: calc(25px * 143 / 48);
-  max-width: min(calc(25px * 143 / 48), 92vw);
+  width: calc(25px * 437 / 48 + 8px);
+  max-width: min(calc(25px * 437 / 48 + 8px), calc(92vw - 8px));
   flex-shrink: 0;
+  overflow: visible;
 }
 
-.login-page__brand-logo .login-page__brand-logo-dot {
-  transition: transform 0.38s cubic-bezier(0.33, 1, 0.32, 1);
+.login-page__brand-logo .lk-header__brand-referrals-shift {
+  transform: translateX(0);
+  transition: transform 0.32s cubic-bezier(0.33, 1.25, 0.32, 1);
 }
 
-.login-page__brand:hover .login-page__brand-logo-dot,
-.login-page__brand:focus-visible .login-page__brand-logo-dot {
-  /* снизу чаши U (cy≈27) к верхней дуге буквы U */
-  transform: translate(0, -13px);
+.login-page__brand:hover .login-page__brand-logo .lk-header__brand-referrals-shift,
+.login-page__brand:focus-visible .login-page__brand-logo .lk-header__brand-referrals-shift {
+  transform: translateX(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page__brand-logo .lk-header__brand-referrals-shift {
+    transition: none;
+  }
+
+  .login-page__brand:hover .login-page__brand-logo .lk-header__brand-referrals-shift,
+  .login-page__brand:focus-visible .login-page__brand-logo .lk-header__brand-referrals-shift {
+    transform: none;
+  }
 }
 
 .login-page__welcome {

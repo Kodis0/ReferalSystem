@@ -296,3 +296,10 @@ VK_OAUTH_CLIENT_SECRET = os.getenv("VK_OAUTH_CLIENT_SECRET", "").strip()
 VK_OAUTH_REDIRECT_URI = os.getenv("VK_OAUTH_REDIRECT_URI", "").strip()
 # Права в authorize (пробел в строке). По доке VK ID для почты: email; при необходимости: "email phone"
 VK_OAUTH_SCOPE = os.getenv("VK_OAUTH_SCOPE", "email").strip() or "email"
+# Тема окна согласия VK ID: light | dark (док. VK ID, параметр scheme)
+VK_OAUTH_SCHEME = os.getenv("VK_OAUTH_SCHEME", "dark").strip() or "dark"
+
+# Telegram Login Widget / oauth.telegram.org (тот же токен, что у бота; bot_id = число до «:» в токене).
+# В BotFather для бота задайте домен сайта (/setdomain), совпадающий с FRONTEND_URL.
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_LOGIN_REDIRECT_URI = os.getenv("TELEGRAM_LOGIN_REDIRECT_URI", "").strip()

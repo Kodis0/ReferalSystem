@@ -39,6 +39,7 @@ from .serializers import (
     RegisterSerializer,
     SiteCtaJoinSerializer,
 )
+from .telegram_auth import TELEGRAM_OAUTH_AUTH_URL, parse_bot_id, verify_telegram_login
 from .vk_oauth import (
     VK_ID_AUTHORIZE_URL,
     exchange_vk_oauth_code,
@@ -457,6 +458,7 @@ class VkOAuthStartView(View):
         request.session.modified = True
 
         vk_scope = (getattr(django_settings, "VK_OAUTH_SCOPE", None) or "email").strip()
+        vk_scheme = (getattr(django_settings, "VK_OAUTH_SCHEME", None) or "dark").strip() or "dark"
         q = urllib.parse.urlencode(
             {
                 "response_type": "code",
@@ -466,6 +468,7 @@ class VkOAuthStartView(View):
                 "state": state,
                 "code_challenge": code_challenge,
                 "code_challenge_method": "S256",
+                "scheme": vk_scheme,
             }
         )
         return HttpResponseRedirect(f"{VK_ID_AUTHORIZE_URL}?{q}")
@@ -568,6 +571,93 @@ class VkOAuthCallbackView(View):
         frag = urllib.parse.urlencode(
             {
                 "oauth": "vk",
+                "access_token": access_jwt,
+                "refresh_token": refresh_jwt,
+            }
+        )
+        return HttpResponseRedirect(f"{fe}/login#{frag}")
+
+
+class TelegramLoginStartView(View):
+    """Редирект на oauth.telegram.org (вход через Telegram)."""
+
+    def get(self, request):
+        fe = _frontend_login_base()
+        token = (getattr(django_settings, "TELEGRAM_BOT_TOKEN", None) or "").strip()
+        bot_id = parse_bot_id(token) if token else None
+        if not token or not bot_id:
+            return HttpResponseRedirect(f"{fe}/login?tg_error=tg_oauth_not_configured")
+
+        fixed_return = (getattr(django_settings, "TELEGRAM_LOGIN_REDIRECT_URI", None) or "").strip()
+        return_to = fixed_return or request.build_absolute_uri(reverse("telegram_login_callback"))
+        origin = fe
+
+        q = urllib.parse.urlencode(
+            {
+                "bot_id": bot_id,
+                "origin": origin,
+                "return_to": return_to,
+                "request_access": "write",
+            }
+        )
+        return HttpResponseRedirect(f"{TELEGRAM_OAUTH_AUTH_URL}?{q}")
+
+
+class TelegramLoginCallbackView(View):
+    """Callback Telegram Login: проверка hash → JWT в fragment (как VK)."""
+
+    def get(self, request):
+        fe = _frontend_login_base()
+        token = (getattr(django_settings, "TELEGRAM_BOT_TOKEN", None) or "").strip()
+        if not token:
+            return HttpResponseRedirect(f"{fe}/login?tg_error=tg_oauth_not_configured")
+
+        data = request.GET.dict()
+        if not verify_telegram_login(data, token):
+            logger.warning("Telegram login callback: invalid signature")
+            return HttpResponseRedirect(f"{fe}/login?tg_error=tg_auth_invalid")
+
+        raw_id = (data.get("id") or "").strip()
+        try:
+            telegram_id = int(raw_id)
+        except (TypeError, ValueError):
+            return HttpResponseRedirect(f"{fe}/login?tg_error=tg_auth_invalid")
+        if telegram_id <= 0:
+            return HttpResponseRedirect(f"{fe}/login?tg_error=tg_auth_invalid")
+
+        first_name = ((data.get("first_name") or "").strip())[:150]
+        last_name = ((data.get("last_name") or "").strip())[:150]
+        username_raw = (data.get("username") or "").strip()
+        username = username_raw[:150] if username_raw else ""
+
+        user, created = CustomUser.objects.get_or_create(
+            telegram_id=telegram_id,
+            defaults={
+                "email": f"tg{telegram_id}@telegram.noreply",
+                "first_name": first_name,
+                "last_name": last_name,
+                "username": username,
+            },
+        )
+        if created:
+            user.set_unusable_password()
+            user.save()
+
+        if not user.is_active:
+            return HttpResponseRedirect(f"{fe}/login?tg_error=account_disabled")
+
+        link_session_attributions_to_user(
+            session_key=request.session.session_key,
+            user=user,
+        )
+
+        refresh = RefreshToken.for_user(user)
+        access_jwt = str(refresh.access_token)
+        refresh_jwt = str(refresh)
+
+        frag = urllib.parse.urlencode(
+            {
+                "oauth": "tg",
                 "access_token": access_jwt,
                 "refresh_token": refresh_jwt,
             }
