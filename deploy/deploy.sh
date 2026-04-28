@@ -11,7 +11,7 @@
 # Gunicorn runs as www-data (see deploy/systemd/lumoref-gunicorn.service).
 #
 # Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH,
-# PLAYWRIGHT_INSTALL_ARGS, PLAYWRIGHT_INSTALL_WITH_DEPS
+# PLAYWRIGHT_INSTALL_ARGS, PLAYWRIGHT_INSTALL_WITH_DEPS, PLAYWRIGHT_BROWSERS_PATH
 
 set -euo pipefail
 
@@ -30,6 +30,7 @@ NGINX_SITE_NAME="${NGINX_SITE_NAME:-lumoref}"
 SYSTEMD_UNIT="${SYSTEMD_UNIT:-lumoref-gunicorn.service}"
 PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:-chromium}"
 PLAYWRIGHT_INSTALL_WITH_DEPS="${PLAYWRIGHT_INSTALL_WITH_DEPS:-0}"
+PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-${APP_ROOT}/.cache/ms-playwright}"
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Python venv not found at ${VENV_PATH}. Create it and install requirements first." >&2
@@ -46,6 +47,9 @@ git reset --hard "origin/${MAIN_BRANCH}"
 echo "==> Backend: dependencies"
 "${PIP}" install -r backend/requirements.txt
 
+echo "==> Backend: Playwright browser cache (${PLAYWRIGHT_BROWSERS_PATH})"
+mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
+chmod 755 "$(dirname "${PLAYWRIGHT_BROWSERS_PATH}")" "${PLAYWRIGHT_BROWSERS_PATH}"
 if [[ "${PLAYWRIGHT_INSTALL_WITH_DEPS}" == "1" ]]; then
   if sudo -n true 2>/dev/null; then
     PLAYWRIGHT_INSTALL_ARGS="--with-deps ${PLAYWRIGHT_INSTALL_ARGS}"
@@ -55,7 +59,8 @@ if [[ "${PLAYWRIGHT_INSTALL_WITH_DEPS}" == "1" ]]; then
   fi
 fi
 echo "==> Backend: Playwright browsers (${PLAYWRIGHT_INSTALL_ARGS})"
-"${PYTHON}" -m playwright install ${PLAYWRIGHT_INSTALL_ARGS}
+PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" "${PYTHON}" -m playwright install ${PLAYWRIGHT_INSTALL_ARGS}
+chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"
 
 # SPA needs REACT_APP_* at build time. If CI did not pass REACT_APP_GOOGLE_CLIENT_ID, reuse the
 # same Web client ID from backend/.env (single place to maintain on the server).
@@ -116,6 +121,21 @@ if [[ -f "${NGINX_SRC}" ]]; then
   fi
 else
   echo "    No ${NGINX_SRC}, skip nginx"
+fi
+
+echo "==> Systemd: update unit if template changed"
+SYSTEMD_SRC="${APP_ROOT}/deploy/systemd/${SYSTEMD_UNIT}"
+SYSTEMD_DST="/etc/systemd/system/${SYSTEMD_UNIT}"
+if [[ -f "${SYSTEMD_SRC}" ]]; then
+  if ! cmp -s "${SYSTEMD_SRC}" "${SYSTEMD_DST}" 2>/dev/null; then
+    echo "    Copying systemd unit (changed or first install)"
+    sudo cp "${SYSTEMD_SRC}" "${SYSTEMD_DST}"
+    sudo systemctl daemon-reload
+  else
+    echo "    Systemd unit unchanged, skip daemon-reload"
+  fi
+else
+  echo "    No ${SYSTEMD_SRC}, skip systemd unit update"
 fi
 
 echo "==> Gunicorn: restart"

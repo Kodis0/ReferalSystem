@@ -81,7 +81,11 @@ _VISUAL_PRELOAD_MAX_URLS_BOTTOM = 400
 _VISUAL_PRELOAD_PER_URL_TIMEOUT_MS = 2_500
 _VISUAL_VIDEO_PRIME_WAIT_MS = 900
 _VISUAL_TREE_WALK_CAP = 12_000
-_CHROMIUM_AUToplay_ARGS = ("--autoplay-policy=no-user-gesture-required",)
+_CHROMIUM_AUToplay_ARGS = (
+    "--autoplay-policy=no-user-gesture-required",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+)
 _VISUAL_SLICE_HEIGHT = 900
 _MAX_VISUAL_PAGE_HEIGHT = 12_000
 _MAX_VISUAL_SECTION_HEIGHT = 1_200

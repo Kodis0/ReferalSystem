@@ -9,6 +9,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/var/www/lumoref/app/backend
 EnvironmentFile=/var/www/lumoref/app/backend/.env
+Environment=PLAYWRIGHT_BROWSERS_PATH=/var/www/lumoref/app/.cache/ms-playwright
 ExecStart=/var/www/lumoref/venv/bin/gunicorn core.wsgi:application \
   --bind 127.0.0.1:8001 \
   --workers 3 \
