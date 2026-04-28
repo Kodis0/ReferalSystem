@@ -111,6 +111,24 @@ _SKIPPED_URL_PREFIXES = ("data:", "blob:", "#", "mailto:", "tel:")
 logger = logging.getLogger(__name__)
 
 
+def _ensure_playwright_browsers_path() -> str:
+    """
+    Gunicorn runs as www-data in production, while deploy may install browsers from another user.
+    Prefer the shared app-local cache when it exists so runtime does not fall back to /var/www/.cache.
+    """
+    configured = (os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
+    if configured:
+        return configured
+    shared_cache = Path(__file__).resolve().parents[2] / ".cache" / "ms-playwright"
+    if shared_cache.exists():
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(shared_cache)
+        return str(shared_cache)
+    return ""
+
+
+_ensure_playwright_browsers_path()
+
+
 def _visual_import_debug_enabled() -> bool:
     return logger.isEnabledFor(logging.DEBUG) or os.environ.get("REFERRALS_VISUAL_IMPORT_DEBUG") == "1"
 
