@@ -163,11 +163,20 @@ class Site(models.Model):
 class SiteOwnerActivityLog(models.Model):
     """
     Append-only owner-visible log for LK «История» (настройки сайта, статусы, и т.д.).
+    ``owner`` is the account whose feed includes the row; ``site`` is optional after deletion.
     """
 
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="site_owner_activity_feed",
+        db_index=True,
+    )
     site = models.ForeignKey(
         Site,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="owner_activity_logs",
         db_index=True,
     )
@@ -187,6 +196,7 @@ class SiteOwnerActivityLog(models.Model):
         ordering = ["-created_at", "-id"]
         indexes = [
             models.Index(fields=["site", "-created_at"]),
+            models.Index(fields=["owner", "-created_at"], name="referrals_s_owner_i_64dcde_idx"),
         ]
 
     def __str__(self) -> str:

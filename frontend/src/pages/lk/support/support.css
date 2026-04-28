@@ -35,18 +35,36 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  min-height: calc(100dvh - 76px);
+  flex: 1 1 0%;
+  min-height: 0;
+  max-height: 100%;
   padding-bottom: 32px;
+}
+
+/* Колонка контента ЛК не раздувается выше окна — скролл только внутри ленты тикета */
+.LK:has(#lk-support-hub) .lk-layout {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.LK:has(#lk-support-hub) .lk-layout > .LK-content {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 #lk-support-hub.lk-support-hub {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   width: 100%;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
+  overflow: hidden;
   box-sizing: border-box;
+  /* Одна высота строки поиска (лист) и шапки тикета (деталь) */
+  --lk-support-hub-list-header-height: 48px;
 }
 
 .lk-support-hub__page-header {
@@ -115,18 +133,22 @@
 .lk-support-hub__split {
   display: grid;
   grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
-  gap: 0;
+  grid-template-rows: minmax(0, 1fr);
+  column-gap: 0;
+  row-gap: 0;
   flex: 1 1 auto;
   min-height: 0;
   align-items: stretch;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
   background: rgba(23, 33, 43, 0.5);
 }
 
 [data-theme="light"] .lk-support-hub__split {
   border-color: #e8ebef;
+  border-top: none;
   background: #f4f5f7;
 }
 
@@ -135,12 +157,10 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  border-right: 1px solid #2c3743;
   background: #242f3d;
 }
 
 [data-theme="light"] .lk-support-hub__list-pane {
-  border-right-color: #e8ebef;
   background: #fff;
 }
 
@@ -157,8 +177,9 @@
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
-  min-height: 44px;
-  padding: 12px 16px;
+  height: var(--lk-support-hub-list-header-height);
+  min-height: var(--lk-support-hub-list-header-height);
+  padding: 0 16px;
   border: none;
   border-radius: 0;
   border-bottom: 1px solid #2c3743;
@@ -220,7 +241,6 @@
   color: rgba(255, 255, 255, 0.95);
   background-color: transparent;
   border: none;
-  border-top: 1px solid #2c3743;
   border-bottom: 1px solid transparent;
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
@@ -234,7 +254,6 @@
 
 [data-theme="light"] .lk-support-hub__closed-bar {
   color: #242f3d;
-  border-top-color: #e8ebef;
 }
 
 [data-theme="light"] .lk-support-hub__closed-bar:hover {
@@ -294,7 +313,12 @@
 .lk-support-hub__ticket-rows {
   list-style: none;
   margin: 0;
-  padding: 0 8px 12px;
+  padding: 0 0 12px;
+}
+
+.lk-support-hub__ticket-rows > li {
+  margin: 0;
+  padding: 0;
 }
 
 .lk-support-hub__ticket-row {
@@ -302,30 +326,32 @@
   flex-direction: row;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 10px;
-  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border-radius: 0;
   text-decoration: none;
   color: inherit;
   transition: background 0.15s ease;
 }
 
 .lk-support-hub__ticket-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .lk-support-hub__ticket-row_highlight {
-  background: rgba(113, 119, 248, 0.18) !important;
-  border-radius: 8px;
-  box-shadow: 0 0 0 1px rgba(113, 119, 248, 0.45);
+  background: rgba(255, 255, 255, 0.025) !important;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 [data-theme="light"] .lk-support-hub__ticket-row_highlight {
-  background: rgba(79, 95, 255, 0.12) !important;
-  box-shadow: 0 0 0 1px rgba(79, 95, 255, 0.35);
+  background: rgba(15, 23, 42, 0.025) !important;
+  box-shadow: none;
 }
 
 [data-theme="light"] .lk-support-hub__ticket-row:hover {
-  background: rgba(15, 23, 42, 0.05);
+  background: rgba(15, 23, 42, 0.035);
 }
 
 .lk-support-hub__ticket-row-avatar {
@@ -336,13 +362,13 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(113, 119, 248, 0.18);
-  color: #a8aeff;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 [data-theme="light"] .lk-support-hub__ticket-row-avatar {
-  background: rgba(79, 95, 255, 0.12);
-  color: #4f5fff;
+  background: rgba(15, 23, 42, 0.06);
+  color: #5c6578;
 }
 
 .lk-support-hub__ticket-row-body {
@@ -367,11 +393,20 @@
 }
 
 .lk-support-hub__ticket-row-meta {
-  margin: 0 0 4px;
+  margin: 0 0 12px;
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
   color: #7f91a4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+[data-theme="light"] .lk-support-hub__ticket-row-meta {
+  color: rgba(109, 117, 138, 0.98);
 }
 
 .lk-support-hub__ticket-row-date {
@@ -415,7 +450,8 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  background: #17212b;
+  overflow: hidden;
+  background: #1c222d;
 }
 
 [data-theme="light"] .lk-support-hub__detail-pane {
@@ -429,6 +465,22 @@
   justify-content: center;
   padding: 32px 28px;
   box-sizing: border-box;
+}
+
+.lk-support-hub__detail-card:has(#lk-support-ticket-view) {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__thread {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .lk-support-hub__detail-empty {
@@ -469,15 +521,33 @@
 }
 
 @media (max-width: 900px) {
+  .LK:has(#lk-support-hub) .lk-layout {
+    flex: unset;
+    min-height: unset;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .LK:has(#lk-support-hub) .lk-layout > .LK-content {
+    flex: unset;
+    min-height: unset;
+    max-height: none;
+    overflow: visible;
+  }
+
   .LK-content:has(main#lk-support-hub) {
     display: block;
+    flex: unset;
     min-height: unset;
+    max-height: none;
     padding-bottom: 24px;
   }
 
   #lk-support-hub.lk-support-hub {
     flex: unset;
     min-height: unset;
+    max-height: none;
+    overflow: visible;
   }
 
   .lk-support-hub__split {
@@ -504,6 +574,12 @@
   .lk-support-hub__detail-pane {
     height: auto;
     min-height: 220px;
+    overflow: visible;
+  }
+
+  .lk-support-hub__detail-card .lk-support-ticket-view__thread-scroll-wrap {
+    flex: none;
+    max-height: min(52vh, 520px);
   }
 }
 
@@ -573,80 +649,996 @@
   color: #7f91a4;
 }
 
-.lk-support-ticket-view__card {
-  max-width: 720px;
-  padding: 20px 22px;
+#lk-support-ticket-view.lk-support-ticket-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px 16px;
+  background: #1c222d;
+}
+
+/* Хаб: сам блок карточки без заливки — виден фон .lk-support-hub__detail-pane; отдельная заливка только у шапки и полосы ввода */
+.lk-support-hub__detail-card #lk-support-ticket-view.lk-support-ticket-view {
+  flex: 1 1 0%;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  background: transparent !important;
+}
+
+/* Пока тред не загрузился — сохраняем отступ сверху для ошибки / «Загрузка…» */
+.lk-support-hub__detail-card #lk-support-ticket-view.lk-support-ticket-view:not(:has(.lk-support-ticket-view__thread)) {
+  padding-top: 16px;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card #lk-support-ticket-view.lk-support-ticket-view {
+  background: transparent !important;
+}
+
+/* Шапка тикета в хабе: как строка поиска — линия снизу; фон как у плашек сообщений */
+.lk-support-hub__detail-card .lk-support-ticket-view__top-bar {
+  margin-bottom: 0;
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--lk-support-hub-list-header-height);
+  min-height: var(--lk-support-hub-list-header-height);
+  max-height: var(--lk-support-hub-list-header-height);
+  padding: 0 16px;
+  border: none;
+  border-bottom: 1px solid #2c3743;
+  border-radius: 0;
+  flex-wrap: nowrap;
+  gap: 16px;
+  align-items: center;
+  background: #242f3d;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__top-bar {
+  border-bottom-color: #e8ebef;
+  background: #fff;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__title {
+  font-size: 14px;
+  line-height: 22px;
+  -webkit-line-clamp: 1;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__ticket-no,
+.lk-support-hub__detail-card .lk-support-ticket-view__status {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.lk-support-ticket-view__thread {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.lk-support-ticket-view__top-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.lk-support-ticket-view__title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.92);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+[data-theme="light"] .lk-support-ticket-view__title {
+  color: #26325c;
+}
+
+.lk-support-ticket-view__top-bar-aside {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.lk-support-ticket-view__ticket-no {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: inherit;
+  cursor: pointer;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.lk-support-ticket-view__ticket-no:hover {
+  color: rgba(255, 255, 255, 1);
+}
+
+.lk-support-ticket-view__ticket-no:focus {
+  outline: none;
+}
+
+.lk-support-ticket-view__ticket-no:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+[data-theme="light"] .lk-support-ticket-view__ticket-no {
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-support-ticket-view__ticket-no:hover {
+  color: #1e2848;
+}
+
+.lk-support-ticket-view__status {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+}
+
+.lk-support-ticket-view__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.lk-support-ticket-view__status_open .lk-support-ticket-view__status-dot {
+  background: #70cf98;
+  box-shadow: none;
+}
+
+.lk-support-ticket-view__status_closed .lk-support-ticket-view__status-dot {
+  background: #7f91a4;
+  box-shadow: none;
+}
+
+[data-theme="light"] .lk-support-ticket-view__status {
+  color: #26325c;
+}
+
+.lk-support-ticket-view__actions {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.lk-support-ticket-view__actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lk-support-ticket-view__actions-trigger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.lk-support-ticket-view__actions-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-theme="light"] .lk-support-ticket-view__actions-trigger {
+  color: #64748b;
+}
+
+[data-theme="light"] .lk-support-ticket-view__actions-trigger:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+  color: #26325c;
+}
+
+.lk-support-ticket-view__actions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  padding: 6px 0;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  background: #17212b;
+  border: 1px solid #2c3743;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 30;
   box-sizing: border-box;
 }
 
-[data-theme="light"] .lk-support-ticket-view__card {
+[data-theme="light"] .lk-support-ticket-view__actions-menu {
+  background: #fff;
   border-color: #e8ebef;
-  background: #f4f5f7;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
-.lk-support-ticket-view__h1 {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 28px;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-[data-theme="light"] .lk-support-ticket-view__h1 {
-  color: #242f3d;
-}
-
-.lk-support-ticket-view__meta {
-  margin: 0 0 6px;
-  font-size: 13px;
-  line-height: 20px;
-  color: #7f91a4;
-}
-
-.lk-support-ticket-view__date {
-  margin: 0 0 16px;
-  font-size: 12px;
+.lk-support-ticket-view__actions-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 16px;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.lk-support-ticket-view__actions-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.lk-support-ticket-view__actions-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+[data-theme="light"] .lk-support-ticket-view__actions-item {
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-support-ticket-view__actions-item:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.lk-support-ticket-view__thread-scroll-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lk-support-ticket-view__thread-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 12px 0 8px;
+  background: transparent;
+  /* Нативная полоса отключена — скролл только через LkScrollerScrollbar (иначе дубль с кастомным). */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lk-support-ticket-view__thread-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Хаб: у ленты нет своей заливки (не перебивать фоном родителя #lk-support-ticket-view).
+   У карточки тикета в хабе обнулён верхний padding у #lk-support-ticket-view — компенсируем
+   отступ сверху у зоны треда, как у полноэкранного вида (там 12px у контейнера + шапка). */
+.lk-support-hub__detail-card .lk-support-ticket-view__thread-scroll-wrap {
+  flex: 1 1 0%;
+  min-height: 0;
+  width: 100%;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__thread-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: transparent !important;
+  background-color: transparent !important;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  padding-left: 20px;
+  padding-right: 18px;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__reply {
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+}
+
+.lk-support-ticket-view__thread-foot {
+  flex-shrink: 0;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2c3743;
+}
+
+.lk-support-ticket-view__thread-foot .lk-support-ticket-view__close-btn:first-child {
+  margin-top: 0;
+}
+
+.lk-support-ticket-view__thread-foot .lk-support-ticket-view__action-error + .lk-support-ticket-view__close-btn {
+  margin-top: 12px;
+}
+
+[data-theme="light"] .lk-support-ticket-view__thread-foot {
+  border-top-color: #e8ebef;
+}
+
+.lk-support-ticket-view__reply {
+  flex-shrink: 0;
+  margin-top: auto;
+  margin-left: -16px;
+  margin-right: -16px;
+  margin-bottom: 0;
+  width: calc(100% + 32px);
+  padding-top: 0;
+  border-top: none;
+  box-sizing: border-box;
+}
+
+.lk-support-ticket-view__composer-form.lk-support-ticket__form {
+  max-width: none;
+  margin: 0;
+  /* иначе базовый .lk-support-ticket__form { gap: 18px } даёт пустоту под полосой ввода */
+  gap: 0;
+}
+
+/* Полоса ввода: на всю ширину карточки, без скруглений; высота строго как у lk-support-hub__closed-bar (66px) */
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-bar {
+  border-radius: 0;
+  height: 66px;
+  min-height: 66px;
+  max-height: 66px;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 12px;
+  box-shadow: none;
+  border: none;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__reply .lk-support-ticket__telegram-bar {
+  background: #1c222d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__reply .lk-support-ticket__telegram-bar {
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-input-wrap {
+  align-self: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  max-height: 66px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Черновик только из ГС: пузырь в полосе ввода (как в Telegram), отправка без текста */
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-bar_voice-draft {
+  height: auto;
+  min-height: 66px;
+  max-height: none;
+  align-items: center;
+  overflow: visible;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-input-wrap_voice-draft {
+  flex-direction: column;
+  align-items: stretch;
+  align-self: stretch;
+  flex: 1 1 0;
+  min-width: 0;
+  max-height: min(168px, 32vh);
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  gap: 8px;
+}
+
+/* Черновик ГС: только поле пузыря + отправка; пузырь на всю ширину между краем и кнопкой */
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-bar_voice-draft .lk-support-ticket__voice_compact-bar {
+  width: 100%;
+  max-width: 100%;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__voice_compact-bar .lk-support-ticket__voice-bubble {
+  padding: 6px 10px 6px 8px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__voice_compact-bar .lk-support-ticket__voice-row {
+  gap: 8px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__voice_compact-bar .lk-support-ticket__voice-play {
+  width: 36px;
+  height: 36px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__voice_compact-bar .lk-support-ticket__voice-middle {
+  gap: 2px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__voice_compact-bar .lk-support-ticket__voice-wave-track {
+  min-height: 26px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__textarea_telegram {
+  min-height: 0 !important;
+  max-height: 58px !important;
+  height: auto;
+  padding: 6px 8px !important;
+  line-height: 22px;
+  overflow-y: auto;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-tool,
+.lk-support-ticket-view__reply .lk-support-ticket__telegram-send {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+/* Композер ответа: одна строка как в Telegram (скрепка · поле · смайл · микрофон/отправка) */
+.lk-support-ticket__telegram-file-input {
+  position: fixed;
+  left: -100px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lk-support-ticket__telegram-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 24px;
+  background: #2b2f38;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-bar {
+  background: #e8ebef;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.lk-support-ticket__telegram-input-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.lk-support-ticket__textarea_telegram {
+  min-height: 40px !important;
+  max-height: 120px;
+  margin: 0;
+  padding: 10px 6px;
+  width: 100%;
+  box-sizing: border-box;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  font-size: 15px;
+  line-height: 20px;
+  resize: none !important;
+  box-shadow: none !important;
+  overflow-y: auto;
+}
+
+.lk-support-ticket__textarea_telegram:hover,
+.lk-support-ticket__textarea_telegram:focus,
+.lk-support-ticket__textarea_telegram:focus-visible {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.lk-support-ticket__textarea_telegram::placeholder {
   color: rgba(127, 145, 164, 0.9);
 }
 
-.lk-support-ticket-view__body-wrap {
-  width: 100%;
-  overflow-x: auto;
+[data-theme="light"] .lk-support-ticket__textarea_telegram {
+  color: #0f172a !important;
 }
 
-.lk-support-ticket-view__body {
+[data-theme="light"] .lk-support-ticket__textarea_telegram::placeholder {
+  color: #64748b;
+}
+
+.lk-support-ticket__telegram-record-time {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e55353;
+  min-width: 2.5em;
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-record-time {
+  color: #c2412c;
+}
+
+.lk-support-ticket__telegram-tool {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(180, 198, 220, 0.9);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.lk-support-ticket__telegram-tool:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.lk-support-ticket__telegram-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-tool {
+  color: #64748b;
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-tool:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+}
+
+.lk-support-ticket__telegram-tool_recording {
+  color: #e55353 !important;
+  animation: lk-support-ticket-mic-pulse 1.1s ease-in-out infinite;
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-tool_recording {
+  color: #c2412c !important;
+}
+
+.lk-support-ticket__telegram-send {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #7177f8;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.05s ease, opacity 0.12s ease;
+}
+
+.lk-support-ticket__telegram-send:hover:not(:disabled) {
+  background: #5c63e6;
+}
+
+.lk-support-ticket__telegram-send:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.lk-support-ticket__telegram-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-send {
+  background: #4f5fff;
+}
+
+[data-theme="light"] .lk-support-ticket__telegram-send:hover:not(:disabled) {
+  background: #3d4de8;
+}
+
+.lk-support-ticket__attach-block_telegram {
+  margin-top: 10px;
+  max-width: none;
+  gap: 10px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__attach-block_telegram {
+  margin-top: 0;
+  padding-left: 16px;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__attach-block_telegram:not(:empty) {
+  margin-top: 10px;
+}
+
+.lk-support-ticket-view__reply .lk-support-ticket__status {
+  margin-top: 8px;
+  margin-bottom: 0;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.lk-support-ticket-view__comment {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.lk-support-ticket-view__comment_user {
+  justify-content: flex-end;
+}
+
+.lk-support-ticket-view__comment_support {
+  justify-content: flex-start;
+}
+
+.lk-support-ticket-view__comment-inner {
+  max-width: min(100%, 520px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+/* Пузыри по ширине контента: пользователь — к правому краю, поддержка — к левому */
+.lk-support-ticket-view__comment_user .lk-support-ticket-view__comment-inner {
+  width: fit-content;
+  max-width: min(100%, 88%);
+  margin-left: auto;
+  align-items: flex-end;
+}
+
+.lk-support-ticket-view__comment_support .lk-support-ticket-view__comment-inner {
+  width: fit-content;
+  max-width: min(100%, 88%);
+  margin-right: auto;
+  align-items: flex-start;
+}
+
+.lk-support-ticket-view__message-wrap {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #242f3d;
+  border: none;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+[data-theme="light"] .lk-support-ticket-view__message-wrap {
+  background: #242f3d;
+  box-shadow: none;
+}
+
+.lk-support-ticket-view__comment_user .lk-support-ticket-view__message-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #7177f8;
+}
+
+[data-theme="light"] .lk-support-ticket-view__comment_user .lk-support-ticket-view__message-wrap {
+  background: #7177f8;
+}
+
+.lk-support-ticket-view__thread-scroll > .lk-support-ticket-view__comment ~ .lk-support-ticket-view__comment {
+  margin-top: 12px;
+}
+
+.lk-support-ticket-view__message {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
   font-size: 14px;
+  font-weight: 400;
   line-height: 22px;
   color: rgba(255, 255, 255, 0.92);
 }
 
-[data-theme="light"] .lk-support-ticket-view__body {
-  color: #242f3d;
+[data-theme="light"] .lk-support-ticket-view__message {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.lk-support-ticket-view__comment_user .lk-support-ticket-view__message {
+  font-size: 13px;
+  color: #fff;
+}
+
+[data-theme="light"] .lk-support-ticket-view__comment_user .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+.lk-support-ticket-view__comment_support .lk-support-ticket-view__message-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #17212b;
+}
+
+.lk-support-ticket-view__comment_support .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+[data-theme="light"] .lk-support-ticket-view__comment_support .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+.lk-support-ticket-view__comment_support .lk-support-ticket-view__comment-byline {
+  text-align: left;
+}
+
+/* Хаб: фон пузырей пользователя / поддержки; общая обёртка без класса роли — без «рамки» */
+.lk-support-hub__detail-card .lk-support-ticket-view__message-wrap {
+  padding: 8px 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__message-wrap {
+  background: transparent;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__comment_user .lk-support-ticket-view__message-wrap {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #7177f8;
+  box-shadow: none;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__comment_user .lk-support-ticket-view__message-wrap {
+  background: #7177f8;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__comment_user .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__comment_user .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__comment_support .lk-support-ticket-view__message-wrap {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #17212b;
+  box-shadow: none;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__comment_support .lk-support-ticket-view__message-wrap {
+  background: #17212b;
+}
+
+.lk-support-hub__detail-card .lk-support-ticket-view__comment_support .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+[data-theme="light"] .lk-support-hub__detail-card .lk-support-ticket-view__comment_support .lk-support-ticket-view__message {
+  color: #fff;
+}
+
+.lk-support-ticket-view__comment-footer {
+  margin-top: 8px;
+  padding: 0 4px;
+}
+
+.lk-support-ticket-view__message-stamp {
+  margin: 0;
+  align-self: flex-end;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: right;
+}
+
+.lk-support-ticket-view__comment-byline {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14px;
+  color: #7f91a4;
+  text-align: right;
+}
+
+[data-theme="light"] .lk-support-ticket-view__comment-byline {
+  color: rgba(131, 137, 159, 0.9);
+}
+
+.lk-support-ticket-view__attach_thread {
+  margin: 14px 0 0;
+  padding: 0 0 0 8px;
+  text-align: right;
+}
+
+.lk-support-ticket-view__thread-voice-attachments {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0 0 0 8px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.lk-support-ticket-view__thread-voice-attachments .lk-support-ticket__voice {
+  max-width: 100%;
+  width: 100%;
+}
+
+.lk-support-ticket-view__comment_attach-row {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Ширина задаётся общими правилами .comment_user .comment-inner (fit-content) */
+.lk-support-ticket-view__thread-voice-attachments .lk-support-ticket-view__comment_user .lk-support-ticket-view__comment-inner {
+  width: fit-content;
+  max-width: min(100%, 88%);
+  margin-left: auto;
+  align-items: flex-end;
+}
+
+.lk-support-ticket-view__thread-file-chip-wrap {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.lk-support-ticket-view__thread-file-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
+  background: #7177f8;
+  word-break: break-all;
+  box-sizing: border-box;
+}
+
+[data-theme="light"] .lk-support-ticket-view__thread-file-chip {
+  color: #fff;
+  background: #4f5fff;
 }
 
 .lk-support-ticket-view__attach {
-  margin: 16px 0 0;
   font-size: 12px;
   line-height: 18px;
   color: #7f91a4;
 }
 
-.lk-support-ticket-view__closed-badge {
-  margin: 14px 0 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.lk-support-ticket-view__thread-divider {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.lk-support-ticket-view__thread-divider_open:first-child {
+  margin-top: 0;
+}
+
+.lk-support-ticket-view__thread-divider_closed:last-child {
+  margin-bottom: 4px;
+}
+
+.lk-support-ticket-view__thread-divider-line {
+  flex: 1 1 auto;
+  min-width: 8px;
+  height: 1px;
+  background: rgba(127, 145, 164, 0.35);
+  border-radius: 1px;
+}
+
+[data-theme="light"] .lk-support-ticket-view__thread-divider-line {
+  background: rgba(131, 137, 159, 0.35);
+}
+
+.lk-support-ticket-view__thread-divider-text {
+  margin: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
   color: #7f91a4;
+  text-align: center;
+}
+
+[data-theme="light"] .lk-support-ticket-view__thread-divider-text {
+  color: rgba(109, 117, 138, 0.98);
+}
+
+.lk-support-ticket-view__thread-foot_error-only {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #2c3743;
+}
+
+[data-theme="light"] .lk-support-ticket-view__thread-foot_error-only {
+  border-top-color: #e8ebef;
+}
+
+.lk-support-ticket-view__thread-foot_error-only .lk-support-ticket-view__action-error {
+  margin: 0;
 }
 
 .lk-support-ticket-view__action-error {
@@ -1151,6 +2143,17 @@
   border-color: var(--lk-form-line-color);
 }
 
+.lk-support-ticket__voice-bubble_thread-stamp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.lk-support-ticket__voice-bubble_thread-stamp .lk-support-ticket-view__message-stamp {
+  align-self: flex-end;
+}
+
 .lk-support-ticket__voice-row {
   display: flex;
   flex-direction: row;
@@ -1180,6 +2183,53 @@
 
 .lk-support-ticket__voice-play:active {
   transform: scale(0.96);
+}
+
+.lk-support-ticket__voice-play:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.lk-support-ticket__voice-play:disabled:hover {
+  background: #52a1e5;
+}
+
+/* ГС в ленте тикета (исходящие пользователя): фон как у текстового пузыря #7177f8 */
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-bubble {
+  background: #7177f8;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-wave-dim .lk-support-ticket__voice-bar {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-meta-row {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-time-right,
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-time-left {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-check {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-play:not(:disabled) {
+  background: rgba(255, 255, 255, 0.95);
+  color: #5c63e6;
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-play:not(:disabled):hover {
+  background: #fff;
+  color: #4f56d4;
+}
+
+[data-theme="light"] .lk-support-ticket__voice_thread-user .lk-support-ticket__voice-bubble {
+  background: #7177f8;
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .lk-support-ticket__voice-play-icon {
@@ -1354,23 +2404,67 @@
 }
 
 .lk-support-ticket__file-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   max-width: 100%;
-  padding: 6px 12px;
+  padding: 4px 6px 4px 12px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
-  word-break: break-all;
   color: rgba(255, 255, 255, 0.82);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+}
+
+.lk-support-ticket__file-chip-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  word-break: break-word;
+}
+
+.lk-support-ticket__file-chip-remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lk-support-ticket__file-chip-remove:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.lk-support-ticket__file-chip-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 [data-theme="light"] .lk-support-ticket__file-chip {
   color: #242f3d;
   background: #eef0f4;
   border-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme="light"] .lk-support-ticket__file-chip-remove {
+  color: rgba(36, 47, 61, 0.5);
+}
+
+[data-theme="light"] .lk-support-ticket__file-chip-remove:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.08);
+  color: #242f3d;
 }
 
 .lk-support-ticket__dropzone {

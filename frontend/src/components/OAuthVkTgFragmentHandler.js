@@ -1,35 +1,47 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../config/api";
 import { persistReturningUserWelcome } from "../pages/login/login";
 
 /**
  * 1) Редирект с бэка: #oauth=vk|tg&access_token&refresh_token
- * 2) Telegram Login Widget (часто на главной): #tgAuthResult=<base64 JSON> — меняем на POST /token/telegram/widget/
+ * 2) Telegram Login Widget: #tgAuthResult=<base64> → POST /users/token/telegram/widget/
+ *
+ * Hash берём из window — у BrowserRouter на первом paint часто пустой location.hash.
+ * replaceState без успеха не делаем, иначе остаётся «/» без обработки при ошибке сети.
  */
 export default function OAuthVkTgFragmentHandler() {
   const location = useLocation();
   const navigate = useNavigate();
   const lastHandledRawRef = useRef(null);
 
-  useEffect(() => {
-    const raw =
-      (location.hash || "").replace(/^#/, "") ||
-      (typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "");
+  useLayoutEffect(() => {
+    const hashFromWindow = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
+    const hashFromRouter = (location.hash || "").replace(/^#/, "");
+    const raw = hashFromWindow || hashFromRouter;
     if (!raw) return undefined;
 
-    /* Telegram Login Widget — не наш JWT во fragment */
+    const stripHashFromUrl = () => {
+      if (typeof window === "undefined") return;
+      const path = window.location.pathname;
+      const search = window.location.search;
+      window.history.replaceState(null, "", `${path}${search}`);
+    };
+
+    /* Не только URLSearchParams: в base64 бывают «+», их get() портит как пробел. */
+    let tgB64 = null;
     if (raw.startsWith("tgAuthResult=")) {
-      const b64 = raw.slice("tgAuthResult=".length);
-      if (!b64 || lastHandledRawRef.current === `w:${b64}`) return undefined;
+      tgB64 = raw.slice("tgAuthResult=".length);
+    } else {
+      tgB64 = new URLSearchParams(raw).get("tgAuthResult");
+    }
+
+    if (tgB64 && tgB64.trim()) {
+      const b64 = tgB64.trim();
+      if (lastHandledRawRef.current === `w:${b64}`) return undefined;
       lastHandledRawRef.current = `w:${b64}`;
 
-      const path = typeof window !== "undefined" ? window.location.pathname : "";
-      const search = typeof window !== "undefined" ? window.location.search : "";
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `${path}${search}`);
-      }
-
+      let cancelled = false;
       (async () => {
         try {
           const response = await fetch(API_ENDPOINTS.tokenTelegramWidget, {
@@ -38,8 +50,15 @@ export default function OAuthVkTgFragmentHandler() {
             body: JSON.stringify({ tgAuthResult: b64 }),
             credentials: "include",
           });
-          const data = await response.json();
+          let data = {};
+          try {
+            data = await response.json();
+          } catch {
+            data = {};
+          }
+          if (cancelled) return;
           if (!response.ok) {
+            stripHashFromUrl();
             const code = typeof data.code === "string" ? data.code : "tg_auth_invalid";
             navigate(`/login?tg_error=${encodeURIComponent(code)}`, { replace: true });
             return;
@@ -50,13 +69,19 @@ export default function OAuthVkTgFragmentHandler() {
             localStorage.setItem("user", JSON.stringify(data.user));
             persistReturningUserWelcome(data.user);
           }
+          stripHashFromUrl();
           navigate("/lk/partner", { replace: true });
         } catch {
-          navigate("/login?tg_error=tg_auth_invalid", { replace: true });
+          if (!cancelled) {
+            stripHashFromUrl();
+            navigate("/login?tg_error=tg_auth_invalid", { replace: true });
+          }
         }
       })();
 
-      return undefined;
+      return () => {
+        cancelled = true;
+      };
     }
 
     const hp = new URLSearchParams(raw);
@@ -68,12 +93,9 @@ export default function OAuthVkTgFragmentHandler() {
     if (lastHandledRawRef.current === raw) return undefined;
     lastHandledRawRef.current = raw;
 
-    const path = typeof window !== "undefined" ? window.location.pathname : "";
-    const search = typeof window !== "undefined" ? window.location.search : "";
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", `${path}${search}`);
-    }
+    stripHashFromUrl();
 
+    let cancelled = false;
     (async () => {
       try {
         localStorage.setItem("access_token", access);
@@ -92,11 +114,19 @@ export default function OAuthVkTgFragmentHandler() {
       } catch {
         /* ЛК подтянет пользователя при наличии токена */
       }
-      navigate("/lk/partner", { replace: true });
+      if (!cancelled) {
+        const path =
+          typeof window !== "undefined" && window.location.pathname.startsWith("/lk/settings")
+            ? "/lk/settings"
+            : "/lk/partner";
+        navigate(path, { replace: true });
+      }
     })();
 
-    return undefined;
-  }, [location.hash, navigate]);
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.search, location.hash, navigate]);
 
   return null;
 }

@@ -32,6 +32,8 @@ venv/
 .venv/
 backend/db.sqlite3
 *.sqlite3
+# Загруженные вложения support-тикетов (локально / multipart PATCH).
+backend/media/
 
 # --- Environment ---
 .env

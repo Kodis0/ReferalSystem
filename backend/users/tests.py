@@ -9,7 +9,11 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
 
+from referrals.models import Project
+from referrals.services import DEFAULT_OWNER_PROJECT_NAME
+
 from .models import SupportTicket
+from .support_attachments import attachment_disk_path
 
 
 User = get_user_model()
@@ -138,6 +142,70 @@ class CurrentUserApiTests(TestCase):
         self.assertEqual(r.status_code, 400)
 
 
+class ChangePasswordApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="pwd-change@example.com",
+            username="pwdchange",
+            password="Secret_old_1",
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def test_change_password_success(self):
+        r = self.api.post(
+            "/users/me/password/",
+            {"old_password": "Secret_old_1", "new_password": "Secret_new_456"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("detail"), "Пароль изменён.")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Secret_new_456"))
+
+    def test_change_password_wrong_old(self):
+        r = self.api.post(
+            "/users/me/password/",
+            {"old_password": "wrong", "new_password": "Secret_new_456"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "wrong_old_password")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Secret_old_1"))
+
+    def test_change_password_requires_old_when_set(self):
+        r = self.api.post(
+            "/users/me/password/",
+            {"old_password": "", "new_password": "Secret_new_456"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "old_password_required")
+
+    def test_change_password_validation_weak_new(self):
+        r = self.api.post(
+            "/users/me/password/",
+            {"old_password": "Secret_old_1", "new_password": "short"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "password_validation_failed")
+        self.assertIn("new_password", r.data)
+
+    def test_change_password_unusable_password_allows_set_without_old(self):
+        self.user.set_unusable_password()
+        self.user.save(update_fields=["password"])
+        r = self.api.post(
+            "/users/me/password/",
+            {"old_password": "", "new_password": "Fresh_secret_99"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Fresh_secret_99"))
+
+
 @override_settings(GOOGLE_OAUTH_CLIENT_ID="test.apps.googleusercontent.com")
 class GoogleIdTokenLoginTests(TestCase):
     def setUp(self):
@@ -257,6 +325,18 @@ class VkOAuthFlowTests(TestCase):
         self.assertTrue(c.session.get("vk_oauth_state"))
         self.assertTrue(c.session.get("vk_code_verifier"))
 
+    def test_vk_start_scheme_light_query(self):
+        c = Client()
+        r = c.get("/users/token/vk/start/?scheme=light")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("scheme=light", r["Location"])
+
+    def test_vk_start_stores_next_settings_in_session(self):
+        c = Client()
+        r = c.get("/users/token/vk/start/?next=/lk/settings")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(c.session.get("vk_oauth_next"), "/lk/settings")
+
     @override_settings(VK_OAUTH_APP_ID="")
     def test_vk_start_missing_config_redirects_frontend_error(self):
         c = Client()
@@ -298,6 +378,30 @@ class VkOAuthFlowTests(TestCase):
         self.assertIn("oauth=vk", loc)
         self.assertIn("access_token=", loc)
         self.assertIn("refresh_token=", loc)
+
+    @patch(
+        "users.views.exchange_vk_oauth_code",
+        return_value={
+            "access_token": "vk_token",
+            "user_id": 1,
+            "email": "vk-set@example.com",
+        },
+    )
+    def test_vk_callback_success_redirects_settings_when_next_in_session(self, _mock_ex):
+        User.objects.create_user(
+            email="vk-set@example.com",
+            username="vkset",
+            password="secret123",
+        )
+        c = Client()
+        c.get("/users/token/vk/start/?next=/lk/settings")
+        state = c.session.get("vk_oauth_state")
+        self.assertTrue(state)
+        r = c.get(f"/users/token/vk/callback/?code=testcode&state={state}&device_id=dev1")
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("http://test-frontend.example:3000/lk/settings#"), loc)
+        self.assertIn("oauth=vk", loc)
 
     @patch(
         "users.views.exchange_vk_oauth_code",
@@ -375,6 +479,8 @@ class TelegramLoginFlowTests(TestCase):
         self.assertIn("refresh_token=", loc)
         u = User.objects.get(telegram_id=42)
         self.assertEqual(u.email, "tg42@telegram.noreply")
+        p = Project.objects.get(owner=u, is_default=True)
+        self.assertEqual(p.name, DEFAULT_OWNER_PROJECT_NAME)
 
     def test_telegram_callback_account_disabled(self):
         bot_token = "123456:ABC-DEF"
@@ -416,7 +522,10 @@ class TelegramLoginFlowTests(TestCase):
         payload = json.loads(r.content.decode())
         self.assertIn("access", payload)
         self.assertIn("refresh", payload)
-        self.assertEqual(User.objects.get(telegram_id=101).email, "tg101@telegram.noreply")
+        u = User.objects.get(telegram_id=101)
+        self.assertEqual(u.email, "tg101@telegram.noreply")
+        p = Project.objects.get(owner=u, is_default=True)
+        self.assertEqual(p.name, DEFAULT_OWNER_PROJECT_NAME)
 
 
 class SupportTicketApiTests(TestCase):
@@ -462,6 +571,7 @@ class SupportTicketApiTests(TestCase):
         self.assertEqual(len(lst.data["tickets"]), 1)
         self.assertEqual(lst.data["tickets"][0]["id"], tid)
         self.assertEqual(lst.data["tickets"][0]["preview"], "Первое сообщение")
+        self.assertEqual(lst.data["tickets"][0]["last_message_preview"], "Первое сообщение\nВторая строка")
         self.assertEqual(lst.data["tickets"][0]["is_closed"], False)
         self.assertTrue(SupportTicket.objects.filter(id=tid, user=self.user).exists())
 
@@ -476,8 +586,51 @@ class SupportTicketApiTests(TestCase):
         p = self.api.patch(f"/users/me/support-tickets/{tid}/", {"is_closed": True}, format="json")
         self.assertEqual(p.status_code, 200)
         self.assertEqual(p.data["is_closed"], True)
+        self.assertIsNotNone(p.data.get("closed_at"))
         t = SupportTicket.objects.get(id=tid)
         self.assertTrue(t.is_closed)
+        self.assertIsNotNone(t.closed_at)
+        reopen = self.api.patch(f"/users/me/support-tickets/{tid}/", {"is_closed": False}, format="json")
+        self.assertEqual(reopen.status_code, 200)
+        self.assertEqual(reopen.data["is_closed"], False)
+        self.assertIsNone(reopen.data.get("closed_at"))
+        t2 = SupportTicket.objects.get(id=tid)
+        self.assertFalse(t2.is_closed)
+        self.assertIsNone(t2.closed_at)
+
+    def test_support_ticket_patch_append_body(self):
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {"type_slug": "help-question", "target_label": "X", "body": "Первая часть"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        p = self.api.patch(
+            f"/users/me/support-tickets/{tid}/",
+            {"append_body": "Вторая часть", "attachment_names": "a.txt"},
+            format="json",
+        )
+        self.assertEqual(p.status_code, 200)
+        self.assertIn("Вторая часть", p.data["body"])
+        self.assertIn("Первая часть", p.data["body"])
+        self.assertEqual(p.data["attachment_names"], "a.txt")
+        lst = self.api.get("/users/me/support-tickets/")
+        self.assertEqual(lst.status_code, 200)
+        self.assertEqual(lst.data["tickets"][0]["last_message_preview"], "Первая часть\n\nВторая часть")
+
+    def test_support_ticket_patch_append_rejected_when_closed(self):
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {"type_slug": "help-question", "target_label": "X", "body": "Текст"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        self.api.patch(f"/users/me/support-tickets/{tid}/", {"is_closed": True}, format="json")
+        p = self.api.patch(f"/users/me/support-tickets/{tid}/", {"append_body": "Ещё"}, format="json")
+        self.assertEqual(p.status_code, 400)
+        self.assertEqual(p.data.get("code"), "ticket_closed")
 
     def test_support_ticket_detail(self):
         r = self.api.post(
@@ -508,3 +661,107 @@ class SupportTicketApiTests(TestCase):
         )
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.data.get("code"), "invalid_type_slug")
+
+    def test_support_ticket_multipart_saves_attachment_and_get_returns_bytes(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {"type_slug": "help-question", "target_label": "X", "body": "Первая часть"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        blob = b"\x1atest_webm_bytes"
+        audio = SimpleUploadedFile("voice-note.webm", blob, content_type="audio/webm")
+        body_line = "Ответ\n\nВложения (имена файлов): voice-note.webm"
+        p = self.api.patch(
+            f"/users/me/support-tickets/{tid}/",
+            {
+                "append_body": body_line,
+                "attachment_names": "voice-note.webm",
+                "files": audio,
+            },
+            format="multipart",
+        )
+        self.assertEqual(p.status_code, 200, p.data)
+        self.assertEqual(p.data["attachment_names"], "voice-note.webm")
+        g = self.api.get(f"/users/me/support-tickets/{tid}/attachments/voice-note.webm/")
+        self.assertEqual(g.status_code, 200)
+        self.assertEqual(b"".join(g.streaming_content), blob)
+
+    def test_support_ticket_delete_attachment_removes_file_and_updates_ticket(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {"type_slug": "help-question", "target_label": "X", "body": "Первая часть"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        blob = b"\x1atest_webm_bytes"
+        audio = SimpleUploadedFile("voice-note.webm", blob, content_type="audio/webm")
+        p = self.api.patch(
+            f"/users/me/support-tickets/{tid}/",
+            {
+                "append_body": "a\n\nВложения (имена файлов): voice-note.webm",
+                "attachment_names": "voice-note.webm",
+                "files": audio,
+            },
+            format="multipart",
+        )
+        self.assertEqual(p.status_code, 200, p.data)
+        disk_path = attachment_disk_path(tid, "voice-note.webm")
+        self.assertTrue(disk_path.is_file())
+        d = self.api.delete(f"/users/me/support-tickets/{tid}/attachments/voice-note.webm/")
+        self.assertEqual(d.status_code, 200, getattr(d, "data", None))
+        self.assertEqual(d.data.get("attachment_names"), "")
+        self.assertFalse(disk_path.is_file())
+        g = self.api.get(f"/users/me/support-tickets/{tid}/attachments/voice-note.webm/")
+        self.assertEqual(g.status_code, 404)
+
+
+class AccountAdditionalUsersApiTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            email="owner-acc@example.com",
+            username="owneracc",
+            password="secret123",
+        )
+        self.additional = User.objects.create_user(
+            email="extra-acc@example.com",
+            username="extraacc",
+            password="secret123",
+        )
+        self.additional.account_owner = self.owner
+        self.additional.save(update_fields=["account_owner"])
+
+    def test_owner_lists_additional_users(self):
+        api = APIClient()
+        api.force_authenticate(self.owner)
+        r = api.get("/users/me/account-users/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data["results"]), 1)
+        row = r.data["results"][0]
+        self.assertEqual(row["email"], "extra-acc@example.com")
+        self.assertEqual(row["public_id"], self.additional.public_id)
+
+    def test_additional_user_gets_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.additional)
+        r = api.get("/users/me/account-users/")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "not_primary_account")
+
+    def test_owner_empty_list(self):
+        lone = User.objects.create_user(
+            email="lone@example.com",
+            username="loneuser",
+            password="secret123",
+        )
+        api = APIClient()
+        api.force_authenticate(lone)
+        r = api.get("/users/me/account-users/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["results"], [])

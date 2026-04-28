@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { deferResizeObserverCallback } from "../../../resizeObserverDefer";
 import { flushSync } from "react-dom";
-import { Hand, Monitor, Move, Smartphone, Tablet, Type, X } from "lucide-react";
+import { Code2, Hand, Monitor, Move, Smartphone, Tablet, Type, X } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { applyNodeChanges, Background, Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -416,45 +416,57 @@ function ReferralBuilderZoomPlusIcon() {
   );
 }
 
-function ReferralBuilderExpandedToolDock({ tool, onToolChange }) {
+function ReferralBuilderExpandedToolDock({ tool, onToolChange, devMode, onDevModeToggle }) {
   return (
     <Panel position="bottom-center" className="owner-programs__referral-builder-expanded-dock">
-      <div className="owner-programs__referral-builder-expanded-dock__tools" role="toolbar" aria-label="Инструменты холста">
+      <div className="owner-programs__referral-builder-expanded-dock__bar">
+        <div className="owner-programs__referral-builder-expanded-dock__tools" role="toolbar" aria-label="Инструменты холста">
+          <button
+            type="button"
+            className={`owner-programs__referral-builder-expanded-dock__btn${tool === "move" ? " is-active" : ""}`}
+            onClick={() => onToolChange("move")}
+            aria-pressed={tool === "move"}
+            aria-label="Move — перемещение и выбор, клавиша V"
+            title="Move (V)"
+          >
+            <Move className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
+            <span className="owner-programs__referral-builder-expanded-dock__label">Move</span>
+            <kbd className="owner-programs__referral-builder-expanded-dock__kbd">V</kbd>
+          </button>
+          <button
+            type="button"
+            className={`owner-programs__referral-builder-expanded-dock__btn${tool === "text" ? " is-active" : ""}`}
+            onClick={() => onToolChange("text")}
+            aria-pressed={tool === "text"}
+            aria-label="Text — редактирование текста в блоках, клавиша T"
+            title="Text (T)"
+          >
+            <Type className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
+            <span className="owner-programs__referral-builder-expanded-dock__label">Text</span>
+            <kbd className="owner-programs__referral-builder-expanded-dock__kbd">T</kbd>
+          </button>
+          <button
+            type="button"
+            className={`owner-programs__referral-builder-expanded-dock__btn${tool === "hand" ? " is-active" : ""}`}
+            onClick={() => onToolChange("hand")}
+            aria-pressed={tool === "hand"}
+            aria-label="Hand — панорама холста, клавиша H"
+            title="Hand (H)"
+          >
+            <Hand className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
+            <span className="owner-programs__referral-builder-expanded-dock__label">Hand</span>
+            <kbd className="owner-programs__referral-builder-expanded-dock__kbd">H</kbd>
+          </button>
+        </div>
         <button
           type="button"
-          className={`owner-programs__referral-builder-expanded-dock__btn${tool === "move" ? " is-active" : ""}`}
-          onClick={() => onToolChange("move")}
-          aria-pressed={tool === "move"}
-          aria-label="Move — перемещение и выбор, клавиша V"
-          title="Move (V)"
+          className={`owner-programs__referral-builder-expanded-dock__dev-btn${devMode ? " is-active" : ""}`}
+          onClick={onDevModeToggle}
+          aria-pressed={devMode ? "true" : "false"}
+          aria-label="Dev Mode — показать шаблонные блоки кодом"
+          title="Dev Mode"
         >
-          <Move className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
-          <span className="owner-programs__referral-builder-expanded-dock__label">Move</span>
-          <kbd className="owner-programs__referral-builder-expanded-dock__kbd">V</kbd>
-        </button>
-        <button
-          type="button"
-          className={`owner-programs__referral-builder-expanded-dock__btn${tool === "text" ? " is-active" : ""}`}
-          onClick={() => onToolChange("text")}
-          aria-pressed={tool === "text"}
-          aria-label="Text — редактирование текста в блоках, клавиша T"
-          title="Text (T)"
-        >
-          <Type className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
-          <span className="owner-programs__referral-builder-expanded-dock__label">Text</span>
-          <kbd className="owner-programs__referral-builder-expanded-dock__kbd">T</kbd>
-        </button>
-        <button
-          type="button"
-          className={`owner-programs__referral-builder-expanded-dock__btn${tool === "hand" ? " is-active" : ""}`}
-          onClick={() => onToolChange("hand")}
-          aria-pressed={tool === "hand"}
-          aria-label="Hand — панорама холста, клавиша H"
-          title="Hand (H)"
-        >
-          <Hand className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
-          <span className="owner-programs__referral-builder-expanded-dock__label">Hand</span>
-          <kbd className="owner-programs__referral-builder-expanded-dock__kbd">H</kbd>
+          <Code2 className="owner-programs__referral-builder-expanded-dock__icon" size={18} strokeWidth={2} aria-hidden />
         </button>
       </div>
     </Panel>
@@ -1169,6 +1181,8 @@ function ImportedPageStackNode({ data }) {
   const onInlineEditBuilderBlockField =
     typeof data?.onInlineEditBuilderBlockField === "function" ? data.onInlineEditBuilderBlockField : () => {};
   const textEditEnabled = data?.textEditEnabled === true;
+  const devMode = data?.devMode === true;
+  const sitePublicId = typeof data?.sitePublicId === "string" ? data.sitePublicId : "";
   const overlayPointerEventsNone = data?.overlayPointerEventsNone !== false;
   const insertAfterBuilderBlockId =
     typeof data?.insertAfterBuilderBlockId === "string" && data.insertAfterBuilderBlockId.trim()
@@ -1217,6 +1231,8 @@ function ImportedPageStackNode({ data }) {
               selected={selectedBuilderBlockId === bBlock.id}
               onSelect={onSelectBuilderBlock}
               textEditEnabled={textEditEnabled}
+              devMode={devMode}
+              sitePublicId={sitePublicId}
               onInlineEditField={onInlineEditBuilderBlockField}
             />,
           );
@@ -1411,15 +1427,6 @@ function ReferralBuilderBlocksDock({ visible, onPickType }) {
               data-preview-kind={item.type}
               onClick={() => onPickType(item.type)}
             >
-              <span className="owner-programs__referral-builder-blocks-dock__btn-preview" aria-hidden="true">
-                <span className="owner-programs__referral-builder-blocks-dock__btn-preview-top" />
-                <span className="owner-programs__referral-builder-blocks-dock__btn-preview-body">
-                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-chip" />
-                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-line owner-programs__referral-builder-blocks-dock__btn-preview-line--lg" />
-                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-line owner-programs__referral-builder-blocks-dock__btn-preview-line--sm" />
-                  <span className="owner-programs__referral-builder-blocks-dock__btn-preview-cta" />
-                </span>
-              </span>
               <span className="owner-programs__referral-builder-blocks-dock__btn-title">{item.title}</span>
               <span className="owner-programs__referral-builder-blocks-dock__btn-text">{item.description}</span>
             </button>
@@ -1606,6 +1613,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     isExpandedRef.current = isExpanded;
   }, [isExpanded]);
   const [expandedCanvasTool, setExpandedCanvasTool] = useState("move");
+  const [isReferralBuilderDevMode, setIsReferralBuilderDevMode] = useState(false);
   const [scanUrl, setScanUrl] = useState("");
   const [scanStatus, setScanStatus] = useState("idle");
   const [scannedBlocks, setScannedBlocks] = useState([]);
@@ -1952,6 +1960,8 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
               onInlineEditBuilderBlockField: handleInlineEditBuilderBlockField,
               onAddBlockAtSlot: handleAddBuilderBlockOfType,
               textEditEnabled: isTextMode,
+              devMode: isReferralBuilderDevMode,
+              sitePublicId,
               overlayPointerEventsNone: isMoveMode,
               previewMode,
             },
@@ -2006,6 +2016,8 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
       selectedBlockId,
       selectedBuilderBlockId,
       selectedInsertionSlotId,
+      isReferralBuilderDevMode,
+      sitePublicId,
       isMoveMode,
       isTextMode,
     ],
@@ -2745,13 +2757,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
               visible={showScreenshotBuilderChrome && isBlockPickerOpen}
               onPickType={handleAddBuilderBlockOfType}
             />
-            <ReferralBuilderBlockInspector
-              visible={showScreenshotBuilderChrome}
-              selectedBlock={selectedBuilderBlock}
-              onChangeConfig={handleChangeBuilderBlockConfig}
-              onDuplicate={handleDuplicateBuilderBlock}
-              onDelete={handleDeleteBuilderBlock}
-            />
             <ReactFlow
               className={`owner-programs__referral-builder-flow ${flowToolClass}${
                 isExpanded ? ` owner-programs__referral-builder-flow--expanded-tool-${expandedCanvasTool}` : ""
@@ -2791,7 +2796,12 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
                 isExpanded={isExpanded}
               />
               {isExpanded ? (
-                <ReferralBuilderExpandedToolDock tool={expandedCanvasTool} onToolChange={setExpandedCanvasTool} />
+                <ReferralBuilderExpandedToolDock
+                  tool={expandedCanvasTool}
+                  onToolChange={setExpandedCanvasTool}
+                  devMode={isReferralBuilderDevMode}
+                  onDevModeToggle={() => setIsReferralBuilderDevMode((value) => !value)}
+                />
               ) : null}
             </ReactFlow>
             {isScanning ? (

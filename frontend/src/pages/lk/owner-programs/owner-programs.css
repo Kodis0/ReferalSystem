@@ -130,7 +130,19 @@
 
 .owner-programs__projects-skel {
   width: 100%;
-  padding-top: 4px;
+  /* Совпадает с блоком списка после загрузки — без смещения «Проекты» / карточки на 4px */
+  padding-top: 0;
+}
+
+/* Пульсирующий shimmer на карточках списка проектов даёт ощущение «скачущего» блока при перезагрузке */
+.owner-programs__projects-skel .owner-programs__skel {
+  animation: none;
+  background: rgba(255, 255, 255, 0.1);
+  background-size: auto;
+}
+
+[data-theme="light"] .owner-programs__projects-skel .owner-programs__skel {
+  background: rgba(38, 50, 92, 0.12);
 }
 
 .owner-programs__projects-skel-grid {
@@ -4112,9 +4124,12 @@
 }
 
 .owner-programs__history-title {
-  margin: 0 0 24px;
-  font: 700 24px/32px var(--hist-font);
-  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.28;
+  font-family: var(--hist-font);
+  letter-spacing: normal;
   color: var(--text-color);
 }
 
@@ -4133,7 +4148,75 @@
 }
 
 .owner-programs__history .owner-programs__histRow {
+  display: grid;
+  grid-template-columns: minmax(0, 27%) minmax(0, 1fr) minmax(0, 24%);
+  column-gap: 20px;
+  align-items: center;
   padding: 14px 20px 14px 0;
+}
+
+.owner-programs__history.owner-programs__history_withService .owner-programs__histRow {
+  grid-template-columns: minmax(0, 22%) minmax(0, 1fr) minmax(0, 18%) minmax(0, 22%);
+}
+
+.owner-programs__history .owner-programs__histRow_body {
+  align-items: start;
+}
+
+.owner-programs__history .owner-programs__histCell_date,
+.owner-programs__history .owner-programs__histCell_event,
+.owner-programs__history .owner-programs__histCell_service,
+.owner-programs__history .owner-programs__histCell_user {
+  flex: none;
+  min-width: 0;
+}
+
+.owner-programs__histCell_service {
+  min-width: 0;
+}
+
+.owner-programs__histServiceRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #7f91a4;
+}
+
+.owner-programs__histServiceLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #7f91a4;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.owner-programs__histServiceLink:hover,
+.owner-programs__histServiceLink:hover .owner-programs__histText_body,
+.owner-programs__histServiceLink:hover .owner-programs__histServiceIcon {
+  color: #7177f8;
+  text-decoration: none;
+}
+
+.owner-programs__histServiceLink:focus-visible {
+  outline: 2px solid var(--main-color);
+  outline-offset: 2px;
+}
+
+.owner-programs__histServiceIcon {
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.owner-programs__histCell_service .owner-programs__histText_body {
+  margin: 0;
+  word-break: break-word;
+}
+
+.owner-programs__history .owner-programs__histRow .owner-programs__histCell_full {
+  grid-column: 1 / -1;
 }
 
 .owner-programs__histTable {
@@ -4147,7 +4230,7 @@
 .owner-programs__histRow {
   display: flex;
   width: 100%;
-  gap: 32px;
+  gap: calc(32px / 3);
   box-sizing: border-box;
   border-bottom: 1px solid var(--hist-row-divider);
   align-items: center;
@@ -4166,7 +4249,6 @@
   background: transparent;
   min-height: 48px;
   align-items: center;
-  border-top: 1px solid var(--hist-header-divider);
   border-bottom: 1px solid var(--hist-header-divider);
 }
 
@@ -4174,8 +4256,9 @@
   align-items: stretch;
 }
 
-/* Подписи «Событие» / «Пользователь» по вертикали по центру ячейки, ширина колонок как у строк данных */
+/* Подписи «Событие» / «Сервис» / «Пользователь» по вертикали по центру ячейки, ширина колонок как у строк данных */
 .owner-programs__histRow_head_filters > .owner-programs__histCell_event.owner-programs__histCell_headerCell,
+.owner-programs__histRow_head_filters > .owner-programs__histCell_service.owner-programs__histCell_headerCell,
 .owner-programs__histRow_head_filters > .owner-programs__histCell_user.owner-programs__histCell_headerCell {
   display: flex;
   align-items: center;
@@ -4526,7 +4609,7 @@
   box-sizing: border-box;
 }
 
-/* ~6 : 3.5 : 6.5 — чуть шире «Событие» и «Пользователь», больше воздуха между колонками (gap у .histRow) */
+/* ~6 : 3.5 : 6.5 — чуть шире «Событие» и «Пользователь»; gap у .histRow ~11px */
 .owner-programs__histCell_date {
   flex: 12 1 0;
 }
@@ -4590,6 +4673,26 @@
   color: var(--text-color);
 }
 
+.owner-programs__history .owner-programs__histCell_event .owner-programs__histText_grey,
+.owner-programs__history .owner-programs__histCell_service .owner-programs__histText_grey,
+.owner-programs__history .owner-programs__histCell_user .owner-programs__histText_grey,
+.owner-programs__history .owner-programs__histCell_event .owner-programs__histText_body,
+.owner-programs__history .owner-programs__histCell_service .owner-programs__histText_body,
+.owner-programs__history .owner-programs__histCell_user .owner-programs__histText_body {
+  color: #7f91a4;
+}
+
+.owner-programs__history .owner-programs__histCell_date.owner-programs__histCell_headerCell .owner-programs__histText_grey {
+  color: #7f91a4;
+}
+
+.owner-programs__history
+  .owner-programs__histCell_date.owner-programs__histCell_headerCell
+  .owner-programs__histDateTrigger:hover:not(:disabled)
+  .owner-programs__histText_grey {
+  color: var(--main-color);
+}
+
 .owner-programs__histText_alignLeft {
   text-align: left;
 }
@@ -4620,14 +4723,16 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  width: 100%;
 }
 
 .owner-programs__histEventRow .owner-programs__histText_body {
   flex: 1 1 auto;
   min-width: 0;
-  white-space: normal;
-  overflow: visible;
-  word-wrap: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .owner-programs__histBlock {
@@ -4647,7 +4752,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 0;
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
@@ -5375,6 +5480,12 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   box-sizing: border-box;
 }
 
+.owner-programs__referral-builder-expanded-dock__bar {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
 .owner-programs__referral-builder-expanded-dock__tools {
   display: inline-flex;
   align-items: stretch;
@@ -5388,9 +5499,11 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   box-sizing: border-box;
 }
 
-.owner-programs__referral-builder-expanded-dock__btn {
+.owner-programs__referral-builder-expanded-dock__btn,
+.owner-programs__referral-builder-expanded-dock__dev-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   min-height: 36px;
   padding: 0 12px 0 10px;
@@ -5409,14 +5522,29 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
     color 0.2s ease;
 }
 
-.owner-programs__referral-builder-expanded-dock__btn:hover {
+.owner-programs__referral-builder-expanded-dock__dev-btn {
+  width: 50px;
+  padding: 0;
+  border: 1px solid #2c3743;
+  background: rgba(36, 47, 61, 0.6);
+  backdrop-filter: blur(2px);
+  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.25);
+}
+
+.owner-programs__referral-builder-expanded-dock__btn:hover,
+.owner-programs__referral-builder-expanded-dock__dev-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
 
-.owner-programs__referral-builder-expanded-dock__btn.is-active {
+.owner-programs__referral-builder-expanded-dock__btn.is-active,
+.owner-programs__referral-builder-expanded-dock__dev-btn.is-active {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
+}
+
+.owner-programs__referral-builder-expanded-dock__dev-btn.is-active .owner-programs__referral-builder-expanded-dock__icon {
+  color: #7177f8;
 }
 
 .owner-programs__referral-builder-expanded-dock__icon {
@@ -6053,6 +6181,77 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   pointer-events: none;
 }
 
+.editable-referral-block-preview__code-view {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid #2c3743;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  overflow: hidden;
+}
+
+.editable-referral-block-preview__code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid #2c3743;
+  background: #252526;
+  box-sizing: border-box;
+}
+
+.editable-referral-block-preview__code-title {
+  font: 600 12px/16px "Inter", "Stem", "Tahoma", "Arial", sans-serif;
+  color: #cccccc;
+}
+
+.editable-referral-block-preview__code-copy {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #2d2d30;
+  color: #d4d4d4;
+  font: 600 12px/16px "Inter", "Stem", "Tahoma", "Arial", sans-serif;
+  cursor: pointer;
+}
+
+.editable-referral-block-preview__code-copy:hover {
+  background: #37373d;
+  color: #ffffff;
+}
+
+.editable-referral-block-preview__code-scroll-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.editable-referral-block-preview__code-pre {
+  margin: 0;
+  padding: 14px 24px 16px 16px;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 2;
+  font: 500 13px/20px "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+  color: #d4d4d4;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.editable-referral-block-preview__code-pre::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.editable-referral-block-preview__code-scroll-wrap .lk-page-scrollbar_nested {
+  background: #1e1e1e;
+}
+
 .editable-referral-block-preview__text-placement {
   position: absolute;
   inset: 0;
@@ -6364,6 +6563,10 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 }
 
 .editable-referral-block-preview__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
   min-height: 46px;
   padding: 0 22px;
   border: none;
@@ -6372,6 +6575,7 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   color: var(--erb-site-button-text, #ffffff);
   font-size: 14px;
   font-weight: 700;
+  text-decoration: none;
   cursor: default;
   font-family: var(--erb-site-body-font, inherit);
 }
@@ -7138,7 +7342,8 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
     display: none;
   }
 
-  .owner-programs__histTable_showHeaderMobile .owner-programs__histRow_body {
+  .owner-programs__history .owner-programs__histTable_showHeaderMobile .owner-programs__histRow_body {
+    display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
@@ -7146,6 +7351,7 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 
   .owner-programs__histTable_showHeaderMobile .owner-programs__histCell_date,
   .owner-programs__histTable_showHeaderMobile .owner-programs__histCell_event,
+  .owner-programs__histTable_showHeaderMobile .owner-programs__histCell_service,
   .owner-programs__histTable_showHeaderMobile .owner-programs__histCell_user {
     flex: none;
     width: 100%;
@@ -7193,6 +7399,24 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
 
 [data-theme="light"] .owner-programs__histText_body {
   color: var(--text-secondary-color-60);
+}
+
+[data-theme="light"] .owner-programs__histCell_event .owner-programs__histText_grey,
+[data-theme="light"] .owner-programs__histCell_service .owner-programs__histText_grey,
+[data-theme="light"] .owner-programs__histCell_user .owner-programs__histText_grey,
+[data-theme="light"] .owner-programs__histCell_event .owner-programs__histText_body,
+[data-theme="light"] .owner-programs__histCell_service .owner-programs__histText_body,
+[data-theme="light"] .owner-programs__histCell_user .owner-programs__histText_body {
+  color: #83899f;
+}
+
+[data-theme="light"] .owner-programs__histServiceRow,
+[data-theme="light"] .owner-programs__histServiceLink {
+  color: #83899f;
+}
+
+[data-theme="light"] .owner-programs__histCell_date.owner-programs__histCell_headerCell .owner-programs__histText_grey {
+  color: #83899f;
 }
 
 [data-theme="light"] .owner-programs__history-pageNum:hover:not(:disabled) {

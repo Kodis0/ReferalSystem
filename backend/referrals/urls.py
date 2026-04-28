@@ -8,6 +8,7 @@ from .views import (
     ProjectOwnerDetailView,
     ProjectSiteOwnerCreateView,
     ReferralCaptureView,
+    SiteOwnerAccountActivityListView,
     SiteOwnerCreateView,
     SiteOwnerIntegrationActivateView,
     SiteOwnerBootstrapView,
@@ -95,6 +96,11 @@ urlpatterns = [
         "site/integration/activity/",
         SiteOwnerSiteActivityListView.as_view(),
         name="site-owner-site-activity",
+    ),
+    path(
+        "account/activity/",
+        SiteOwnerAccountActivityListView.as_view(),
+        name="site-owner-account-activity",
     ),
     path(
         "site/integration/verify/",

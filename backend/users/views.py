@@ -4,6 +4,8 @@ import urllib.parse
 
 import requests
 from django.contrib.auth import login
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -33,6 +35,7 @@ from referrals.services import (
 
 from .models import CustomUser
 from .serializers import (
+    AccountAdditionalUserSerializer,
     CurrentUserProfileUpdateSerializer,
     CurrentUserSerializer,
     LoginSerializer,
@@ -221,6 +224,69 @@ class DashboardView(APIView):
         return Response({"message": f"Добро пожаловать, {request.user.email}!"})
 
 
+class ChangePasswordView(APIView):
+    """
+    Смена пароля для авторизованного пользователя.
+    Если у пользователя нет заданного пароля (только соц. вход), поле `old_password` не требуется.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        new_password = request.data.get("new_password", "")
+        if not (isinstance(new_password, str) and new_password.strip()):
+            return Response(
+                {
+                    "detail": "Укажите новый пароль.",
+                    "code": "new_password_required",
+                    "new_password": ["This field may not be blank."],
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        new_password = new_password.strip()
+
+        old_password = request.data.get("old_password", "")
+        if not isinstance(old_password, str):
+            old_password = ""
+
+        if user.has_usable_password():
+            if not old_password.strip():
+                return Response(
+                    {
+                        "detail": "Укажите текущий пароль.",
+                        "code": "old_password_required",
+                        "old_password": ["Укажите текущий пароль."],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not user.check_password(old_password):
+                return Response(
+                    {
+                        "detail": "Неверный текущий пароль.",
+                        "code": "wrong_old_password",
+                        "old_password": ["Неверный пароль."],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as exc:
+            return Response(
+                {
+                    "detail": "Пароль не соответствует требованиям.",
+                    "code": "password_validation_failed",
+                    "new_password": list(exc.messages),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        return Response({"detail": "Пароль изменён."}, status=status.HTTP_200_OK)
+
+
 class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -239,6 +305,34 @@ class CurrentUserView(APIView):
         serializer.save()
         request.user.refresh_from_db()
         return Response(CurrentUserSerializer(request.user).data, status=status.HTTP_200_OK)
+
+
+class AccountAdditionalUsersListView(APIView):
+    """
+    Список учётных записей, привязанных к текущему владельцу аккаунта (доп. пользователи).
+    Доступен только если у текущего пользователя нет своего account_owner.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.account_owner_id:
+            return Response(
+                {
+                    "detail": "Список доступен только владельцу основного аккаунта.",
+                    "code": "not_primary_account",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        qs = (
+            CustomUser.objects.filter(account_owner=user)
+            .order_by("date_joined", "email")
+        )
+        return Response(
+            {"results": AccountAdditionalUserSerializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
 
 
 class MyProgramsView(APIView):
@@ -487,14 +581,45 @@ def _vk_oauth_redirect_uri(request):
     return request.build_absolute_uri(reverse("vk_oauth_callback"))
 
 
+def _vk_safe_oauth_next(raw: str | None) -> str | None:
+    """Безопасный путь возврата после VK ID (привязка из настроек)."""
+    if not raw or not isinstance(raw, str):
+        return None
+    p = raw.strip()
+    if not p.startswith("/lk/settings"):
+        return None
+    if len(p) > 256 or "\n" in p or "\r" in p or ".." in p:
+        return None
+    return p
+
+
+def _vk_oauth_frontend_return_base(fe: str, oauth_return_path: str | None) -> str:
+    base = fe.rstrip("/")
+    if oauth_return_path:
+        return f"{base}{oauth_return_path}"
+    return f"{base}/login"
+
+
 class VkOAuthStartView(View):
     """Начало VK ID: редирект на id.vk.com (PKCE), state и code_verifier в сессии."""
 
     def get(self, request):
         fe = _frontend_login_base()
+        next_path = _vk_safe_oauth_next(request.GET.get("next"))
+        if next_path:
+            request.session["vk_oauth_next"] = next_path
+            request.session.modified = True
+
+        scheme_q = (request.GET.get("scheme") or "").strip().lower()
+        if scheme_q in ("light", "dark"):
+            vk_scheme = scheme_q
+        else:
+            vk_scheme = (getattr(django_settings, "VK_OAUTH_SCHEME", None) or "dark").strip() or "dark"
+
         app_id = (getattr(django_settings, "VK_OAUTH_APP_ID", None) or "").strip()
         if not app_id:
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_not_configured")
+            target = _vk_oauth_frontend_return_base(fe, next_path)
+            return HttpResponseRedirect(f"{target}?vk_error=vk_oauth_not_configured")
 
         redirect_uri = _vk_oauth_redirect_uri(request)
         state = secrets.token_urlsafe(32)
@@ -505,7 +630,6 @@ class VkOAuthStartView(View):
         request.session.modified = True
 
         vk_scope = (getattr(django_settings, "VK_OAUTH_SCOPE", None) or "email").strip()
-        vk_scheme = (getattr(django_settings, "VK_OAUTH_SCHEME", None) or "dark").strip() or "dark"
         q = urllib.parse.urlencode(
             {
                 "response_type": "code",
@@ -522,31 +646,33 @@ class VkOAuthStartView(View):
 
 
 class VkOAuthCallbackView(View):
-    """Callback VK ID: code + PKCE + device_id → токены → email → JWT → /login#..."""
+    """Callback VK ID: code + PKCE + device_id → токены → email → JWT → /login#... или /lk/settings#..."""
 
     def get(self, request):
         fe = _frontend_login_base()
+        oauth_return_path = _vk_safe_oauth_next(request.session.pop("vk_oauth_next", None))
+        return_base = _vk_oauth_frontend_return_base(fe, oauth_return_path)
 
         parsed = parse_vk_id_callback_query(request)
         if parsed.get("error") == "access_denied":
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_denied")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_oauth_denied")
 
         code = parsed.get("code")
         state = parsed.get("state")
         device_id = parsed.get("device_id")
         if not code or not state or not isinstance(code, str) or not isinstance(state, str):
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_invalid_callback")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_oauth_invalid_callback")
 
         if not device_id:
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_missing_device_id")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_missing_device_id")
 
         expected = request.session.get("vk_oauth_state")
         if not expected or state != expected:
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_state_invalid")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_state_invalid")
 
         code_verifier = request.session.get("vk_code_verifier")
         if not code_verifier or not isinstance(code_verifier, str):
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_state_invalid")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_state_invalid")
 
         try:
             del request.session["vk_oauth_state"]
@@ -558,7 +684,7 @@ class VkOAuthCallbackView(View):
         app_id = (getattr(django_settings, "VK_OAUTH_APP_ID", None) or "").strip()
         client_secret = (getattr(django_settings, "VK_OAUTH_CLIENT_SECRET", None) or "").strip()
         if not app_id:
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_not_configured")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_oauth_not_configured")
 
         redirect_uri = _vk_oauth_redirect_uri(request)
 
@@ -574,11 +700,11 @@ class VkOAuthCallbackView(View):
             )
         except (requests.RequestException, ValueError):
             logger.exception("VK ID token exchange failed")
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_token_exchange_failed")
 
         vk_access = token_payload.get("access_token")
         if not vk_access or not isinstance(vk_access, str):
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_token_exchange_failed")
 
         try:
             email_raw = resolve_vk_login_email(
@@ -588,23 +714,23 @@ class VkOAuthCallbackView(View):
             )
         except requests.RequestException:
             logger.exception("VK ID resolve email failed")
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_fetch_failed")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_email_fetch_failed")
 
         if not email_raw or not isinstance(email_raw, str):
             logger.warning(
                 "VK ID: no unmasked email after resolve; scope=%r",
                 token_payload.get("scope"),
             )
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_missing")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_email_missing")
 
         email = email_raw.strip()
         try:
             user = CustomUser.objects.get(email__iexact=email)
         except CustomUser.DoesNotExist:
-            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_not_registered")
+            return HttpResponseRedirect(f"{return_base}?vk_error=vk_email_not_registered")
 
         if not user.is_active:
-            return HttpResponseRedirect(f"{fe}/login?vk_error=account_disabled")
+            return HttpResponseRedirect(f"{return_base}?vk_error=account_disabled")
 
         link_session_attributions_to_user(
             session_key=request.session.session_key,
@@ -622,7 +748,7 @@ class VkOAuthCallbackView(View):
                 "refresh_token": refresh_jwt,
             }
         )
-        return HttpResponseRedirect(f"{fe}/login#{frag}")
+        return HttpResponseRedirect(f"{return_base}#{frag}")
 
 
 class TelegramLoginStartView(View):

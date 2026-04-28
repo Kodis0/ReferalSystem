@@ -9,6 +9,9 @@ from django.core.exceptions import ImproperlyConfigured
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Файлы вложений обращений в поддержку (PATCH multipart → disk; GET по URL с JWT).
+SUPPORT_TICKET_ATTACHMENTS_ROOT = BASE_DIR / "media" / "support_tickets"
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/

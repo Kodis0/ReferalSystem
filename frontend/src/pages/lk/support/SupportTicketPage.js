@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
-import { Check, Code, Globe, Mic, Pause, Play, Smile, Square, Users, X } from "lucide-react";
+import { Code, Globe, Mic, Smile, Square, Users, X } from "lucide-react";
 import EmojiPicker, { Categories, EmojiStyle, Theme } from "emoji-picker-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { fetchOwnerSitesList } from "../owner-programs/ownerSitesListApi";
 import { formatSiteCardTitle } from "../owner-programs/siteDisplay";
 import { SUPPORT_SERVICE_OPTIONS, SUPPORT_TICKET_SLUGS, SUPPORT_TICKET_TABS } from "./supportConstants";
 import { createSupportTicket } from "./supportTicketsApi";
+import { isVoiceLikeFile, SupportTicketVoiceBubble } from "./supportTicketVoiceBubble";
+import { chooseVoiceRecorderMimeType } from "./supportVoiceRecording";
 import LkListboxSelect from "../components/LkListboxSelect";
 import "../settings/settings.css";
 import "./support.css";
@@ -28,351 +30,6 @@ const SUPPORT_TARGET_LOADING_VALUE = "__loading";
 
 const EMOJI_PANEL_WIDTH = 336;
 const EMOJI_PANEL_HEIGHT = 380;
-
-const VOICE_WAVE_BARS = 52;
-
-function isVoiceLikeFile(file) {
-  const t = String(file?.type || "").toLowerCase();
-  if (t.startsWith("audio/")) return true;
-  const n = String(file?.name || "").toLowerCase();
-  return /\.(webm|ogg|opus|mp3|wav|m4a|aac|flac|mpeg)$/i.test(n);
-}
-
-function hashStringToSeed(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i += 1) {
-    h = (h << 5) - h + str.charCodeAt(i);
-    h |= 0;
-  }
-  return Math.abs(h);
-}
-
-function fakeWaveformBars(seed, count) {
-  const bars = [];
-  let x = seed || 1;
-  for (let i = 0; i < count; i += 1) {
-    x = (x * 1103515245 + 12345) & 0x7fffffff;
-    bars.push(0.12 + ((x % 78) / 100) * 0.88);
-  }
-  return bars;
-}
-
-async function decodeWaveformBars(file, barCount) {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) throw new Error("no AudioContext");
-  const ctx = new AC();
-  try {
-    const buf = await file.arrayBuffer();
-    const audioBuffer = await ctx.decodeAudioData(buf.slice(0));
-    const data = audioBuffer.getChannelData(0);
-    const step = Math.max(1, Math.floor(data.length / barCount));
-    const bars = [];
-    for (let i = 0; i < barCount; i += 1) {
-      const start = i * step;
-      const end = Math.min(start + step, data.length);
-      let sum = 0;
-      for (let j = start; j < end; j += 1) sum += Math.abs(data[j]);
-      bars.push(sum / (end - start) || 0);
-    }
-    const max = Math.max(...bars, 1e-9);
-    return bars.map((v) => Math.min(1, (v / max) * 0.92 + 0.08));
-  } finally {
-    await ctx.close?.();
-  }
-}
-
-function formatMmSs(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const s = Math.floor(seconds);
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, "0")}`;
-}
-
-function formatMessageClock(file) {
-  const t = file?.lastModified ? new Date(file.lastModified) : new Date();
-  return `${t.getHours()}:${String(t.getMinutes()).padStart(2, "0")}`;
-}
-
-function SupportTicketVoiceBubble({ file, fileIndex, onRemove }) {
-  const audioRef = useRef(null);
-  const containerRef = useRef(null);
-  const waveTrackRef = useRef(null);
-  const [bars, setBars] = useState(() => fakeWaveformBars(hashStringToSeed(`${file.name}-${file.size}`), VOICE_WAVE_BARS));
-  const [waveTrackPx, setWaveTrackPx] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [current, setCurrent] = useState(0);
-  const [playing, setPlaying] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const next = await decodeWaveformBars(file, VOICE_WAVE_BARS);
-        if (!cancelled) setBars(next);
-      } catch {
-        if (!cancelled) {
-          setBars(fakeWaveformBars(hashStringToSeed(`${file.name}-${file.size}`), VOICE_WAVE_BARS));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [file]);
-
-  useEffect(() => {
-    const url = URL.createObjectURL(file);
-    const audio = audioRef.current;
-    if (audio) {
-      audio.src = url;
-      audio.preload = "metadata";
-    }
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [file]);
-
-  useLayoutEffect(() => {
-    const el = waveTrackRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => {
-      setWaveTrackPx(el.clientWidth);
-    });
-    ro.observe(el);
-    setWaveTrackPx(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!playing) return undefined;
-    let rafId = 0;
-    let cancelled = false;
-    const tick = () => {
-      if (cancelled) return;
-      const a = audioRef.current;
-      if (a && !a.paused && Number.isFinite(a.duration)) {
-        setCurrent(a.currentTime);
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(rafId);
-    };
-  }, [playing]);
-
-  const onTimeUpdate = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    setCurrent(a.currentTime);
-  }, []);
-
-  const onLoadedMeta = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    const d = a.duration;
-    if (Number.isFinite(d)) setDuration(d);
-  }, []);
-
-  const onEnded = useCallback(() => {
-    setPlaying(false);
-    setCurrent(0);
-    const a = audioRef.current;
-    if (a) a.currentTime = 0;
-  }, []);
-
-  const pauseOthersInAttachments = useCallback(() => {
-    const root = containerRef.current?.closest(".lk-support-ticket__attachments");
-    if (!root) return;
-    root.querySelectorAll(".lk-support-ticket__voice-audio-el").forEach((el) => {
-      if (el !== audioRef.current) el.pause();
-    });
-  }, []);
-
-  const togglePlay = useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (a.paused) {
-      pauseOthersInAttachments();
-      a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-    } else {
-      a.pause();
-      setPlaying(false);
-    }
-  }, [pauseOthersInAttachments]);
-
-  const progress = duration > 0 ? Math.min(1, current / duration) : 0;
-  const clock = useMemo(() => formatMessageClock(file), [file]);
-  const leftTime = playing || current > 0 ? current : duration;
-
-  const seekToClientX = useCallback(
-    (clientX) => {
-      const track = waveTrackRef.current;
-      const a = audioRef.current;
-      if (!track || !a) return;
-      const d = Number.isFinite(duration) && duration > 0 ? duration : a.duration;
-      if (!Number.isFinite(d) || d <= 0) return;
-      const rect = track.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const ratio = Math.min(1, Math.max(0, x / rect.width));
-      const t = ratio * d;
-      a.currentTime = t;
-      setCurrent(t);
-    },
-    [duration],
-  );
-
-  const onWavePointerDown = useCallback(
-    (e) => {
-      if (e.button !== 0) return;
-      const track = waveTrackRef.current;
-      if (!track) return;
-      seekToClientX(e.clientX);
-      try {
-        if (e.pointerId != null) track.setPointerCapture(e.pointerId);
-      } catch {
-        /* noop */
-      }
-      const onMove = (ev) => {
-        seekToClientX(ev.clientX);
-      };
-      const onUp = (ev) => {
-        try {
-          if (ev.pointerId != null) track.releasePointerCapture(ev.pointerId);
-        } catch {
-          /* noop */
-        }
-        track.removeEventListener("pointermove", onMove);
-        track.removeEventListener("pointerup", onUp);
-        track.removeEventListener("pointercancel", onUp);
-      };
-      track.addEventListener("pointermove", onMove);
-      track.addEventListener("pointerup", onUp);
-      track.addEventListener("pointercancel", onUp);
-    },
-    [seekToClientX],
-  );
-
-  const onRemoveClick = useCallback(
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const a = audioRef.current;
-      if (a) {
-        a.pause();
-      }
-      onRemove?.(fileIndex);
-    },
-    [fileIndex, onRemove],
-  );
-
-  return (
-    <div ref={containerRef} className="lk-support-ticket__voice" data-voice-id={String(fileIndex)}>
-      <audio
-        ref={audioRef}
-        className="lk-support-ticket__voice-audio-el"
-        preload="metadata"
-        aria-label={`Голосовое вложение ${file.name}`}
-        onTimeUpdate={onTimeUpdate}
-        onLoadedMetadata={onLoadedMeta}
-        onEnded={onEnded}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-      />
-      <div className="lk-support-ticket__voice-bubble">
-        <div className="lk-support-ticket__voice-row">
-          <button type="button" className="lk-support-ticket__voice-play" aria-label={playing ? "Пауза" : "Воспроизвести"} onClick={togglePlay}>
-            {playing ? (
-              <Pause size={20} strokeWidth={2} fill="currentColor" aria-hidden />
-            ) : (
-              <Play size={22} strokeWidth={0} fill="currentColor" className="lk-support-ticket__voice-play-icon" aria-hidden />
-            )}
-          </button>
-          <div className="lk-support-ticket__voice-middle">
-            <div
-              ref={waveTrackRef}
-              className="lk-support-ticket__voice-wave-track"
-              role="slider"
-              tabIndex={0}
-              aria-label="Прогресс и перемотка"
-              aria-valuemin={0}
-              aria-valuemax={Math.round(Number.isFinite(duration) ? duration : 0)}
-              aria-valuenow={Math.round(current)}
-              aria-valuetext={`${formatMmSs(current)} из ${formatMmSs(duration)}`}
-              onPointerDown={onWavePointerDown}
-              onKeyDown={(e) => {
-                const a = audioRef.current;
-                if (!a || !Number.isFinite(duration) || duration <= 0) return;
-                const step = Math.min(5, duration / 20);
-                if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-                  e.preventDefault();
-                  a.currentTime = Math.max(0, a.currentTime - step);
-                  setCurrent(a.currentTime);
-                } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-                  e.preventDefault();
-                  a.currentTime = Math.min(duration, a.currentTime + step);
-                  setCurrent(a.currentTime);
-                } else if (e.key === "Home") {
-                  e.preventDefault();
-                  a.currentTime = 0;
-                  setCurrent(0);
-                } else if (e.key === "End") {
-                  e.preventDefault();
-                  a.currentTime = duration;
-                  setCurrent(duration);
-                }
-              }}
-            >
-              <div className="lk-support-ticket__voice-wave-dim">
-                {bars.map((h, i) => (
-                  <span
-                    key={`d-${i}`}
-                    className="lk-support-ticket__voice-bar"
-                    style={{ height: `${Math.max(4, Math.round(5 + h * 26))}px` }}
-                  />
-                ))}
-              </div>
-              {waveTrackPx > 0 ? (
-                <div className="lk-support-ticket__voice-wave-hi" style={{ width: `${progress * 100}%` }}>
-                  <div className="lk-support-ticket__voice-wave-dup" style={{ width: `${waveTrackPx}px` }}>
-                    {bars.map((h, i) => (
-                      <span
-                        key={`u-${i}`}
-                        className="lk-support-ticket__voice-bar lk-support-ticket__voice-bar_active"
-                        style={{ height: `${Math.max(4, Math.round(5 + h * 26))}px` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="lk-support-ticket__voice-meta-row">
-              <span className="lk-support-ticket__voice-time-left">
-                {formatMmSs(leftTime)}
-                <span className="lk-support-ticket__voice-dot" aria-hidden />
-              </span>
-              <span className="lk-support-ticket__voice-time-right">
-                <span>{clock}</span>
-                <Check className="lk-support-ticket__voice-check" size={16} strokeWidth={2.5} aria-hidden />
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="lk-support-ticket__voice-remove"
-            aria-label="Удалить голосовое сообщение"
-            title="Удалить"
-            onClick={onRemoveClick}
-          >
-            <X size={18} strokeWidth={2} aria-hidden />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function supportServiceIcon(iconType) {
   if (iconType === "site") {
@@ -685,16 +342,7 @@ export default function SupportTicketPage() {
       discardRecordingRef.current = false;
       mediaStreamRef.current = stream;
       recordChunksRef.current = [];
-      let mimeType = "";
-      if (typeof MediaRecorder !== "undefined") {
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-          mimeType = "audio/webm;codecs=opus";
-        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
-          mimeType = "audio/webm";
-        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-          mimeType = "audio/mp4";
-        }
-      }
+      const mimeType = chooseVoiceRecorderMimeType();
       const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       rec.ondataavailable = (ev) => {
         if (ev.data && ev.data.size > 0) {
@@ -1090,9 +738,18 @@ export default function SupportTicketPage() {
                     <div className="lk-support-ticket__file-list-other">
                       {files.map((f, idx) =>
                         !isVoiceLikeFile(f) ? (
-                          <span key={`file-${idx}-${f.name}`} className="lk-support-ticket__file-chip">
-                            {f.name}
-                          </span>
+                          <div key={`file-${idx}-${f.name}`} className="lk-support-ticket__file-chip">
+                            <span className="lk-support-ticket__file-chip-name">{f.name}</span>
+                            <button
+                              type="button"
+                              className="lk-support-ticket__file-chip-remove"
+                              aria-label={`Удалить вложение ${f.name}`}
+                              title="Удалить"
+                              onClick={() => removeFileAt(idx)}
+                            >
+                              <X size={15} strokeWidth={2.25} aria-hidden />
+                            </button>
+                          </div>
                         ) : null,
                       )}
                     </div>

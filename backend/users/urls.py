@@ -11,14 +11,20 @@ from .views import (
     TelegramLoginStartView,
     TelegramLoginCallbackView,
     TelegramWidgetLoginView,
+    ChangePasswordView,
     CurrentUserView,
+    AccountAdditionalUsersListView,
     MyProgramsView,
     MyProgramDetailView,
     SiteCtaJoinView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views_orders import OrderReceiveView
-from .support_views import SupportTicketListCreateView, SupportTicketRetrieveView
+from .support_views import (
+    SupportTicketAttachmentView,
+    SupportTicketListCreateView,
+    SupportTicketRetrieveView,
+)
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -36,8 +42,15 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('me/programs/<uuid:site_public_id>/', MyProgramDetailView.as_view(), name='my_program_detail'),
     path('me/programs/', MyProgramsView.as_view(), name='my_programs'),
+    path('me/password/', ChangePasswordView.as_view(), name='change_password'),
+    path('me/account-users/', AccountAdditionalUsersListView.as_view(), name='account_additional_users'),
     path('me/', CurrentUserView.as_view(), name='current_user'),  # 🔹 текущий пользователь
     path('me/support-tickets/', SupportTicketListCreateView.as_view(), name='support_tickets'),
+    path(
+        'me/support-tickets/<uuid:ticket_id>/attachments/<str:filename>/',
+        SupportTicketAttachmentView.as_view(),
+        name='support_ticket_attachment',
+    ),
     path(
         'me/support-tickets/<uuid:ticket_id>/',
         SupportTicketRetrieveView.as_view(),

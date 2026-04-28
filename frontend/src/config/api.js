@@ -11,9 +11,15 @@ export const API_ENDPOINTS = {
   tokenTelegramWidget: `${API_BASE}/users/token/telegram/widget/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
+  /** Дополнительные пользователи аккаунта (учётные записи с привязкой к владельцу). */
+  accountUsers: `${API_BASE}/users/me/account-users/`,
+  changePassword: `${API_BASE}/users/me/password/`,
   supportTickets: `${API_BASE}/users/me/support-tickets/`,
   supportTicketDetail: (ticketId) =>
     `${API_BASE}/users/me/support-tickets/${encodeURIComponent(ticketId)}/`,
+  /** GET с заголовком Authorization: Bearer — отдаёт байты вложения (аудио для плеера в ЛК). */
+  supportTicketAttachment: (ticketId, fileName) =>
+    `${API_BASE}/users/me/support-tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(fileName)}/`,
   myPrograms: `${API_BASE}/users/me/programs/`,
   myProgramDetail: (sitePublicId) => `${API_BASE}/users/me/programs/${encodeURIComponent(sitePublicId)}/`,
   referralCapture: `${API_BASE}/referrals/capture/`,
@@ -37,6 +43,8 @@ export const API_ENDPOINTS = {
   siteIntegrationActivate: `${API_BASE}/referrals/site/integration/activate/`,
   siteReachability: `${API_BASE}/referrals/site/reachability/`,
   siteIntegrationActivity: `${API_BASE}/referrals/site/integration/activity/`,
+  /** Журнал действий аккаунта (проекты, сайты, интеграция). */
+  accountOwnerActivity: `${API_BASE}/referrals/account/activity/`,
 };
 
 export { API_BASE };

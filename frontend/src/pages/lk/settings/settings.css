@@ -101,6 +101,10 @@
   margin: 0;
 }
 
+.lk-settings__account-history-wrap {
+  margin-top: 12px;
+}
+
 .lk-settings__section_linked {
   margin-top: 28px;
 }
@@ -239,8 +243,9 @@
 
 .lk-settings__manage-section-title {
   margin: 0 0 12px;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
+  line-height: 24px;
   color: rgba(255, 255, 255, 0.92);
 }
 
@@ -271,14 +276,23 @@
 
 .lk-settings__manage-row-icon {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background: transparent;
+  border-radius: 50%;
+  background: rgba(127, 145, 164, 0.16);
   color: rgba(255, 255, 255, 0.75);
+  line-height: 0;
+  box-sizing: border-box;
+}
+
+.lk-settings__manage-row-icon svg {
+  display: block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
 }
 
 .lk-settings__manage-row-body {
@@ -301,19 +315,31 @@
 
 .lk-settings__manage-action {
   flex-shrink: 0;
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0 18px;
   border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 14px;
+  background: #39495e;
+  color: #fff;
+  font-family: "Stem", "Tahoma", "Arial", sans-serif;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 16px;
   cursor: pointer;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  transition: background 0.2s ease-in-out, opacity 0.15s ease;
 }
 
 .lk-settings__manage-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: #4a5d75;
+}
+
+.lk-settings__manage-action:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.55);
+  outline-offset: 2px;
 }
 
 .lk-settings__manage-action:disabled {
@@ -468,12 +494,337 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
+/* Вкладка «Безопасность»: блок «Способы входа» (ряды как в референсе) */
+.lk-settings__section_security {
+  margin-bottom: 32px;
+}
+
+/* Вкладка «Пользователи»: дополнительные учётные записи аккаунта (референс Timeweb / controlsBlock) */
+.lk-settings__section_account-users {
+  margin-bottom: 32px;
+}
+
+.lk-settings__controls-block_account-users {
+  margin-bottom: 0;
+}
+
+.lk-settings__controls-block-title_users .lk-settings__section-title_h2 {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.02em;
+}
+
+.lk-settings__account-users-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.lk-settings__account-users-empty {
+  margin: 0;
+  font: 400 14px/24px "Stem", "Tahoma", "Arial", sans-serif;
+  color: #7f91a4;
+  text-align: left;
+}
+
+.lk-settings__account-users-forbidden {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(248, 113, 113, 0.92);
+}
+
+.lk-settings__account-users-create-wrap {
+  margin-top: 8px;
+}
+
+.lk-settings__account-users-create-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #7177f8;
+  color: #fff;
+  font: 500 14px/24px "Stem", "Tahoma", "Arial", sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+.lk-settings__account-users-empty + .lk-settings__account-users-create-btn {
+  margin-top: 20px;
+}
+
+.lk-settings__account-users-create-btn:hover {
+  background: #5b61e8;
+  color: #fff;
+}
+
+.lk-settings__account-users-create-btn:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: 2px;
+}
+
+.lk-settings__account-users-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.lk-settings__account-users-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+}
+
+.lk-settings__account-users-row:last-child {
+  border-bottom: none;
+}
+
+.lk-settings__account-users-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.lk-settings__account-users-name {
+  font: 500 15px/20px "Stem", "Tahoma", "Arial", sans-serif;
+  color: rgba(255, 255, 255, 0.95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lk-settings__account-users-email {
+  font: 400 13px/16px "Stem", "Tahoma", "Arial", sans-serif;
+  color: #7f91a4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lk-settings__account-users-inactive {
+  flex-shrink: 0;
+  font: 500 12px/14px "Stem", "Tahoma", "Arial", sans-serif;
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.lk-settings__controls-block-title .lk-settings__section-title_h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: -0.02em;
+}
+
+.lk-settings__card_controls {
+  --lk-control-line: #2c3743;
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.lk-settings__control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 16px 0;
+  box-sizing: border-box;
+  border-top: 1px solid var(--lk-control-line);
+  border-bottom: 1px solid var(--lk-control-line);
+  margin-top: -1px;
+}
+
+.lk-settings__control-row:first-of-type {
+  margin-top: 0;
+}
+
+.lk-settings__control-row_social {
+  align-items: flex-start;
+}
+
+.lk-settings__control-row_social .lk-settings__control-content {
+  padding-top: 2px;
+}
+
+.lk-settings__control-description {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.lk-settings__control-avatar-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lk-settings__control-avatar {
+  box-sizing: border-box;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 0;
+}
+
+.lk-settings__control-avatar svg {
+  display: block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.lk-settings__control-avatar_secondary {
+  background: rgba(127, 145, 164, 0.16);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.lk-settings__control-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.lk-settings__control-title {
+  margin: 0;
+  font: 500 15px/20px "Stem", "Tahoma", "Arial", sans-serif;
+  color: #fff;
+}
+
+.lk-settings__control-sub {
+  margin: 2px 0 0;
+  font: 400 13px/16px "Stem", "Tahoma", "Arial", sans-serif;
+  color: #7f91a4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lk-settings__control-content {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* Колонка с действием: как `.content` в референсе; кнопка — secondary medium (baseButton__color_secondary, size medium). */
+.lk-settings__card_controls .lk-settings__control-content:not(.lk-settings__control-content_oauth) {
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
+/* Соцкнопки в духе socialNetwork + baseButton secondary medium (референс Timeweb). */
+.lk-settings__oauth-login-wrap {
+  width: 100%;
+}
+
+.lk-settings__oauth-network-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.lk-settings__oauth-network-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 40px;
+  height: 40px;
+  max-width: 150px;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #4a5867;
+  color: #fff;
+  font: 500 14px/24px "Stem", "Tahoma", "Arial", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease-in-out;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lk-settings__oauth-network-btn:hover:not(:disabled) {
+  background: #556b7a;
+}
+
+.lk-settings__oauth-network-btn:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: 2px;
+}
+
+.lk-settings__oauth-network-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lk-settings__oauth-network-btn svg {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.lk-settings__oauth-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #f87171;
+}
+
 .lk-settings__card {
   padding: 18px 18px 16px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
+}
+
+.lk-settings__card.lk-settings__card_controls {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .lk-settings__card_empty {
@@ -587,10 +938,50 @@
   color: #0f172a;
 }
 
+[data-theme="light"] .lk-settings__controls-block-title .lk-settings__section-title_h2 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .lk-settings__card_controls {
+  --lk-control-line: #e8ebef;
+}
+
+[data-theme="light"] .lk-settings__control-avatar_secondary {
+  background: rgba(131, 137, 159, 0.18);
+  color: #64748b;
+}
+
+[data-theme="light"] .lk-settings__control-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .lk-settings__control-sub {
+  color: #64748b;
+}
+
+[data-theme="light"] .lk-settings__oauth-network-btn {
+  background: #e8ecf1;
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-settings__oauth-network-btn:hover:not(:disabled) {
+  background: #dce2ea;
+}
+
+[data-theme="light"] .lk-settings__oauth-hint {
+  color: #b91c1c;
+}
+
 [data-theme="light"] .lk-settings__card {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.08);
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .lk-settings__card.lk-settings__card_controls {
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 [data-theme="light"] .lk-settings__muted {
@@ -599,6 +990,31 @@
 
 [data-theme="light"] .lk-settings__empty-title {
   color: #0f172a;
+}
+
+[data-theme="light"] .lk-settings__controls-block-title_users .lk-settings__section-title_h2 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .lk-settings__account-users-empty {
+  color: #64748b;
+}
+
+[data-theme="light"] .lk-settings__account-users-list {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #f4f5f7;
+}
+
+[data-theme="light"] .lk-settings__account-users-row {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .lk-settings__account-users-name {
+  color: #0f172a;
+}
+
+[data-theme="light"] .lk-settings__account-users-email {
+  color: #64748b;
 }
 
 [data-theme="light"] .lk-settings__placeholder {
@@ -654,7 +1070,7 @@
 }
 
 [data-theme="light"] .lk-settings__manage-row-icon {
-  background: transparent;
+  background: rgba(131, 137, 159, 0.18);
   color: #64748b;
 }
 
@@ -668,12 +1084,12 @@
 
 [data-theme="light"] .lk-settings__manage-action {
   border: none;
-  background: #ffffff;
-  color: #0f172a;
+  background: #fff;
+  color: #26325c;
 }
 
 [data-theme="light"] .lk-settings__manage-action:hover:not(:disabled) {
-  background: rgba(15, 23, 42, 0.04);
+  background: #f1f5f9;
 }
 
 [data-theme="light"] .lk-settings__linked-card {
@@ -741,7 +1157,8 @@
 
 /* Страница «Личные данные» — референс: тёмный холст, плоская форма, ФИО одной строкой */
 #lk-settings-personal-page.lk-settings-personal-page,
-#lk-settings-bind-account-page.lk-settings-personal-page {
+#lk-settings-bind-account-page.lk-settings-personal-page,
+#lk-settings-change-password-page.lk-settings-personal-page {
   --lk-form-line-color: #2c3743;
   --lk-form-text-color: #fff;
   --lk-form-text-secondary: #7f91a4;
@@ -765,7 +1182,8 @@
 }
 
 [data-theme="light"] #lk-settings-personal-page.lk-settings-personal-page,
-[data-theme="light"] #lk-settings-bind-account-page.lk-settings-personal-page {
+[data-theme="light"] #lk-settings-bind-account-page.lk-settings-personal-page,
+[data-theme="light"] #lk-settings-change-password-page.lk-settings-personal-page {
   --lk-form-line-color: rgba(15, 23, 42, 0.12);
   --lk-form-text-color: #0f172a;
   --lk-form-text-secondary: #64748b;
@@ -774,8 +1192,45 @@
   background: #f1f5f9;
 }
 
+/* Служебное поле email для autofill: не display:none, иначе часть браузеров не подставляет сохранённый пароль */
+#lk-settings-change-password-page .lk-settings-change-password-page__autofill-username {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* «Изменить пароль»: компактные отступы карточки (ширина как у прочих personal-страниц, max-width 600px в общем блоке выше) */
+#lk-settings-change-password-page.lk-settings-personal-page {
+  position: relative;
+  padding: 8px 20px 14px;
+}
+
+#lk-settings-change-password-page .page__returnButton {
+  margin-bottom: 12px;
+}
+
+#lk-settings-change-password-page .lk-settings-personal-page__header {
+  margin-bottom: 14px;
+}
+
+#lk-settings-change-password-page .lk-settings-personal-page__form {
+  gap: 16px;
+}
+
+#lk-settings-change-password-page .lk-settings-personal-page__actions {
+  margin-top: 4px;
+}
+
 #lk-settings-personal-page .page,
-#lk-settings-bind-account-page .page {
+#lk-settings-bind-account-page .page, #lk-settings-change-password-page .page {
   box-sizing: border-box;
 }
 
@@ -788,7 +1243,7 @@
 }
 
 #lk-settings-personal-page .tw-link.link_primary.link_s,
-#lk-settings-bind-account-page .tw-link.link_primary.link_s {
+#lk-settings-bind-account-page .tw-link.link_primary.link_s, #lk-settings-change-password-page .tw-link.link_primary.link_s {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -800,22 +1255,24 @@
 }
 
 #lk-settings-personal-page .tw-link.link_primary.link_s:hover,
-#lk-settings-bind-account-page .tw-link.link_primary.link_s:hover {
+#lk-settings-bind-account-page .tw-link.link_primary.link_s:hover, #lk-settings-change-password-page .tw-link.link_primary.link_s:hover {
   text-decoration: none;
   color: rgba(255, 255, 255, 0.85);
 }
 
 [data-theme="light"] #lk-settings-personal-page .tw-link.link_primary.link_s,
-[data-theme="light"] #lk-settings-bind-account-page .tw-link.link_primary.link_s {
+[data-theme="light"] #lk-settings-bind-account-page .tw-link.link_primary.link_s,
+[data-theme="light"] #lk-settings-change-password-page .tw-link.link_primary.link_s {
   color: #64748b;
 }
 
 [data-theme="light"] #lk-settings-personal-page .tw-link.link_primary.link_s:hover,
-[data-theme="light"] #lk-settings-bind-account-page .tw-link.link_primary.link_s:hover {
+[data-theme="light"] #lk-settings-bind-account-page .tw-link.link_primary.link_s:hover,
+[data-theme="light"] #lk-settings-change-password-page .tw-link.link_primary.link_s:hover {
   color: #4f5fff;
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-shell {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-shell, #lk-settings-change-password-page .lk-settings-bind-account-page__password-shell {
   display: flex;
   align-items: stretch;
   width: 100%;
@@ -830,12 +1287,12 @@
     box-shadow 0.15s ease;
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-shell:focus-within {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-shell:focus-within, #lk-settings-change-password-page .lk-settings-bind-account-page__password-shell:focus-within {
   border-color: rgba(113, 119, 248, 0.75);
   box-shadow: 0 0 0 2px rgba(113, 119, 248, 0.2);
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-input {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-input, #lk-settings-change-password-page .lk-settings-bind-account-page__password-input {
   flex: 1 1 auto;
   min-width: 0;
   border: none;
@@ -843,11 +1300,11 @@
   box-shadow: none;
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-input:focus {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-input:focus, #lk-settings-change-password-page .lk-settings-bind-account-page__password-input:focus {
   box-shadow: none;
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle, #lk-settings-change-password-page .lk-settings-bind-account-page__password-toggle {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -861,16 +1318,71 @@
   cursor: pointer;
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle:hover {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle:hover, #lk-settings-change-password-page .lk-settings-bind-account-page__password-toggle:hover {
   color: var(--lk-form-text-color);
 }
 
-#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle:focus-visible {
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle:focus-visible, #lk-settings-change-password-page .lk-settings-bind-account-page__password-toggle:focus-visible {
   outline: 2px solid rgba(113, 119, 248, 0.75);
   outline-offset: -2px;
 }
 
-[data-theme="light"] #lk-settings-bind-account-page .lk-settings-bind-account-page__password-input {
+#lk-settings-bind-account-page .lk-settings-change-password-page__label-row, #lk-settings-change-password-page .lk-settings-change-password-page__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+/* Кнопка «Сгенерировать» (как link_s + link_primary: 13px/16px, accent) */
+#lk-settings-change-password-page .lk-settings-change-password-page__generate-btn {
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: "Stem", "Tahoma", "Arial", sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 16px;
+  color: #7177f8;
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    color 0.2s ease-in-out,
+    opacity 0.2s ease-in-out;
+}
+
+#lk-settings-change-password-page .lk-settings-change-password-page__generate-btn:hover:not(:disabled) {
+  color: #8b90ff;
+}
+
+#lk-settings-change-password-page .lk-settings-change-password-page__generate-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#lk-settings-change-password-page .lk-settings-change-password-page__generate-btn:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.75);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+[data-theme="light"] #lk-settings-change-password-page .lk-settings-change-password-page__generate-btn {
+  color: #4f5fff;
+}
+
+[data-theme="light"] #lk-settings-change-password-page .lk-settings-change-password-page__generate-btn:hover:not(:disabled) {
+  color: #3d4de8;
+}
+
+[data-theme="light"] #lk-settings-bind-account-page .lk-settings-bind-account-page__password-input,
+[data-theme="light"] #lk-settings-change-password-page .lk-settings-bind-account-page__password-input {
   background: #fff;
 }
 
@@ -1410,7 +1922,7 @@
 }
 
 #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary,
-#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
+#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary, #lk-settings-change-password-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
   align-self: flex-start;
   min-height: 44px;
   padding: 0 26px;
@@ -1425,29 +1937,61 @@
 }
 
 #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled),
-#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
+#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled), #lk-settings-change-password-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
   background: #5c6bef;
 }
 
 #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled,
-#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled {
+#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled, #lk-settings-change-password-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
 [data-theme="light"] #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary,
-[data-theme="light"] #lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
+[data-theme="light"] #lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary,
+[data-theme="light"] #lk-settings-change-password-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
   background: #4f5fff;
 }
 
 [data-theme="light"] #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled),
-[data-theme="light"] #lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
+[data-theme="light"] #lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled),
+[data-theme="light"] #lk-settings-change-password-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
   background: #3d4de8;
 }
 
 @media (max-width: 640px) {
   .lk-settings__manage-row {
     flex-wrap: wrap;
+  }
+
+  .lk-settings__control-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .lk-settings__control-row .lk-settings__control-content:not(.lk-settings__control-content_oauth) {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .lk-settings__control-row .lk-settings__manage-action {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .lk-settings__control-row .lk-settings__control-content_oauth {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .lk-settings__oauth-network-list {
+    justify-content: stretch;
+  }
+
+  .lk-settings__oauth-network-btn {
+    max-width: none;
+    flex: 1 1 calc(50% - 4px);
+    min-width: min(100%, 150px);
   }
 
   .lk-settings__manage-action,
@@ -1461,8 +2005,13 @@
   }
 
   #lk-settings-personal-page.lk-settings-personal-page,
-  #lk-settings-bind-account-page.lk-settings-personal-page {
+  #lk-settings-bind-account-page.lk-settings-personal-page,
+  #lk-settings-change-password-page.lk-settings-personal-page {
     padding: 12px 14px 28px;
     margin-right: 0;
+  }
+
+  #lk-settings-change-password-page.lk-settings-personal-page {
+    padding: 6px 14px 10px;
   }
 }

@@ -60,11 +60,50 @@ export async function patchSupportTicket(ticketId, payload) {
   if (!token) {
     return { ok: false, status: 401 };
   }
+  const files = payload.files;
+  const rest = { ...payload };
+  delete rest.files;
+  const hasFiles = Array.isArray(files) && files.length > 0;
+
   try {
-    const res = await fetch(API_ENDPOINTS.supportTicketDetail(ticketId), {
-      method: "PATCH",
-      headers: authHeaders(token),
-      body: JSON.stringify(payload),
+    let res;
+    if (hasFiles) {
+      const fd = new FormData();
+      if (rest.append_body != null) fd.append("append_body", String(rest.append_body));
+      if (rest.attachment_names != null) fd.append("attachment_names", String(rest.attachment_names));
+      files.forEach((f) => fd.append("files", f));
+      res = await fetch(API_ENDPOINTS.supportTicketDetail(ticketId), {
+        method: "PATCH",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+    } else {
+      res = await fetch(API_ENDPOINTS.supportTicketDetail(ticketId), {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify(rest),
+      });
+    }
+    const ticket = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, status: res.status, ticket };
+    }
+    return { ok: true, ticket };
+  } catch {
+    return { ok: false, detail: "network" };
+  }
+}
+
+/** Удалить вложение тикета (файл на диске + запись в attachment_names). */
+export async function deleteSupportTicketAttachment(ticketId, fileName) {
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    return { ok: false, status: 401 };
+  }
+  try {
+    const res = await fetch(API_ENDPOINTS.supportTicketAttachment(ticketId, fileName), {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const ticket = await res.json().catch(() => ({}));
     if (!res.ok) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./LkSidebar.css";
 import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
 import { formatSiteCardTitle } from "./owner-programs/siteDisplay";
@@ -24,13 +24,10 @@ function projectAvatarDataUrl(project) {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
-/** Avoid refetch + FLIP layout on every nested tab under the same owner project. */
+/** Один ключ для всего дерева `/lk/partner/*`, чтобы список в сайдбаре не уходил в загрузку при входе в проект или смене вкладки. */
 function ownerProjectsRouteStaleKey(pathname) {
   const p = pathname || "";
-  if (p === "/lk/support" || p.startsWith("/lk/support/")) return "/lk/support";
-  if (!p.startsWith("/lk/partner")) return p;
-  const m = p.match(/^\/lk\/partner\/project\/(\d+)/);
-  if (m) return `/lk/partner/project/${m[1]}`;
+  if (p.startsWith("/lk/partner")) return "/lk/partner";
   return p;
 }
 
@@ -77,6 +74,13 @@ function moveProjectPosition(list, sourceId, targetId, placeAfter) {
   return next;
 }
 
+function formatIdeaNavBadgeLabel(count) {
+  if (count <= 0) return "";
+  if (count > 99) return "99+";
+  if (count >= 10) return "9+";
+  return String(count);
+}
+
 function ProgramsNavIcon() {
   return (
     <svg
@@ -109,9 +113,11 @@ function ProgramsNavIcon() {
   );
 }
 
-export default function LkSidebar({ ownerSessionKey = "" }) {
+export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0, onHeaderNavNavigate }) {
   const projectAvatarClipId = useId().replace(/:/g, "");
   const { pathname, hash, search } = useLocation();
+  const navigate = useNavigate();
+  const currentPath = pathname.toLowerCase();
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [ownerProjects, setOwnerProjects] = useState([]);
   const [ownerProjectsLoading, setOwnerProjectsLoading] = useState(true);
@@ -349,6 +355,7 @@ export default function LkSidebar({ ownerSessionKey = "" }) {
   return (
     <aside className="lk-sidebar" aria-label="Меню личного кабинета" id="sidebarMenu">
       <div className="lk-sidebar__frame">
+        <div className="lk-sidebar__panel lk-sidebar__panel_section1">
         <div className="lk-sidebar__collapse-container lk-sidebar__collapse-container_projects">
           <div className={`lk-sidebar__collapse ${projectsOpen ? "lk-sidebar__collapse_open" : ""}`}>
             <div className="lk-sidebar__projects-header">
@@ -412,6 +419,7 @@ export default function LkSidebar({ ownerSessionKey = "" }) {
               aria-hidden={!projectsOpen}
             >
               <div className="lk-sidebar__collapse-inner-wrap">
+                <div className="lk-sidebar__projects-rows-block">
                 {ownerProjectsLoading ? (
                   <div
                     className="lk-sidebar__projects-skel"
@@ -532,6 +540,7 @@ export default function LkSidebar({ ownerSessionKey = "" }) {
                   );
                   })
                 )}
+                </div>
                 <Link
                   to="/lk/partner/new"
                   data-test-id="add-project-btn"
@@ -561,9 +570,9 @@ export default function LkSidebar({ ownerSessionKey = "" }) {
             </div>
           </div>
         </div>
+        </div>
 
-        <hr className="lk-sidebar__divider" />
-
+        <div className="lk-sidebar__panel lk-sidebar__panel_section2 lk-sidebar__panel_nav">
         <nav className="lk-sidebar__nav" aria-label="Разделы">
           <Link
             to="/lk/dashboard#my-programs"
@@ -573,7 +582,140 @@ export default function LkSidebar({ ownerSessionKey = "" }) {
             <ProgramsNavIcon />
             <span className="lk-sidebar__nav-text">Агентские программы</span>
           </Link>
+
+          <button
+            type="button"
+            className={itemClass(currentPath === "/lk/news")}
+            aria-current={currentPath === "/lk/news" ? "page" : undefined}
+            onClick={() => {
+              onHeaderNavNavigate?.();
+              navigate("/LK/news");
+            }}
+          >
+            <svg
+              className="lk-sidebar__nav-icon-svg"
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <g id="News_0">
+                <path
+                  id="news-Vector_1"
+                  d="M2 18C2 18.7957 2.31607 19.5587 2.87868 20.1213C3.44129 20.6839 4.20435 21 5 21H18C19.0609 21 20.0783 20.5786 20.8284 19.8284C21.5786 19.0783 22 18.0609 22 17V6.18201H20V17C20 17.5304 19.7893 18.0392 19.4142 18.4142C19.0391 18.7893 18.5304 19 18 19H7.82C7.93642 18.6793 7.9973 18.3412 8 18V6.18201H6V7.00001V9.00001V18C6 18.2652 5.89464 18.5196 5.70711 18.7071C5.51957 18.8947 5.26522 19 5 19C4.73478 19 4.48043 18.8947 4.29289 18.7071C4.10536 18.5196 4 18.2652 4 18V13.0088H2V18Z"
+                  fill="currentColor"
+                />
+                <path
+                  id="news-Vector_2"
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M17 9H11C10.7348 9 10.4804 8.89464 10.2929 8.70711C10.1054 8.51957 10 8.26522 10 8C10 7.73478 10.1054 7.48043 10.2929 7.29289C10.4804 7.10536 10.7348 7 11 7H17C17.2652 7 17.5196 7.10536 17.7071 7.29289C17.8946 7.48043 18 7.73478 18 8C18 8.26522 17.8946 8.51957 17.7071 8.70711C17.5196 8.89464 17.2652 9 17 9Z"
+                  fill="currentColor"
+                />
+                <path
+                  id="news-Vector_3"
+                  d="M17 13H11C10.7348 13 10.4804 12.8946 10.2929 12.7071C10.1054 12.5196 10 12.2652 10 12C10 11.7348 10.1054 11.4804 10.2929 11.2929C10.4804 11.1054 10.7348 11 11 11H17C17.2652 11 17.5196 11.1054 17.7071 11.2929C17.8946 11.4804 18 11.7348 18 12C18 12.2652 17.8946 12.5196 17.7071 12.7071C17.5196 12.8946 17.2652 13 17 13Z"
+                  fill="currentColor"
+                />
+                <path
+                  id="news-Vector_4"
+                  d="M17 17H11C10.7348 17 10.4804 16.8946 10.2929 16.7071C10.1054 16.5196 10 16.2652 10 16C10 15.7348 10.1054 15.4804 10.2929 15.2929C10.4804 15.1054 10.7348 15 11 15H17C17.2652 15 17.5196 15.1054 17.7071 15.2929C17.8946 15.4804 18 15.7348 18 16C18 16.2652 17.8946 16.5196 17.7071 16.7071C17.5196 16.8946 17.2652 17 17 17Z"
+                  fill="currentColor"
+                />
+                <path
+                  id="news-Vector_5"
+                  d="M7 3H21C21.2652 3 21.5196 3.10536 21.7071 3.29289C21.8946 3.48043 22 3.73478 22 4V13.8622H20V5H8V13.5H6V9V7V4C6 3.73478 6.10536 3.48043 6.29289 3.29289C6.48043 3.10536 6.73478 3 7 3Z"
+                  fill="currentColor"
+                />
+                <path
+                  id="news-Vector_6"
+                  d="M3 7H6V9H4V13.5H2V8C2 7.73478 2.10536 7.48043 2.29289 7.29289C2.48043 7.10536 2.73478 7 3 7Z"
+                  fill="currentColor"
+                />
+              </g>
+            </svg>
+            <span className="lk-sidebar__nav-text">Новости и обновления</span>
+          </button>
+
+          <button
+            type="button"
+            className={itemClass(currentPath === "/lk/bug")}
+            aria-current={currentPath === "/lk/bug" ? "page" : undefined}
+            onClick={() => {
+              onHeaderNavNavigate?.();
+              navigate("/LK/bug");
+            }}
+          >
+            <svg
+              className="lk-sidebar__nav-icon-svg"
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <g id="Apps_0">
+                <path
+                  id="Vector_1"
+                  d="M12.0101 7.58936H12.0001C9.31603 7.58936 7.14014 9.76525 7.14014 12.4494V14.8894C7.14014 17.5735 9.31603 19.7494 12.0001 19.7494H12.0101C14.6942 19.7494 16.8701 17.5735 16.8701 14.8894V12.4494C16.8701 9.76525 14.6942 7.58936 12.0101 7.58936Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  id="Vector_2"
+                  d="M3.49023 7.58936C3.49023 8.39561 3.81052 9.16885 4.38063 9.73896C4.95074 10.3091 5.72398 10.6294 6.53023 10.6294H17.4702C18.2765 10.6294 19.0497 10.3091 19.6198 9.73896C20.1899 9.16885 20.5102 8.39561 20.5102 7.58936"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  id="Vector_3"
+                  d="M9.47023 4.54932V5.05932C9.44852 5.40427 9.49771 5.75001 9.61478 6.07522C9.73184 6.40043 9.91431 6.69819 10.1509 6.95016C10.3875 7.20212 10.6732 7.40293 10.9904 7.54021C11.3076 7.67748 11.6496 7.7483 11.9952 7.7483C12.3409 7.7483 12.6828 7.67748 13 7.54021C13.3173 7.40293 13.603 7.20212 13.8396 6.95016C14.0762 6.69819 14.2586 6.40043 14.3757 6.07522C14.4928 5.75001 14.542 5.40427 14.5202 5.05932V4.54932M3.49023 20.3493C3.49023 19.5431 3.81052 18.7698 4.38063 18.1997C4.95074 17.6296 5.72398 17.3093 6.53023 17.3093H7.74023M20.5102 20.3493C20.5102 19.5431 20.1899 18.7698 19.6198 18.1997C19.0497 17.6296 18.2765 17.3093 17.4702 17.3093H16.2502M7.14023 14.0093H4.10023M19.9002 14.0093H16.8602"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+              </g>
+            </svg>
+            <span className="lk-sidebar__nav-text">Сообщить о баге</span>
+          </button>
+
+          <button
+            type="button"
+            className={itemClass(currentPath === "/lk/idea")}
+            aria-current={currentPath === "/lk/idea" ? "page" : undefined}
+            onClick={() => {
+              onHeaderNavNavigate?.();
+              navigate("/LK/idea");
+            }}
+          >
+            <span className="lk-sidebar__nav-ideas-wrap">
+              <svg
+                className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_ideas"
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  id="ideas-Vector_1"
+                  d="M10.0546 17.3371H11.0419V12.5444H12.959V17.3371H13.9463C14.0709 16.1869 14.6556 15.2283 15.6142 14.1931C15.7196 14.0781 16.4098 13.3687 16.4864 13.2633C17.1633 12.4174 17.5874 11.3975 17.71 10.321C17.8326 9.24462 17.6486 8.15546 17.1794 7.179C16.7101 6.20253 15.9745 5.37847 15.0575 4.80171C14.1404 4.22495 13.079 3.91895 11.9956 3.91895C10.9123 3.91895 9.85091 4.22495 8.93381 4.80171C8.01672 5.37847 7.28118 6.20253 6.8119 7.179C6.34262 8.15546 6.15869 9.24462 6.28128 10.321C6.40387 11.3975 6.828 12.4174 7.50483 13.2633L8.3867 14.1931C9.34525 15.2379 9.92996 16.1869 10.0546 17.3371ZM10.0833 19.2542V20.2128H13.9175V19.2542H10.0833ZM6.0095 14.4615C5.10808 13.3333 4.54354 11.9735 4.38085 10.5387C4.21817 9.10378 4.46394 7.65212 5.0899 6.35077C5.71585 5.04942 6.69653 3.95125 7.91908 3.18268C9.14163 2.4141 10.5564 2.00635 12.0004 2.00635C13.4445 2.00635 14.8592 2.4141 16.0818 3.18268C17.3043 3.95125 18.285 5.04942 18.911 6.35077C19.5369 7.65212 19.7827 9.10378 19.62 10.5387C19.4573 11.9735 18.8928 13.3333 17.9914 14.4615C17.3875 15.1996 15.8346 16.3786 15.8346 17.8164V20.2128C15.8346 20.7212 15.6326 21.2089 15.2731 21.5684C14.9136 21.9279 14.426 22.1299 13.9175 22.1299H10.0833C9.57488 22.1299 9.08726 21.9279 8.72774 21.5684C8.36821 21.2089 8.16623 20.7212 8.16623 20.2128V17.8164C8.16623 16.3786 6.6038 15.1996 6.0095 14.4615Z"
+                  fill="currentColor"
+                />
+              </svg>
+              {ideaNavBadgeCount > 0 ? (
+                <span className="lk-header__nav-badge" aria-hidden="true">
+                  {formatIdeaNavBadgeLabel(ideaNavBadgeCount)}
+                </span>
+              ) : null}
+            </span>
+            <span className="lk-sidebar__nav-text">Предложить идею</span>
+          </button>
         </nav>
+        </div>
       </div>
     </aside>
   );

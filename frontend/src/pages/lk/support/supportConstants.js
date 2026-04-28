@@ -1,3 +1,6 @@
+/** Событие `window` для обновления списка тикетов в хабе без перезагрузки страницы. */
+export const SUPPORT_HUB_TICKETS_REFRESH_EVENT = "lk-support-tickets-refresh";
+
 export const SUPPORT_TICKET_SLUGS = ["help-question", "help-problem", "help-claim"];
 
 export const SUPPORT_TICKET_TABS = [

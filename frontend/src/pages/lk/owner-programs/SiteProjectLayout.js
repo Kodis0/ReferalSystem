@@ -261,6 +261,16 @@ export default function SiteProjectLayout() {
   const projectOverviewNavPath = useMemo(() => buildScopedProjectPath("overview"), [buildScopedProjectPath]);
   const projectMembersNavPath = useMemo(() => buildScopedProjectPath("members"), [buildScopedProjectPath]);
 
+  /** «Назад» из оболочки сайта: например в Настройки → История, если пришли по ссылке из ленты. */
+  const siteShellBackLinkTo = useMemo(() => {
+    const raw = location.state?.ownerShellBackTo;
+    if (typeof raw === "string" && raw.startsWith("/")) return raw;
+    return projectServicesNavPath;
+  }, [location.state, projectServicesNavPath]);
+
+  const siteTabNavigationState =
+    isSiteRouteShell && location.state && typeof location.state === "object" ? location.state : undefined;
+
   useEffect(() => {
     function handlePointerDown(event) {
       if (!createMenuRef.current || createMenuRef.current.contains(event.target)) return;
@@ -901,7 +911,7 @@ export default function SiteProjectLayout() {
             <div className="page__returnButton owner-programs__shell-site-back">
               <Link
                 className="tw-link link_primary link_s"
-                to={projectServicesNavPath}
+                to={siteShellBackLinkTo}
                 data-testid="project-site-shell-back"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="7" height="13" fill="none" viewBox="0 0 7 13" aria-hidden="true">
@@ -1184,22 +1194,40 @@ export default function SiteProjectLayout() {
               )
             ) : isSiteRouteShell ? (
               <>
-                <NavLink to={dashboardSiteNavPath} end className={tabClass} preventScrollReset>
+                <NavLink
+                  to={dashboardSiteNavPath}
+                  end
+                  className={tabClass}
+                  preventScrollReset
+                  state={siteTabNavigationState}
+                >
                   Дашборд
                 </NavLink>
-                <NavLink to={widgetSiteNavPath} end className={tabClass} preventScrollReset>
+                <NavLink to={widgetSiteNavPath} end className={tabClass} preventScrollReset state={siteTabNavigationState}>
                   Виджет
                 </NavLink>
-                <NavLink to={referralBlockSiteNavPath} end className={tabClass} preventScrollReset>
+                <NavLink
+                  to={referralBlockSiteNavPath}
+                  end
+                  className={tabClass}
+                  preventScrollReset
+                  state={siteTabNavigationState}
+                >
                   Блок для сайта
                 </NavLink>
-                <NavLink to={settingsSiteNavPath} end className={tabClass} preventScrollReset>
+                <NavLink
+                  to={settingsSiteNavPath}
+                  end
+                  className={tabClass}
+                  preventScrollReset
+                  state={siteTabNavigationState}
+                >
                   Настройки
                 </NavLink>
-                <NavLink to={membersSiteNavPath} end className={tabClass} preventScrollReset>
+                <NavLink to={membersSiteNavPath} end className={tabClass} preventScrollReset state={siteTabNavigationState}>
                   Пользователи
                 </NavLink>
-                <NavLink to={historySiteNavPath} end className={tabClass} preventScrollReset>
+                <NavLink to={historySiteNavPath} end className={tabClass} preventScrollReset state={siteTabNavigationState}>
                   История
                 </NavLink>
               </>

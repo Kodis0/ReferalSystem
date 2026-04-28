@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, Outlet, useLocation, useMatch, useNavigate, useOutlet } from "react-router-dom";
-import { ChevronDown, MessageCircle, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useMatch, useNavigate, useOutlet } from "react-router-dom";
+import { ChevronDown, LifeBuoy, Search } from "lucide-react";
+import { SUPPORT_HUB_TICKETS_REFRESH_EVENT } from "./supportConstants";
 import { fetchMySupportTickets } from "./supportTicketsApi";
 import "./support.css";
 
@@ -14,9 +15,12 @@ function formatTicketListDate(iso) {
 function matchesQuery(t, q) {
   if (!q) return true;
   const preview = String(t.preview || "").toLowerCase();
+  const lastMsg = String(t.last_message_preview || "").toLowerCase();
   const title = String(t.type_title || "").toLowerCase();
   const target = String(t.target_label || "").toLowerCase();
-  return preview.includes(q) || title.includes(q) || target.includes(q);
+  return (
+    preview.includes(q) || lastMsg.includes(q) || title.includes(q) || target.includes(q)
+  );
 }
 
 function TicketRowLink({ t, highlighted }) {
@@ -27,13 +31,14 @@ function TicketRowLink({ t, highlighted }) {
       aria-current={highlighted ? "page" : undefined}
     >
       <span className="lk-support-hub__ticket-row-avatar" aria-hidden>
-        <MessageCircle size={22} strokeWidth={2} />
+        <LifeBuoy size={20} strokeWidth={1.75} />
       </span>
       <div className="lk-support-hub__ticket-row-body">
         <p className="lk-support-hub__ticket-row-title">{t.preview || "Обращение"}</p>
         <p className="lk-support-hub__ticket-row-meta">
-          {t.type_title}
-          {t.target_label ? ` · ${t.target_label}` : ""}
+          {String(t.last_message_preview || "").trim() ||
+            [t.type_title, t.target_label].filter(Boolean).join(" · ") ||
+            "…"}
         </p>
         <p className="lk-support-hub__ticket-row-date">{formatTicketListDate(t.created_at)}</p>
       </div>
@@ -54,6 +59,21 @@ export default function SupportHubPage() {
   const [closedExpanded, setClosedExpanded] = useState(false);
   const [highlightTicketId, setHighlightTicketId] = useState(null);
 
+  const applyListResult = useCallback((res, silent) => {
+    if (!res.ok) {
+      if (!silent) {
+        setTickets([]);
+        if (res.status === 401) {
+          setLoadError("Войдите в аккаунт, чтобы видеть обращения.");
+        } else {
+          setLoadError(res.detail === "network" ? "Не удалось загрузить список. Проверьте соединение." : "Не удалось загрузить список.");
+        }
+      }
+      return;
+    }
+    setTickets(res.tickets);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -62,21 +82,32 @@ export default function SupportHubPage() {
       const res = await fetchMySupportTickets();
       if (cancelled) return;
       setLoading(false);
-      if (!res.ok) {
-        setTickets([]);
-        if (res.status === 401) {
-          setLoadError("Войдите в аккаунт, чтобы видеть обращения.");
-        } else {
-          setLoadError(res.detail === "network" ? "Не удалось загрузить список. Проверьте соединение." : "Не удалось загрузить список.");
-        }
-        return;
-      }
-      setTickets(res.tickets);
+      applyListResult(res, false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyListResult]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const onRefresh = (e) => {
+      const d = e && e.detail;
+      if (d && d.closedTicketId) {
+        setClosedExpanded(true);
+      }
+      (async () => {
+        const res = await fetchMySupportTickets();
+        if (cancelled) return;
+        applyListResult(res, true);
+      })();
+    };
+    window.addEventListener(SUPPORT_HUB_TICKETS_REFRESH_EVENT, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(SUPPORT_HUB_TICKETS_REFRESH_EVENT, onRefresh);
+    };
+  }, [applyListResult]);
 
   useEffect(() => {
     const fidRaw = location.state && location.state.focusTicketId;

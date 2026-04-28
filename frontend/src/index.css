@@ -3,10 +3,11 @@
   src: local("Stem-Regular"), local("Stem Regular");
   font-weight: 400;
   font-style: normal;
-  font-display: swap;
+  /* Как у Inter из Google (display=optional): не подменять метрики после отрисовки */
+  font-display: optional;
 }
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+/* Inter: см. public/index.html — preconnect + stylesheet, без @import (иначе поздняя загрузка и FOUT). */
 
 /* Тема по умолчанию: тёмная */
 :root {

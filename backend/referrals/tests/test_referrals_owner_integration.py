@@ -16,6 +16,7 @@ from referrals.models import (
     SiteMembership,
     SiteOwnerActivityLog,
 )
+from referrals.owner_site_activity import normalize_legacy_activity_message
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME, ensure_partner_profile
 from referrals.widget_install_verify import build_default_verify_page_url
 
@@ -156,7 +157,11 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/owner-sites/")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data["projects"], [])
+        self.assertEqual(len(r.data["projects"]), 1)
+        default_card = r.data["projects"][0]
+        self.assertTrue(default_card["is_default"])
+        self.assertEqual(default_card["project"]["name"], DEFAULT_OWNER_PROJECT_NAME)
+        self.assertEqual(default_card["sites_count"], 0)
         self.assertEqual(r.data["sites"], [])
 
     def test_owner_sites_list_contract_nested_project_and_flat_site_keys(self):
@@ -176,8 +181,8 @@ class SiteOwnerIntegrationApiTests(TestCase):
         data = r.data
         self.assertIsInstance(data.get("projects"), list)
         self.assertIsInstance(data.get("sites"), list)
-        self.assertEqual(len(data["projects"]), 1)
-        card = data["projects"][0]
+        self.assertEqual(len(data["projects"]), 2)
+        card = next(p for p in data["projects"] if p["id"] == project.id)
         for key in ("id", "is_default", "project", "primary_site_public_id", "sites_count", "sites"):
             self.assertIn(key, card, msg=f"missing project-card key: {key}")
         self.assertEqual(card["id"], project.id)
@@ -215,9 +220,8 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/owner-sites/")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(r.data["projects"]), 1)
-        row = r.data["projects"][0]
-        self.assertEqual(row["id"], project.id)
+        self.assertEqual(len(r.data["projects"]), 2)
+        row = next(p for p in r.data["projects"] if p["id"] == project.id)
         self.assertEqual(row["project"]["name"], "Empty project")
         self.assertEqual(row["sites_count"], 0)
         self.assertEqual(row["primary_site_public_id"], "")
@@ -268,11 +272,13 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/owner-sites/")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(r.data["projects"]), 2)
+        self.assertEqual(len(r.data["projects"]), 3)
         self.assertEqual(r.data["projects"][0]["primary_site_public_id"], str(newer.public_id))
         self.assertEqual(r.data["projects"][1]["primary_site_public_id"], str(older.public_id))
         self.assertEqual(r.data["projects"][0]["project"]["name"], "Newer project")
         self.assertEqual(r.data["projects"][1]["project"]["name"], "Older project")
+        self.assertTrue(r.data["projects"][2]["is_default"])
+        self.assertEqual(r.data["projects"][2]["sites_count"], 0)
         ids = [row["public_id"] for row in r.data["sites"]]
         self.assertEqual(len(ids), 2)
         self.assertEqual(ids[0], str(newer.public_id))
@@ -340,11 +346,11 @@ class SiteOwnerIntegrationApiTests(TestCase):
     def test_bootstrap_creates_first_site(self):
         self.api.force_authenticate(self.owner)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 0)
-        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 0)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
         r = self.api.post("/referrals/site/bootstrap/")
         self.assertEqual(r.status_code, 201)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
-        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 2)
         self.assertIn("publishable_key", r.data)
         self.assertIn("widget_embed_snippet", r.data)
         site = Site.objects.select_related("project").get(owner=self.owner)
@@ -403,7 +409,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         )
         self.assertEqual(r.status_code, 201)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 1)
-        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 2)
         newest = (
             Site.objects.select_related("project")
             .filter(owner=self.owner)
@@ -422,7 +428,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertTrue(newest.project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
         r_owner = self.api.get("/referrals/site/owner-sites/")
         self.assertEqual(r_owner.status_code, 200)
-        card = r_owner.data["projects"][0]
+        card = next(p for p in r_owner.data["projects"] if p["id"] == newest.project_id)
         self.assertEqual(card["sites_count"], 1)
         self.assertEqual(card["primary_site_public_id"], str(newest.public_id))
         self.assertEqual(len(card["sites"]), 1)
@@ -439,9 +445,9 @@ class SiteOwnerIntegrationApiTests(TestCase):
             format="json",
         )
         self.assertEqual(r.status_code, 201)
-        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 2)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 0)
-        project = Project.objects.get(owner=self.owner)
+        project = Project.objects.get(owner=self.owner, name="Standalone project")
         self.assertEqual(project.name, "Standalone project")
         self.assertEqual(project.description, "Only project")
         self.assertTrue(project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
@@ -601,7 +607,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         )
         self.assertEqual(r.status_code, 201)
         self.assertEqual(Site.objects.filter(owner=self.owner).count(), 2)
-        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 1)
+        self.assertEqual(Project.objects.filter(owner=self.owner).count(), 2)
         created = Site.objects.exclude(id=existing.id).get(owner=self.owner)
         self.assertEqual(created.project_id, project.id)
         self.assertEqual(created.allowed_origins, ["https://new.example"])
@@ -661,8 +667,8 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.api.force_authenticate(self.owner)
         r = self.api.get("/referrals/site/owner-sites/")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(r.data["projects"]), 1)
-        project_row = r.data["projects"][0]
+        self.assertEqual(len(r.data["projects"]), 2)
+        project_row = next(p for p in r.data["projects"] if p["id"] == project.id)
         self.assertEqual(project_row["id"], project.id)
         self.assertEqual(project_row["project"]["name"], "Grouped project")
         self.assertEqual(project_row["sites_count"], 2)
@@ -1547,6 +1553,35 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["results"][0]["action"], "site_settings")
         self.assertTrue(SiteOwnerActivityLog.objects.filter(site=site).exists())
 
+    def test_site_activity_api_normalizes_legacy_messages(self):
+        project = Project.objects.create(owner=self.owner, name="P", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_leg_msg_" + uuid.uuid4().hex,
+        )
+        SiteOwnerActivityLog.objects.create(
+            owner=self.owner,
+            site=site,
+            actor=self.owner,
+            action="site_settings",
+            message="Изменены имя сайта, черновик блока.",
+            details={},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get(f"/referrals/site/integration/activity/?site_public_id={site.public_id}")
+        self.assertEqual(r.status_code, 200)
+        msg = r.data["results"][0]["message"]
+        self.assertIn("Имя сайта: изменено", msg)
+        self.assertIn("Реферальный блок: изменения сохранены", msg)
+        self.assertNotIn("черновик блока", msg)
+
+        jumbled = "Изменения настроек сайта: черновик конструктора реферального блока."
+        self.assertEqual(
+            normalize_legacy_activity_message("site_settings", jumbled, {}),
+            "Реферальный блок: изменения сохранены.",
+        )
+
     def test_site_activity_list_filters_by_date(self):
         project = Project.objects.create(owner=self.owner, name="P", description="")
         site = Site.objects.create(
@@ -1556,6 +1591,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
             allowed_origins=["https://one.example"],
         )
         log_old = SiteOwnerActivityLog.objects.create(
+            owner=self.owner,
             site=site,
             actor=self.owner,
             action="site_settings",
@@ -1577,4 +1613,72 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r_all = self.api.get(f"/referrals/site/integration/activity/?site_public_id={site.public_id}")
         self.assertEqual(r_all.status_code, 200)
         self.assertGreaterEqual(r_all.data["count"], 1)
+
+    def test_account_activity_list_ok(self):
+        project = Project.objects.create(owner=self.owner, name="AccFeed", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_acc_feed_" + uuid.uuid4().hex,
+        )
+        SiteOwnerActivityLog.objects.create(
+            owner=self.owner,
+            site=site,
+            actor=self.owner,
+            action="site_settings",
+            message="Событие для ленты аккаунта",
+            details={},
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/account/activity/")
+        self.assertEqual(r.status_code, 200)
+        self.assertGreaterEqual(r.data["count"], 1)
+        self.assertTrue(any("ленты" in row.get("message", "") for row in r.data["results"]))
+        feed_row = next(row for row in r.data["results"] if "ленты" in row.get("message", ""))
+        self.assertEqual(feed_row.get("service_label"), "AccFeed")
+        self.assertEqual(feed_row.get("project_id"), project.id)
+
+    def test_account_activity_visible_to_additional_user(self):
+        additional = User.objects.create_user(
+            username="add_account_feed",
+            email="additional-feed@example.com",
+            password="secret12",
+        )
+        additional.account_owner = self.owner
+        additional.save(update_fields=["account_owner"])
+        project = Project.objects.create(owner=self.owner, name="MultiUserProj", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_add_feed_" + uuid.uuid4().hex,
+        )
+        SiteOwnerActivityLog.objects.create(
+            owner=self.owner,
+            site=site,
+            actor=additional,
+            action="site_settings",
+            message="Действие от доп. пользователя",
+            details={},
+        )
+        self.api.force_authenticate(additional)
+        r = self.api.get("/referrals/account/activity/")
+        self.assertEqual(r.status_code, 200)
+        self.assertGreaterEqual(r.data["count"], 1)
+        self.assertTrue(
+            any("доп. пользователя" in row.get("message", "") for row in r.data["results"])
+        )
+        extra_row = next(
+            row for row in r.data["results"] if "доп. пользователя" in row.get("message", "")
+        )
+        self.assertEqual(extra_row.get("service_label"), "MultiUserProj")
+        self.assertEqual(extra_row.get("project_id"), project.id)
+
+    def test_account_activity_after_empty_project_delete(self):
+        project = Project.objects.create(owner=self.owner, name="ToDeleteEmpty", description="")
+        self.api.force_authenticate(self.owner)
+        r_del = self.api.delete(f"/referrals/project/{project.id}/")
+        self.assertEqual(r_del.status_code, 200)
+        r = self.api.get("/referrals/account/activity/")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(any("удалён" in row.get("message", "").lower() for row in r.data["results"]))
 

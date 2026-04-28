@@ -1,8 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from referrals.services import ensure_default_owner_project
-
 from .models import CustomUser
 
 User = get_user_model()
@@ -71,7 +69,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             user.phone = phone_raw
         user.set_password(password)
         user.save()
-        ensure_default_owner_project(user)
         return user
 
 # ------------------- Логин -------------------
@@ -135,6 +132,24 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         if not (data.get("account_type") or "").strip():
             data["account_type"] = "individual"
         return data
+
+
+class AccountAdditionalUserSerializer(serializers.ModelSerializer):
+    """Краткое представление дополнительного пользователя аккаунта (без паспортных полей)."""
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            "public_id",
+            "email",
+            "username",
+            "fio",
+            "first_name",
+            "last_name",
+            "patronymic",
+            "is_active",
+            "date_joined",
+        ]
 
 
 ACCOUNT_TYPE_CHOICES = (

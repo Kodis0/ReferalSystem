@@ -28,6 +28,15 @@ class CustomUser(AbstractUser):
         db_index=True,
     )
     telegram_id = models.BigIntegerField("Telegram user id", null=True, blank=True, unique=True)
+    # Дополнительный пользователь, входящий в тот же договор/аккаунт что и владелец (отдельная учётная запись).
+    account_owner = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="account_additional_users",
+        verbose_name="владелец аккаунта",
+    )
 
     EMAIL_FIELD = "email"
     USERNAME_FIELD = "email"
@@ -68,6 +77,7 @@ class SupportTicket(models.Model):
     body = models.TextField()
     attachment_names = models.TextField(blank=True, default="")
     is_closed = models.BooleanField(default=False, db_index=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -16,6 +16,10 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import PartnerProfile, Project, Site, SiteOwnerActivityLog
 from .owner_site_activity import (
     log_integration_patch,
+    log_owner_project_created,
+    log_owner_project_deleted,
+    log_owner_project_updated,
+    log_owner_site_deleted,
     log_site_activated,
     log_site_connection_rechecked,
     log_site_created_in_project,
@@ -377,6 +381,12 @@ class ProjectOwnerCreateView(APIView):
             description=(data.get("description") or "").strip(),
             avatar_data_url=ensure_project_avatar_data_url(data.get("avatar_data_url")),
         )
+        log_owner_project_created(
+            owner=request.user,
+            actor=request.user,
+            project_name=project.name,
+            project_id=project.id,
+        )
         return Response(_owner_project_payload(project=project, sites=[]), status=status.HTTP_201_CREATED)
 
 
@@ -412,6 +422,12 @@ class ProjectOwnerDetailView(APIView):
             update_fields.append("avatar_data_url")
         if update_fields:
             project.save(update_fields=[*update_fields, "updated_at"])
+            log_owner_project_updated(
+                owner=request.user,
+                actor=request.user,
+                project_name=project.name,
+                project_id=project.id,
+            )
         sites = list(project.sites.all().order_by("-created_at", "-id"))
         return Response(_owner_project_payload(project=project, sites=sites), status=status.HTTP_200_OK)
 
@@ -426,6 +442,12 @@ class ProjectOwnerDetailView(APIView):
             )
         if project.sites.exists():
             return Response(_owner_api_error_body("project_not_empty"), status=status.HTTP_409_CONFLICT)
+        log_owner_project_deleted(
+            owner=request.user,
+            actor=request.user,
+            project_name=project.name,
+            project_id=project.id,
+        )
         project.delete()
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
@@ -496,6 +518,7 @@ class ProjectSiteOwnerCreateView(APIView):
             site = None
         if site is None:
             return Response(_owner_api_error_body("site_missing"), status=status.HTTP_404_NOT_FOUND)
+        log_owner_site_deleted(site=site, actor=request.user, via="project_child")
         site.delete()
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
@@ -659,6 +682,7 @@ class SiteOwnerIntegrationView(APIView):
         site, error = _resolve_owner_site(request)
         if error is not None:
             return error
+        log_owner_site_deleted(site=site, actor=request.user, via="integration")
         site.delete()
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
@@ -955,7 +979,52 @@ class SiteOwnerSiteActivityListView(APIView):
         except ValueError:
             page_size = 20
         page_size = max(1, min(page_size, 100))
-        qs = SiteOwnerActivityLog.objects.filter(site=site)
+        qs = SiteOwnerActivityLog.objects.filter(site=site).select_related("site", "actor")
+        date_raw = (request.query_params.get("date") or "").strip()
+        if date_raw:
+            d = parse_date(date_raw)
+            if d is not None:
+                qs = qs.filter(created_at__date=d)
+        paginator = Paginator(qs, page_size)
+        p = paginator.get_page(page)
+        return Response(
+            {
+                "results": serialize_activity_rows(p.object_list),
+                "count": paginator.count,
+                "page": p.number,
+                "page_size": page_size,
+                "num_pages": paginator.num_pages,
+            }
+        )
+
+
+def _account_activity_feed_owner(user):
+    """Activity rows are stored under the primary account; additional users share that feed."""
+    if getattr(user, "account_owner_id", None):
+        return user.account_owner
+    return user
+
+
+class SiteOwnerAccountActivityListView(APIView):
+    """
+    Paginated activity log for the whole account (projects, sites, integration).
+    Query: ``page`` (1-based), ``page_size`` (max 100), optional ``date`` (YYYY-MM-DD).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+        except ValueError:
+            page = 1
+        try:
+            page_size = int(request.query_params.get("page_size") or 20)
+        except ValueError:
+            page_size = 20
+        page_size = max(1, min(page_size, 100))
+        feed_owner = _account_activity_feed_owner(request.user)
+        qs = SiteOwnerActivityLog.objects.filter(owner=feed_owner).select_related("site", "actor")
         date_raw = (request.query_params.get("date") or "").strip()
         if date_raw:
             d = parse_date(date_raw)

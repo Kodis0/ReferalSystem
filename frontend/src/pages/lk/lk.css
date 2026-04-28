@@ -301,6 +301,17 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   background: rgba(36, 47, 61, 0.42);
 }
 
+.lk-page-scrollbar.lk-page-scrollbar_nested {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: 6px;
+  height: auto;
+  z-index: 5;
+}
+
 .lk-header__left {
   grid-column: 2;
   display: flex;
@@ -332,7 +343,7 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
 
 .lk-header__center {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   column-gap: 20px;
   min-width: 0;
@@ -677,10 +688,19 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   color: #ffffff;
 }
 
-.lk-header__support-label,
+.lk-header__support-label {
+  font: inherit;
+  color: inherit;
+}
+
 .lk-header__account-id {
   font: inherit;
   color: inherit;
+  /* Пока /me подгружается, id не меняет ширину кнопки — меньше дёрганья шапки */
+  font-variant-numeric: tabular-nums;
+  min-width: 7ch;
+  display: inline-block;
+  text-align: left;
 }
 
 .lk-header__support-icon,
