@@ -2627,11 +2627,19 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
         if (clearExisting) {
           setBuilderBlocks([]);
           setSelectedBuilderBlockId("");
-          for (const mode of REFERRAL_BUILDER_PREVIEW_MODES) {
-            if (mode.id !== normalizedPreviewMode) {
-              void loadPreviewModeInBackground(nextUrl, mode.id);
+          if (normalized.visualMode === "screenshot" && normalized.visualImportAvailable !== false) {
+            for (const mode of REFERRAL_BUILDER_PREVIEW_MODES) {
+              if (mode.id !== normalizedPreviewMode) {
+                void loadPreviewModeInBackground(nextUrl, mode.id);
+              }
             }
           }
+        }
+        if (normalized.visualImportAvailable === false || normalized.visualMode !== "screenshot") {
+          setScanError(
+            normalized.detail ||
+              "Визуальный импорт недоступен на сервере. Сейчас показана только текстовая карта секций.",
+          );
         }
         setScanStatus("success");
       } catch (error) {

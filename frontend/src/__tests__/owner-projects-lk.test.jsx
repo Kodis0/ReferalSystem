@@ -3070,6 +3070,7 @@ describe("Canonical site identity contract", () => {
     expect(screen.queryByTestId("imported-site-block-node")).not.toBeInTheDocument();
     expect(screen.queryByTestId("screenshot-site-block-node")).not.toBeInTheDocument();
     expect(screen.getByTestId("referral-builder-preview-node")).toBeInTheDocument();
+    expect(screen.getByText("Visual import is not available on this server")).toBeInTheDocument();
   });
 
   it("shows a friendly scan error without the referral preview placeholder", async () => {

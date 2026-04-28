@@ -10,7 +10,7 @@
 # deploy user: SSH + git sync; passwordless sudo only for nginx/systemctl (recommended).
 # Gunicorn runs as www-data (see deploy/systemd/lumoref-gunicorn.service).
 #
-# Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH
+# Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH, PLAYWRIGHT_INSTALL_ARGS
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ PIP="${VENV_PATH}/bin/pip"
 GUNICORN="${VENV_PATH}/bin/gunicorn"
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-lumoref}"
 SYSTEMD_UNIT="${SYSTEMD_UNIT:-lumoref-gunicorn.service}"
-PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:-chromium}"
+PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:---with-deps chromium}"
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Python venv not found at ${VENV_PATH}. Create it and install requirements first." >&2
