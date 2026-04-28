@@ -1,5 +1,7 @@
+import base64
 import hashlib
 import hmac
+import json
 import time
 from unittest.mock import patch
 
@@ -393,6 +395,28 @@ class TelegramLoginFlowTests(TestCase):
         )
         self.assertEqual(r.status_code, 302)
         self.assertIn("tg_error=account_disabled", r["Location"])
+
+    def test_telegram_widget_post_returns_tokens_json(self):
+        bot_token = "123456:ABC-DEF"
+        auth_date = int(time.time())
+        obj = {"id": 101, "first_name": "Widget", "auth_date": auth_date}
+        sign_payload = {k: str(v) for k, v in obj.items()}
+        digest = _telegram_login_hash(bot_token, sign_payload)
+        obj["hash"] = digest
+        raw_json = json.dumps(obj)
+        b64 = base64.urlsafe_b64encode(raw_json.encode("utf-8")).decode("ascii").rstrip("=")
+
+        c = Client()
+        r = c.post(
+            "/users/token/telegram/widget/",
+            data=json.dumps({"tgAuthResult": b64}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+        payload = json.loads(r.content.decode())
+        self.assertIn("access", payload)
+        self.assertIn("refresh", payload)
+        self.assertEqual(User.objects.get(telegram_id=101).email, "tg101@telegram.noreply")
 
 
 class SupportTicketApiTests(TestCase):

@@ -48,6 +48,8 @@ function telegramErrorMessageRu(code) {
   const byCode = {
     tg_oauth_not_configured: "Вход через Telegram не настроен на сервере.",
     tg_auth_invalid: "Не удалось подтвердить вход Telegram. Откройте вход снова.",
+    tg_widget_payload_missing: "Не получены данные Telegram. Обновите страницу и попробуйте снова.",
+    tg_widget_payload_invalid: "Некорректный ответ Telegram. Попробуйте войти снова.",
     account_disabled: "Аккаунт отключён.",
   };
   return byCode[code] || "";

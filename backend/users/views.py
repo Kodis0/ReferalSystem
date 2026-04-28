@@ -39,7 +39,13 @@ from .serializers import (
     RegisterSerializer,
     SiteCtaJoinSerializer,
 )
-from .telegram_auth import TELEGRAM_OAUTH_AUTH_URL, parse_bot_id, verify_telegram_login
+from .telegram_auth import (
+    TELEGRAM_OAUTH_AUTH_URL,
+    decode_telegram_widget_tg_auth_result,
+    parse_bot_id,
+    telegram_widget_auth_to_verify_dict,
+    verify_telegram_login,
+)
 from .vk_oauth import (
     VK_ID_AUTHORIZE_URL,
     exchange_vk_oauth_code,
@@ -433,6 +439,47 @@ def _frontend_login_base():
     return (getattr(django_settings, "FRONTEND_URL", None) or "http://localhost:3000").strip().rstrip("/")
 
 
+def _telegram_login_resolve_user(request, data: dict[str, str]):
+    """
+    Проверенные строковые поля Telegram (как у GET callback).
+    Возвращает (user, None) или (None, error_code).
+    """
+    raw_id = (data.get("id") or "").strip()
+    try:
+        telegram_id = int(raw_id)
+    except (TypeError, ValueError):
+        return None, "tg_auth_invalid"
+    if telegram_id <= 0:
+        return None, "tg_auth_invalid"
+
+    first_name = ((data.get("first_name") or "").strip())[:150]
+    last_name = ((data.get("last_name") or "").strip())[:150]
+    username_raw = (data.get("username") or "").strip()
+    username = username_raw[:150] if username_raw else ""
+
+    user, created = CustomUser.objects.get_or_create(
+        telegram_id=telegram_id,
+        defaults={
+            "email": f"tg{telegram_id}@telegram.noreply",
+            "first_name": first_name,
+            "last_name": last_name,
+            "username": username,
+        },
+    )
+    if created:
+        user.set_unusable_password()
+        user.save()
+
+    if not user.is_active:
+        return None, "account_disabled"
+
+    link_session_attributions_to_user(
+        session_key=request.session.session_key,
+        user=user,
+    )
+    return user, None
+
+
 def _vk_oauth_redirect_uri(request):
     fixed = (getattr(django_settings, "VK_OAUTH_REDIRECT_URI", None) or "").strip()
     if fixed:
@@ -617,39 +664,11 @@ class TelegramLoginCallbackView(View):
             logger.warning("Telegram login callback: invalid signature")
             return HttpResponseRedirect(f"{fe}/login?tg_error=tg_auth_invalid")
 
-        raw_id = (data.get("id") or "").strip()
-        try:
-            telegram_id = int(raw_id)
-        except (TypeError, ValueError):
+        user, err = _telegram_login_resolve_user(request, data)
+        if err:
+            if err == "account_disabled":
+                return HttpResponseRedirect(f"{fe}/login?tg_error=account_disabled")
             return HttpResponseRedirect(f"{fe}/login?tg_error=tg_auth_invalid")
-        if telegram_id <= 0:
-            return HttpResponseRedirect(f"{fe}/login?tg_error=tg_auth_invalid")
-
-        first_name = ((data.get("first_name") or "").strip())[:150]
-        last_name = ((data.get("last_name") or "").strip())[:150]
-        username_raw = (data.get("username") or "").strip()
-        username = username_raw[:150] if username_raw else ""
-
-        user, created = CustomUser.objects.get_or_create(
-            telegram_id=telegram_id,
-            defaults={
-                "email": f"tg{telegram_id}@telegram.noreply",
-                "first_name": first_name,
-                "last_name": last_name,
-                "username": username,
-            },
-        )
-        if created:
-            user.set_unusable_password()
-            user.save()
-
-        if not user.is_active:
-            return HttpResponseRedirect(f"{fe}/login?tg_error=account_disabled")
-
-        link_session_attributions_to_user(
-            session_key=request.session.session_key,
-            user=user,
-        )
 
         refresh = RefreshToken.for_user(user)
         access_jwt = str(refresh.access_token)
@@ -663,3 +682,78 @@ class TelegramLoginCallbackView(View):
             }
         )
         return HttpResponseRedirect(f"{fe}/login#{frag}")
+
+
+class TelegramWidgetLoginView(APIView):
+    """
+    Виджет Telegram Login отдаёт #tgAuthResult=<base64(json)> на фронт.
+    POST тем же base64: проверка hash → JWT (как POST /users/token/google/).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = (getattr(django_settings, "TELEGRAM_BOT_TOKEN", None) or "").strip()
+        if not token:
+            return Response(
+                {
+                    "detail": "Вход через Telegram не настроен на сервере.",
+                    "code": "tg_oauth_not_configured",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        raw_b64 = request.data.get("tgAuthResult") or request.data.get("tg_auth_result")
+        if not raw_b64 or not isinstance(raw_b64, str):
+            return Response(
+                {
+                    "detail": "Нужен tgAuthResult от Telegram.",
+                    "code": "tg_widget_payload_missing",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            obj = decode_telegram_widget_tg_auth_result(raw_b64.strip())
+        except ValueError:
+            logger.warning("Telegram widget: decode payload failed", exc_info=True)
+            return Response(
+                {
+                    "detail": "Некорректные данные Telegram.",
+                    "code": "tg_widget_payload_invalid",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = telegram_widget_auth_to_verify_dict(obj)
+        if not verify_telegram_login(data, token):
+            logger.warning("Telegram widget: invalid signature")
+            return Response(
+                {
+                    "detail": "Не удалось подтвердить вход Telegram.",
+                    "code": "tg_auth_invalid",
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        user, err = _telegram_login_resolve_user(request, data)
+        if err:
+            if err == "account_disabled":
+                return Response(
+                    {"detail": "Аккаунт отключён.", "code": "account_disabled"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return Response(
+                {"detail": "Некорректные данные Telegram.", "code": err},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "user": CurrentUserSerializer(user).data,
+            },
+            status=status.HTTP_200_OK,
+        )

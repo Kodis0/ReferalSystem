@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import hmac
+import json
 import secrets
 import time
-from typing import Mapping
+from typing import Any, Mapping
 
 TELEGRAM_OAUTH_AUTH_URL = "https://oauth.telegram.org/auth"
 MAX_AUTH_AGE_SEC = 86400
@@ -44,3 +47,36 @@ def verify_telegram_login(auth_data: Mapping[str, str], bot_token: str) -> bool:
     secret_key = hashlib.sha256(bot_token.encode()).digest()
     digest = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
     return secrets.compare_digest(digest, rh)
+
+
+def decode_telegram_widget_tg_auth_result(b64: str) -> dict[str, Any]:
+    """
+    Декодирует значение hash-параметра tgAuthResult (base64 JSON из Telegram Login Widget).
+    """
+    s = (b64 or "").strip()
+    if not s:
+        raise ValueError("empty_payload")
+    pad = (-len(s)) % 4
+    if pad:
+        s += "=" * pad
+    try:
+        raw = base64.urlsafe_b64decode(s)
+    except (binascii.Error, ValueError):
+        raw = base64.standard_b64decode(s)
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise ValueError("invalid_json") from e
+    if not isinstance(data, dict):
+        raise ValueError("not_object")
+    return data
+
+
+def telegram_widget_auth_to_verify_dict(obj: dict[str, Any]) -> dict[str, str]:
+    """Те же строковые поля, что у GET-callback (для verify_telegram_login)."""
+    out: dict[str, str] = {}
+    for k, v in obj.items():
+        if v is None:
+            continue
+        out[k] = str(v)
+    return out

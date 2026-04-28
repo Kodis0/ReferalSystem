@@ -4,8 +4,8 @@ import { API_ENDPOINTS } from "../config/api";
 import { persistReturningUserWelcome } from "../pages/login/login";
 
 /**
- * JWT VK/Telegram приходят во fragment. Обрабатываем на любом маршруте (в т.ч. с «/»),
- * без navigate('/login#...') — длинные JWT в hash с `&` ломали client-side переход.
+ * 1) Редирект с бэка: #oauth=vk|tg&access_token&refresh_token
+ * 2) Telegram Login Widget (часто на главной): #tgAuthResult=<base64 JSON> — меняем на POST /token/telegram/widget/
  */
 export default function OAuthVkTgFragmentHandler() {
   const location = useLocation();
@@ -13,8 +13,51 @@ export default function OAuthVkTgFragmentHandler() {
   const lastHandledRawRef = useRef(null);
 
   useEffect(() => {
-    const raw = (location.hash || "").replace(/^#/, "") || (typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "");
+    const raw =
+      (location.hash || "").replace(/^#/, "") ||
+      (typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "");
     if (!raw) return undefined;
+
+    /* Telegram Login Widget — не наш JWT во fragment */
+    if (raw.startsWith("tgAuthResult=")) {
+      const b64 = raw.slice("tgAuthResult=".length);
+      if (!b64 || lastHandledRawRef.current === `w:${b64}`) return undefined;
+      lastHandledRawRef.current = `w:${b64}`;
+
+      const path = typeof window !== "undefined" ? window.location.pathname : "";
+      const search = typeof window !== "undefined" ? window.location.search : "";
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `${path}${search}`);
+      }
+
+      (async () => {
+        try {
+          const response = await fetch(API_ENDPOINTS.tokenTelegramWidget, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tgAuthResult: b64 }),
+            credentials: "include",
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            const code = typeof data.code === "string" ? data.code : "tg_auth_invalid";
+            navigate(`/login?tg_error=${encodeURIComponent(code)}`, { replace: true });
+            return;
+          }
+          localStorage.setItem("access_token", data.access);
+          localStorage.setItem("refresh_token", data.refresh);
+          if (data.user) {
+            localStorage.setItem("user", JSON.stringify(data.user));
+            persistReturningUserWelcome(data.user);
+          }
+          navigate("/lk/partner", { replace: true });
+        } catch {
+          navigate("/login?tg_error=tg_auth_invalid", { replace: true });
+        }
+      })();
+
+      return undefined;
+    }
 
     const hp = new URLSearchParams(raw);
     const oauth = hp.get("oauth");
