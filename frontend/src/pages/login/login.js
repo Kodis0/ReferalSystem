@@ -148,6 +148,20 @@ function pickLoginDisplayName(user) {
   return "";
 }
 
+/** Для VK/TG OAuth вне страницы Login — см. `OAuthVkTgFragmentHandler`. */
+export function persistReturningUserWelcome(user) {
+  if (!user || typeof user !== "object") return;
+  const displayName = pickLoginDisplayName(user);
+  try {
+    localStorage.setItem(LOGIN_RETURNING_KEY, "1");
+    if (displayName) {
+      localStorage.setItem(LOGIN_DISPLAY_NAME_KEY, displayName);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function PasskeyIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -303,15 +317,7 @@ function Login() {
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
-      const displayName = pickLoginDisplayName(data.user);
-      try {
-        localStorage.setItem(LOGIN_RETURNING_KEY, "1");
-        if (displayName) {
-          localStorage.setItem(LOGIN_DISPLAY_NAME_KEY, displayName);
-        }
-      } catch {
-        /* ignore */
-      }
+      persistReturningUserWelcome(data.user);
 
       setMessage("✅ Вход выполнен!");
       navigate("/lk/partner");
@@ -336,61 +342,6 @@ function Login() {
     setSearchParams(next, { replace: true });
     return undefined;
   }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const rawHash = (window.location.hash || "").replace(/^#/, "");
-    if (!rawHash) return undefined;
-    const hp = new URLSearchParams(rawHash);
-    const oauth = hp.get("oauth");
-    if (oauth !== "vk" && oauth !== "tg") return undefined;
-    const access = hp.get("access_token");
-    const refresh = hp.get("refresh_token");
-    if (!access || !refresh) return undefined;
-
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setMessage("");
-
-      localStorage.setItem("access_token", access);
-      localStorage.setItem("refresh_token", refresh);
-      try {
-        const response = await fetch(API_ENDPOINTS.currentUser, {
-          headers: { Authorization: `Bearer ${access}` },
-          credentials: "include",
-        });
-        if (response.ok) {
-          const user = await response.json();
-          if (!cancelled && user && typeof user === "object") {
-            localStorage.setItem("user", JSON.stringify(user));
-            const displayName = pickLoginDisplayName(user);
-            try {
-              localStorage.setItem(LOGIN_RETURNING_KEY, "1");
-              if (displayName) {
-                localStorage.setItem(LOGIN_DISPLAY_NAME_KEY, displayName);
-              }
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-      } catch {
-        /* still navigate; LK may refetch user */
-      }
-      if (!cancelled) {
-        setMessage("✅ Вход выполнен!");
-        navigate("/lk/partner");
-      }
-      setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate]);
 
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
@@ -498,15 +449,7 @@ function Login() {
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
-      const displayName = pickLoginDisplayName(data.user);
-      try {
-        localStorage.setItem(LOGIN_RETURNING_KEY, "1");
-        if (displayName) {
-          localStorage.setItem(LOGIN_DISPLAY_NAME_KEY, displayName);
-        }
-      } catch {
-        /* ignore quota / private mode */
-      }
+      persistReturningUserWelcome(data.user);
 
       setMessage("✅ Вход выполнен!");
       setEmail("");
