@@ -6,10 +6,12 @@ import LK from '../lk/lk';
 import SiteConnectPage from "../site-connect/SiteConnectPage";
 import ProtectedRoute from "../../components/protectedroute";
 import ReferralCaptureOnMount from "../../components/ReferralCaptureOnMount";
+import OAuthLoginHashRedirect from "../../components/OAuthLoginHashRedirect";
 
 function App() {
   return (
     <BrowserRouter>
+      <OAuthLoginHashRedirect />
       <ReferralCaptureOnMount />
       <Routes>
         <Route path="/" element={<Home />} />
