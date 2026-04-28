@@ -31,6 +31,11 @@ SYSTEMD_UNIT="${SYSTEMD_UNIT:-lumoref-gunicorn.service}"
 PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:-chromium}"
 PLAYWRIGHT_INSTALL_WITH_DEPS="${PLAYWRIGHT_INSTALL_WITH_DEPS:-0}"
 PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-${APP_ROOT}/.cache/ms-playwright}"
+BACKEND_ENV_FILE="${APP_ROOT}/backend/.env"
+SUDO_AVAILABLE=0
+if sudo -n true 2>/dev/null; then
+  SUDO_AVAILABLE=1
+fi
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Python venv not found at ${VENV_PATH}. Create it and install requirements first." >&2
@@ -51,7 +56,7 @@ echo "==> Backend: Playwright browser cache (${PLAYWRIGHT_BROWSERS_PATH})"
 mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
 chmod 755 "$(dirname "${PLAYWRIGHT_BROWSERS_PATH}")" "${PLAYWRIGHT_BROWSERS_PATH}"
 if [[ "${PLAYWRIGHT_INSTALL_WITH_DEPS}" == "1" ]]; then
-  if sudo -n true 2>/dev/null; then
+  if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
     PLAYWRIGHT_INSTALL_ARGS="--with-deps ${PLAYWRIGHT_INSTALL_ARGS}"
   else
     echo "    PLAYWRIGHT_INSTALL_WITH_DEPS=1 requested, but passwordless sudo is unavailable; installing browser only."
@@ -62,10 +67,40 @@ echo "==> Backend: Playwright browsers (${PLAYWRIGHT_INSTALL_ARGS})"
 PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH}" "${PYTHON}" -m playwright install ${PLAYWRIGHT_INSTALL_ARGS}
 chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"
 
+echo "==> Backend: persist Playwright runtime path"
+if [[ -f "${BACKEND_ENV_FILE}" ]]; then
+  BACKEND_ENV_FILE="${BACKEND_ENV_FILE}" PLAYWRIGHT_BROWSERS_PATH_VALUE="${PLAYWRIGHT_BROWSERS_PATH}" "${PYTHON}" - <<'PY'
+from pathlib import Path
+import os
+
+path = Path(os.environ["BACKEND_ENV_FILE"])
+key = "PLAYWRIGHT_BROWSERS_PATH"
+value = os.environ["PLAYWRIGHT_BROWSERS_PATH_VALUE"]
+lines = path.read_text(encoding="utf-8").splitlines()
+out = []
+replaced = False
+for line in lines:
+    if line.strip().startswith(f"{key}="):
+        if not replaced:
+            out.append(f"{key}={value}")
+            replaced = True
+        continue
+    out.append(line)
+if not replaced:
+    if out and out[-1].strip():
+        out.append("")
+    out.append(f"{key}={value}")
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+else
+  echo "    ${BACKEND_ENV_FILE} not found; create it from deploy/lumoref-backend.env.template before production deploy." >&2
+  exit 1
+fi
+
 # SPA needs REACT_APP_* at build time. If CI did not pass REACT_APP_GOOGLE_CLIENT_ID, reuse the
 # same Web client ID from backend/.env (single place to maintain on the server).
-if [[ -z "${REACT_APP_GOOGLE_CLIENT_ID}" ]] && [[ -f "${APP_ROOT}/backend/.env" ]]; then
-  _gline="$(grep -E '^[[:space:]]*GOOGLE_OAUTH_CLIENT_ID=' "${APP_ROOT}/backend/.env" 2>/dev/null | tail -n1 || true)"
+if [[ -z "${REACT_APP_GOOGLE_CLIENT_ID}" ]] && [[ -f "${BACKEND_ENV_FILE}" ]]; then
+  _gline="$(grep -E '^[[:space:]]*GOOGLE_OAUTH_CLIENT_ID=' "${BACKEND_ENV_FILE}" 2>/dev/null | tail -n1 || true)"
   if [[ -n "${_gline}" ]]; then
     REACT_APP_GOOGLE_CLIENT_ID="${_gline#*=}"
     REACT_APP_GOOGLE_CLIENT_ID="${REACT_APP_GOOGLE_CLIENT_ID//$'\r'/}"
@@ -109,13 +144,17 @@ NGINX_SRC="${APP_ROOT}/deploy/nginx/${NGINX_SITE_NAME}.conf"
 NGINX_DST="/etc/nginx/sites-available/${NGINX_SITE_NAME}.conf"
 if [[ -f "${NGINX_SRC}" ]]; then
   if ! cmp -s "${NGINX_SRC}" "${NGINX_DST}" 2>/dev/null; then
-    echo "    Copying nginx site (changed or first install)"
-    sudo cp "${NGINX_SRC}" "${NGINX_DST}"
-    if [[ ! -L "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf" ]] && [[ ! -e "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf" ]]; then
-      sudo ln -s "/etc/nginx/sites-available/${NGINX_SITE_NAME}.conf" "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf"
+    if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+      echo "    Copying nginx site (changed or first install)"
+      sudo cp "${NGINX_SRC}" "${NGINX_DST}"
+      if [[ ! -L "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf" ]] && [[ ! -e "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf" ]]; then
+        sudo ln -s "/etc/nginx/sites-available/${NGINX_SITE_NAME}.conf" "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}.conf"
+      fi
+      sudo nginx -t
+      sudo systemctl reload nginx
+    else
+      echo "    Nginx site changed, but passwordless sudo is unavailable; skipping nginx update."
     fi
-    sudo nginx -t
-    sudo systemctl reload nginx
   else
     echo "    Nginx site unchanged, skip reload"
   fi
@@ -128,9 +167,13 @@ SYSTEMD_SRC="${APP_ROOT}/deploy/systemd/${SYSTEMD_UNIT}"
 SYSTEMD_DST="/etc/systemd/system/${SYSTEMD_UNIT}"
 if [[ -f "${SYSTEMD_SRC}" ]]; then
   if ! cmp -s "${SYSTEMD_SRC}" "${SYSTEMD_DST}" 2>/dev/null; then
-    echo "    Copying systemd unit (changed or first install)"
-    sudo cp "${SYSTEMD_SRC}" "${SYSTEMD_DST}"
-    sudo systemctl daemon-reload
+    if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+      echo "    Copying systemd unit (changed or first install)"
+      sudo cp "${SYSTEMD_SRC}" "${SYSTEMD_DST}"
+      sudo systemctl daemon-reload
+    else
+      echo "    Systemd unit changed, but passwordless sudo is unavailable; using backend/.env for runtime env and skipping unit update."
+    fi
   else
     echo "    Systemd unit unchanged, skip daemon-reload"
   fi
@@ -140,7 +183,12 @@ fi
 
 echo "==> Gunicorn: restart"
 if systemctl is-active --quiet "${SYSTEMD_UNIT}" 2>/dev/null; then
-  sudo systemctl restart "${SYSTEMD_UNIT}"
+  if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+    sudo systemctl restart "${SYSTEMD_UNIT}"
+  else
+    echo "    WARNING: ${SYSTEMD_UNIT} is active, but passwordless sudo is unavailable; backend was not restarted."
+    echo "    Run manually on the server: sudo systemctl restart ${SYSTEMD_UNIT}"
+  fi
 else
   echo "    Unit ${SYSTEMD_UNIT} not active — start manually after first-time setup"
 fi
