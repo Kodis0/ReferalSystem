@@ -39,6 +39,14 @@ from .serializers import (
     RegisterSerializer,
     SiteCtaJoinSerializer,
 )
+from .vk_oauth import (
+    VK_ID_AUTHORIZE_URL,
+    email_from_vk_id_token_response,
+    exchange_vk_oauth_code,
+    fetch_vk_id_user_email,
+    generate_pkce_pair,
+    parse_vk_id_callback_query,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -425,127 +433,6 @@ def _frontend_login_base():
     return (getattr(django_settings, "FRONTEND_URL", None) or "http://localhost:3000").strip().rstrip("/")
 
 
-def _github_oauth_redirect_uri(request):
-    fixed = (getattr(django_settings, "GITHUB_OAUTH_REDIRECT_URI", None) or "").strip()
-    if fixed:
-        return fixed
-    return request.build_absolute_uri(reverse("github_oauth_callback"))
-
-
-class GitHubOAuthStartView(View):
-    """
-    Начало OAuth: редирект на github.com с state в сессии бэкенда (localhost:8000).
-    """
-
-    def get(self, request):
-        fe = _frontend_login_base()
-        client_id = (getattr(django_settings, "GITHUB_OAUTH_CLIENT_ID", None) or "").strip()
-        if not client_id:
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_not_configured")
-
-        redirect_uri = _github_oauth_redirect_uri(request)
-        state = secrets.token_urlsafe(32)
-        request.session["github_oauth_state"] = state
-        request.session.modified = True
-
-        q = urllib.parse.urlencode(
-            {
-                "client_id": client_id,
-                "redirect_uri": redirect_uri,
-                "scope": "user:email",
-                "state": state,
-            }
-        )
-        return HttpResponseRedirect(f"https://github.com/login/oauth/authorize?{q}")
-
-
-class GitHubOAuthCallbackView(View):
-    """
-    Callback GitHub: обмен code → токен GitHub → подтверждённый email → наш JWT → редирект на /login#...
-    """
-
-    def get(self, request):
-        fe = _frontend_login_base()
-
-        if request.GET.get("error") == "access_denied":
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_denied")
-
-        code = request.GET.get("code")
-        state = request.GET.get("state")
-        if not code or not state or not isinstance(code, str) or not isinstance(state, str):
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_invalid_callback")
-
-        expected = request.session.get("github_oauth_state")
-        if not expected or state != expected:
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_state_invalid")
-
-        try:
-            del request.session["github_oauth_state"]
-            request.session.modified = True
-        except KeyError:
-            pass
-
-        client_id = (getattr(django_settings, "GITHUB_OAUTH_CLIENT_ID", None) or "").strip()
-        client_secret = (getattr(django_settings, "GITHUB_OAUTH_CLIENT_SECRET", None) or "").strip()
-        if not client_id or not client_secret:
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_not_configured")
-
-        redirect_uri = _github_oauth_redirect_uri(request)
-
-        from .github_oauth import exchange_github_oauth_code, github_primary_verified_email
-
-        try:
-            token_payload = exchange_github_oauth_code(
-                code=code.strip(),
-                client_id=client_id,
-                client_secret=client_secret,
-                redirect_uri=redirect_uri,
-            )
-        except (requests.RequestException, ValueError):
-            logger.exception("GitHub OAuth token exchange failed")
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_token_exchange_failed")
-
-        gh_access = token_payload.get("access_token")
-        if not gh_access or not isinstance(gh_access, str):
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_token_exchange_failed")
-
-        try:
-            email_raw = github_primary_verified_email(github_access_token=gh_access.strip())
-        except requests.RequestException:
-            logger.exception("GitHub user/emails request failed")
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_email_fetch_failed")
-
-        if not email_raw:
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_email_missing")
-
-        email = email_raw.strip()
-        try:
-            user = CustomUser.objects.get(email__iexact=email)
-        except CustomUser.DoesNotExist:
-            return HttpResponseRedirect(f"{fe}/login?github_error=github_email_not_registered")
-
-        if not user.is_active:
-            return HttpResponseRedirect(f"{fe}/login?github_error=account_disabled")
-
-        link_session_attributions_to_user(
-            session_key=request.session.session_key,
-            user=user,
-        )
-
-        refresh = RefreshToken.for_user(user)
-        access_jwt = str(refresh.access_token)
-        refresh_jwt = str(refresh)
-
-        frag = urllib.parse.urlencode(
-            {
-                "oauth": "github",
-                "access_token": access_jwt,
-                "refresh_token": refresh_jwt,
-            }
-        )
-        return HttpResponseRedirect(f"{fe}/login#{frag}")
-
-
 def _vk_oauth_redirect_uri(request):
     fixed = (getattr(django_settings, "VK_OAUTH_REDIRECT_URI", None) or "").strip()
     if fixed:
@@ -554,7 +441,7 @@ def _vk_oauth_redirect_uri(request):
 
 
 class VkOAuthStartView(View):
-    """Начало OAuth VK: редирект на oauth.vk.com, state в сессии бэкенда."""
+    """Начало VK ID: редирект на id.vk.com (PKCE), state и code_verifier в сессии."""
 
     def get(self, request):
         fe = _frontend_login_base()
@@ -564,55 +451,66 @@ class VkOAuthStartView(View):
 
         redirect_uri = _vk_oauth_redirect_uri(request)
         state = secrets.token_urlsafe(32)
+
+        code_verifier, code_challenge = generate_pkce_pair()
         request.session["vk_oauth_state"] = state
+        request.session["vk_code_verifier"] = code_verifier
         request.session.modified = True
 
         q = urllib.parse.urlencode(
             {
-                "client_id": app_id,
-                "display": "page",
-                "redirect_uri": redirect_uri,
-                "scope": "email",
                 "response_type": "code",
+                "client_id": app_id,
+                "scope": "email",
+                "redirect_uri": redirect_uri,
                 "state": state,
-                "v": "5.199",
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
             }
         )
-        return HttpResponseRedirect(f"https://oauth.vk.com/authorize?{q}")
+        return HttpResponseRedirect(f"{VK_ID_AUTHORIZE_URL}?{q}")
 
 
 class VkOAuthCallbackView(View):
-    """Callback VK: code → access_token (и email при scope email) → JWT → редирект на /login#..."""
+    """Callback VK ID: code + PKCE + device_id → токены → email → JWT → /login#..."""
 
     def get(self, request):
         fe = _frontend_login_base()
 
-        if request.GET.get("error") == "access_denied":
+        parsed = parse_vk_id_callback_query(request)
+        if parsed.get("error") == "access_denied":
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_denied")
 
-        code = request.GET.get("code")
-        state = request.GET.get("state")
+        code = parsed.get("code")
+        state = parsed.get("state")
+        device_id = parsed.get("device_id")
         if not code or not state or not isinstance(code, str) or not isinstance(state, str):
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_invalid_callback")
+
+        if not device_id:
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_missing_device_id")
 
         expected = request.session.get("vk_oauth_state")
         if not expected or state != expected:
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_state_invalid")
 
+        code_verifier = request.session.get("vk_code_verifier")
+        if not code_verifier or not isinstance(code_verifier, str):
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_state_invalid")
+
         try:
             del request.session["vk_oauth_state"]
+            del request.session["vk_code_verifier"]
             request.session.modified = True
         except KeyError:
             pass
 
         app_id = (getattr(django_settings, "VK_OAUTH_APP_ID", None) or "").strip()
         client_secret = (getattr(django_settings, "VK_OAUTH_CLIENT_SECRET", None) or "").strip()
-        if not app_id or not client_secret:
+        if not app_id:
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_not_configured")
 
         redirect_uri = _vk_oauth_redirect_uri(request)
-
-        from .vk_oauth import exchange_vk_oauth_code
 
         try:
             token_payload = exchange_vk_oauth_code(
@@ -620,16 +518,26 @@ class VkOAuthCallbackView(View):
                 app_id=app_id,
                 client_secret=client_secret,
                 redirect_uri=redirect_uri,
+                code_verifier=code_verifier.strip(),
+                device_id=device_id.strip(),
+                state=state.strip(),
             )
         except (requests.RequestException, ValueError):
-            logger.exception("VK OAuth token exchange failed")
+            logger.exception("VK ID token exchange failed")
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
 
         vk_access = token_payload.get("access_token")
         if not vk_access or not isinstance(vk_access, str):
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
 
-        email_raw = token_payload.get("email")
+        email_raw = email_from_vk_id_token_response(token_payload)
+        if not email_raw:
+            try:
+                email_raw = fetch_vk_id_user_email(access_token=vk_access.strip())
+            except requests.RequestException:
+                logger.exception("VK ID user_info request failed")
+                return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_fetch_failed")
+
         if not email_raw or not isinstance(email_raw, str):
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_missing")
 
