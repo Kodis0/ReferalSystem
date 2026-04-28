@@ -10,7 +10,8 @@
 # deploy user: SSH + git sync; passwordless sudo only for nginx/systemctl (recommended).
 # Gunicorn runs as www-data (see deploy/systemd/lumoref-gunicorn.service).
 #
-# Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH, PLAYWRIGHT_INSTALL_ARGS
+# Env overrides: VENV_PATH, REACT_APP_API_URL, REACT_APP_GOOGLE_CLIENT_ID, NGINX_SITE_NAME, SYSTEMD_UNIT, DEPLOY_MAIN_BRANCH,
+# PLAYWRIGHT_INSTALL_ARGS, PLAYWRIGHT_INSTALL_WITH_DEPS
 
 set -euo pipefail
 
@@ -27,7 +28,8 @@ PIP="${VENV_PATH}/bin/pip"
 GUNICORN="${VENV_PATH}/bin/gunicorn"
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-lumoref}"
 SYSTEMD_UNIT="${SYSTEMD_UNIT:-lumoref-gunicorn.service}"
-PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:---with-deps chromium}"
+PLAYWRIGHT_INSTALL_ARGS="${PLAYWRIGHT_INSTALL_ARGS:-chromium}"
+PLAYWRIGHT_INSTALL_WITH_DEPS="${PLAYWRIGHT_INSTALL_WITH_DEPS:-0}"
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Python venv not found at ${VENV_PATH}. Create it and install requirements first." >&2
@@ -44,6 +46,14 @@ git reset --hard "origin/${MAIN_BRANCH}"
 echo "==> Backend: dependencies"
 "${PIP}" install -r backend/requirements.txt
 
+if [[ "${PLAYWRIGHT_INSTALL_WITH_DEPS}" == "1" ]]; then
+  if sudo -n true 2>/dev/null; then
+    PLAYWRIGHT_INSTALL_ARGS="--with-deps ${PLAYWRIGHT_INSTALL_ARGS}"
+  else
+    echo "    PLAYWRIGHT_INSTALL_WITH_DEPS=1 requested, but passwordless sudo is unavailable; installing browser only."
+    echo "    To install Linux deps, run manually on the server: sudo ${PYTHON} -m playwright install-deps chromium"
+  fi
+fi
 echo "==> Backend: Playwright browsers (${PLAYWRIGHT_INSTALL_ARGS})"
 "${PYTHON}" -m playwright install ${PLAYWRIGHT_INSTALL_ARGS}
 
