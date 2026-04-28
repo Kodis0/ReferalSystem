@@ -281,3 +281,9 @@ ORDER_WEBHOOK_DEBUG_LOGGING = (
 
 # Google Sign-In (GIS): Web client ID (same value as REACT_APP_GOOGLE_CLIENT_ID on the SPA).
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+
+# GitHub OAuth App (Authorization callback URL must match .../users/token/github/callback/).
+GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "").strip()
+GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "").strip()
+# Optional: fixed callback URL if it differs from request.build_absolute_uri (proxies / custom domains).
+GITHUB_OAUTH_REDIRECT_URI = os.getenv("GITHUB_OAUTH_REDIRECT_URI", "").strip()

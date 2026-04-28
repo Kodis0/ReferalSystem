@@ -71,6 +71,26 @@ _PROJECT_AVATAR_PALETTES = (
     ("#082F49", "#1D4ED8", "#0F3D91", "#2563EB"),
 )
 DEFAULT_OWNER_PROJECT_NAME = "Общий проект"
+
+# Предустановленная иконка «Общий проект» (бренд LUMO / Frame 18); остальные проекты — generate_project_avatar_data_url().
+_DEFAULT_OWNER_PROJECT_AVATAR_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 1078 1078" fill="none">
+<g clip-path="url(#clip0_lumo_default_owner)">
+<rect width="1078" height="1078" rx="539" fill="#24029D"/>
+<rect x="539" y="672" width="591" height="591" rx="295.5" fill="#7177F8"/>
+<rect x="-338" y="-89" width="836" height="836" rx="418" fill="#7177F8"/>
+<rect x="725" y="43" width="591" height="591" rx="295.5" fill="#7177F8"/>
+</g>
+<defs>
+<clipPath id="clip0_lumo_default_owner">
+<rect width="1078" height="1078" rx="539" fill="white"/>
+</clipPath>
+</defs>
+</svg>"""
+
+
+def default_owner_project_avatar_data_url() -> str:
+    encoded = base64.b64encode(_DEFAULT_OWNER_PROJECT_AVATAR_SVG.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
     {
         "display_name",
@@ -224,11 +244,14 @@ def ensure_project_avatar_data_url(value: Any) -> str:
 
 
 def persist_project_avatar_if_empty(project: Project) -> str:
-    """Return stored avatar URL; if empty, assign a generated SVG and persist (legacy default projects)."""
+    """Return stored avatar URL; if empty, assign preset (default project) or generated SVG and persist."""
     raw = project.avatar_data_url.strip() if isinstance(project.avatar_data_url, str) else ""
     if raw:
         return raw
-    next_url = ensure_project_avatar_data_url("")
+    if getattr(project, "is_default", False):
+        next_url = default_owner_project_avatar_data_url()
+    else:
+        next_url = ensure_project_avatar_data_url("")
     Project.objects.filter(pk=project.pk).update(avatar_data_url=next_url)
     project.avatar_data_url = next_url
     return next_url
@@ -240,7 +263,7 @@ def ensure_default_owner_project(user) -> Tuple[Project, bool]:
         is_default=True,
         defaults={
             "name": DEFAULT_OWNER_PROJECT_NAME,
-            "avatar_data_url": generate_project_avatar_data_url(),
+            "avatar_data_url": default_owner_project_avatar_data_url(),
         },
     )
     return project, created

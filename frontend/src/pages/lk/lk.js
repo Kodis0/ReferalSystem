@@ -1,6 +1,6 @@
 import { Routes, Route, Link, useNavigate, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, MessageCircle, Palette, Send, Settings as SettingsGearIcon, UserPlus, UserRound } from "lucide-react";
 import { LkHeaderBrandMark } from "./LkHeaderBrandMark";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
 import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
@@ -257,8 +257,9 @@ function LK() {
 
   const lkHeaderBg = lkTheme === "light" ? "#ffffff" : "#242F3D";
   const currentPath = location.pathname.toLowerCase();
-  /** Совпадает с левым краем full-bleed `.owner-programs__shell` (margin -24px к padding `.LK-content`). */
-  const headerSearchAlignShellTrack = /^\/lk\/partner\/project\/[^/]+/i.test(location.pathname);
+  /** Та же дорожка 920px, что `.LK-content` / shell: partner, настройки аккаунта (без скачка шапки при переходе). */
+  const headerSearchAlignShellTrack =
+    /^\/lk\/partner(\/|$)/i.test(location.pathname) || /^\/lk\/settings(\/|$)/i.test(location.pathname);
 
   useEffect(() => {
     function onIdeasBadgeEvent(event) {
@@ -572,12 +573,18 @@ function LK() {
               </button>
 
               {supportOpen && (
-                <div className="lk-header__menu" role="menu">
+                <div className="lk-header__menu" role="menu" data-test-id="support-dropdown-menu">
                   <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => setSupportOpen(false)}>
-                    Центр поддержки
+                    <span className="lk-header__menu-item-icon" aria-hidden="true">
+                      <MessageCircle size={20} strokeWidth={1.75} />
+                    </span>
+                    <span className="lk-header__menu-item-text">Центр поддержки</span>
                   </button>
                   <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => setSupportOpen(false)}>
-                    Написать в поддержку
+                    <span className="lk-header__menu-item-icon" aria-hidden="true">
+                      <Send size={20} strokeWidth={1.75} />
+                    </span>
+                    <span className="lk-header__menu-item-text">Написать в поддержку</span>
                   </button>
                 </div>
               )}
@@ -608,9 +615,12 @@ function LK() {
             </button>
 
             {menuOpen && (
-              <div className="lk-header__menu" role="menu">
+              <div className="lk-header__menu" role="menu" data-test-id="account-dropdown-menu">
                 <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => navigate("/lk/settings")}>
-                  Настройки аккаунта
+                  <span className="lk-header__menu-item-icon" aria-hidden="true">
+                    <SettingsGearIcon size={20} strokeWidth={1.75} />
+                  </span>
+                  <span className="lk-header__menu-item-text">Настройки аккаунта</span>
                 </button>
                 <button
                   type="button"
@@ -624,7 +634,10 @@ function LK() {
                     setLanguageOpen(false);
                   }}
                 >
-                  Персонализация
+                  <span className="lk-header__menu-item-icon" aria-hidden="true">
+                    <Palette size={20} strokeWidth={1.75} />
+                  </span>
+                  <span className="lk-header__menu-item-text">Персонализация</span>
                 </button>
 
                 <button
@@ -638,7 +651,10 @@ function LK() {
                     logout();
                   }}
                 >
-                  Выйти
+                  <span className="lk-header__menu-item-icon" aria-hidden="true">
+                    <LogOut size={20} strokeWidth={1.75} />
+                  </span>
+                  <span className="lk-header__menu-item-text">Выйти</span>
                 </button>
                 <div className="lk-header__menu-divider" role="separator" />
                 <button
@@ -647,7 +663,10 @@ function LK() {
                   role="menuitem"
                   onClick={() => setMenuOpen(false)}
                 >
-                  Добавить аккаунт
+                  <span className="lk-header__menu-item-icon" aria-hidden="true">
+                    <UserPlus size={20} strokeWidth={1.75} />
+                  </span>
+                  <span className="lk-header__menu-item-text">Добавить аккаунт</span>
                 </button>
               </div>
             )}

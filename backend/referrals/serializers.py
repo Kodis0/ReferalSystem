@@ -124,6 +124,12 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "widget_embed_snippet",
             "public_api_base",
             "widget_script_base",
+            "verification_url",
+            "verification_status",
+            "last_verification_at",
+            "last_verification_error",
+            "last_widget_seen_at",
+            "last_widget_seen_origin",
         )
         read_only_fields = fields
 
@@ -185,6 +191,7 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     capture_config = serializers.JSONField(required=False)
     referral_builder_workspace = serializers.JSONField(required=False, allow_null=True)
     widget_enabled = serializers.BooleanField(required=False)
+    verification_url = serializers.CharField(max_length=2048, required=False, allow_blank=True)
 
     def validate_origin(self, value: str) -> str:
         if not (value or "").strip():

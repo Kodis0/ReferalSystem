@@ -325,7 +325,7 @@ export function useSiteShellIntegrationActions({
           return;
         }
         if (typeof reloadProjectEntry === "function") {
-          await reloadProjectEntry(pid);
+          await reloadProjectEntry(pid, { silent: true });
         }
         if (deleteContext === "overview") {
           if (siteId === (overviewRouteSitePublicId || "").trim() && typeof buildProjectPath === "function") {

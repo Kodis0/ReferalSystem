@@ -138,14 +138,12 @@ export const DomainCountryFlagSvg = memo(function DomainCountryFlagSvg({ country
     <svg
       className="owner-programs__service-card-flag-svg"
       viewBox="0 0 32 32"
-      width="22"
-      height="22"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
     >
       <defs>
         <mask id={maskId} maskUnits="userSpaceOnUse">
-          <rect width="32" height="32" rx="6" fill="#fff" />
+          <circle cx="16" cy="16" r="16" fill="#fff" />
         </mask>
       </defs>
       <Inner maskId={maskId} />

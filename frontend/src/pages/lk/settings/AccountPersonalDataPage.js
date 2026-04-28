@@ -244,6 +244,7 @@ export function PersonalDatePicker({
 }) {
   const defaultPeekYear = maxDate instanceof Date && !Number.isNaN(maxDate.getTime()) ? maxDate.getFullYear() : new Date().getFullYear();
   const [peekOpenToDate, setPeekOpenToDate] = useState(() => parseYmdLocal(value) || null);
+  const [pickerCalendarOpen, setPickerCalendarOpen] = useState(false);
 
   useEffect(() => {
     setPeekOpenToDate(parseYmdLocal(value) || null);
@@ -281,13 +282,18 @@ export function PersonalDatePicker({
   }, [value, peekOpenToDate, maxDate]);
 
   const resolvedCustomInput = customInput
-    ? cloneElement(customInput, typeof customInput.type === "string" ? {} : { id, name })
+    ? cloneElement(
+        customInput,
+        typeof customInput.type === "string" ? {} : { id, name, calendarOpen: pickerCalendarOpen },
+      )
     : null;
 
   return (
     <DatePicker
       selected={parseYmdLocal(value)}
       onChange={(d) => onChange(d ? formatYmdLocal(d) : "")}
+      onCalendarOpen={() => setPickerCalendarOpen(true)}
+      onCalendarClose={() => setPickerCalendarOpen(false)}
       locale="ru"
       dateFormat={PERSONAL_DATE_DISPLAY_FORMATS}
       placeholderText={placeholderText}

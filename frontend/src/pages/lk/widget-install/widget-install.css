@@ -209,6 +209,281 @@
   opacity: 0.82;
 }
 
+.lk-widget-install__connection-check-status-inner {
+  animation: lk-widget-install-status-tone-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes lk-widget-install-status-tone-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lk-widget-install-verify-meta-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.62;
+  }
+}
+
+@keyframes lk-widget-install-verify-panel-shimmer {
+  0% {
+    background-position: -80% 0;
+  }
+
+  100% {
+    background-position: 180% 0;
+  }
+}
+
+@keyframes lk-widget-install-verify-dot-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(107, 163, 214, 0.42);
+  }
+
+  70% {
+    box-shadow: 0 0 0 9px rgba(107, 163, 214, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(107, 163, 214, 0);
+  }
+}
+
+@keyframes lk-widget-install-verify-step-wave {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+
+  45% {
+    opacity: 1;
+  }
+}
+
+@keyframes lk-widget-install-verify-bar-slide {
+  0% {
+    background-position: -40% 0, 0 0;
+  }
+
+  100% {
+    background-position: 140% 0, 0 0;
+  }
+}
+
+.lk-widget-install__verify-status-value {
+  font-weight: 600;
+}
+
+.lk-widget-install__verify-status-wrap_is-checking .lk-widget-install__verify-status-value {
+  animation: lk-widget-install-verify-meta-pulse 1.45s ease-in-out infinite;
+}
+
+.lk-widget-install__connection-check-status_pending {
+  position: relative;
+  overflow: hidden;
+}
+
+.lk-widget-install__connection-check-status_pending::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    transparent 42%,
+    rgba(255, 255, 255, 0.14) 50%,
+    transparent 58%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-position: -80% 0;
+  animation: lk-widget-install-verify-panel-shimmer 2.6s ease-in-out infinite;
+}
+
+[data-theme="light"] .lk-widget-install__connection-check-status_pending::after {
+  opacity: 0.38;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    transparent 42%,
+    rgba(255, 255, 255, 0.85) 50%,
+    transparent 58%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-position: -80% 0;
+  animation: lk-widget-install-verify-panel-shimmer 2.6s ease-in-out infinite;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__connection-check-title {
+  position: relative;
+  z-index: 1;
+  padding-left: 20px;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__connection-check-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35em;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #6ba3d6;
+  animation: lk-widget-install-verify-dot-ring 1.45s ease-out infinite;
+}
+
+[data-theme="light"] .lk-widget-install__connection-check-status_pending .lk-widget-install__connection-check-title::before {
+  background: #1565c0;
+  animation: lk-widget-install-verify-dot-ring-light 1.45s ease-out infinite;
+}
+
+@keyframes lk-widget-install-verify-dot-ring-light {
+  0% {
+    box-shadow: 0 0 0 0 rgba(21, 101, 192, 0.35);
+  }
+
+  70% {
+    box-shadow: 0 0 0 9px rgba(21, 101, 192, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(21, 101, 192, 0);
+  }
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__connection-check-copy,
+.lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps {
+  position: relative;
+  z-index: 1;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps li {
+  animation: lk-widget-install-verify-step-wave 2.2s ease-in-out infinite;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps li:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps li:nth-child(2) {
+  animation-delay: 0.28s;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps li:nth-child(3) {
+  animation-delay: 0.56s;
+}
+
+.lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps li:nth-child(n + 4) {
+  animation-delay: 0.75s;
+}
+
+/* Индикатор «идёт проверка» — над нижней кнопкой (кнопка в конце блока) */
+.lk-widget-install__step-verify-actions[data-verify-active="true"] .lk-widget-install__connection-check-actions {
+  position: relative;
+  padding-top: 11px;
+}
+
+.lk-widget-install__step-verify-actions[data-verify-active="true"] .lk-widget-install__connection-check-actions::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(130, 190, 240, 0.92) 50%,
+      transparent 100%
+    ),
+    rgba(82, 136, 193, 0.14);
+  background-size: 38% 100%, 100% 100%;
+  background-position: -40% 0, 0 0;
+  background-repeat: no-repeat, no-repeat;
+  animation: lk-widget-install-verify-bar-slide 1.05s linear infinite;
+}
+
+[data-theme="light"] .lk-widget-install__step-verify-actions[data-verify-active="true"] .lk-widget-install__connection-check-actions::before {
+  background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(21, 101, 192, 0.7) 50%,
+      transparent 100%
+    ),
+    rgba(15, 23, 42, 0.07);
+  background-size: 38% 100%, 100% 100%;
+  background-position: -40% 0, 0 0;
+  background-repeat: no-repeat, no-repeat;
+  animation: lk-widget-install-verify-bar-slide 1.05s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-widget-install__connection-check-status-inner,
+  .lk-widget-install__verify-status-wrap_is-checking .lk-widget-install__verify-status-value,
+  .lk-widget-install__connection-check-status_pending::after,
+  .lk-widget-install__connection-check-status_pending .lk-widget-install__connection-check-title::before,
+  .lk-widget-install__connection-check-status_pending .lk-widget-install__verify-poll-steps li,
+  .lk-widget-install__step-verify-actions[data-verify-active="true"] .lk-widget-install__connection-check-actions::before {
+    animation: none !important;
+  }
+
+  .lk-widget-install__connection-check-status-inner {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lk-widget-install__verify-poll-steps {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  opacity: 0.88;
+}
+
+.lk-widget-install__verify-poll-steps li + li {
+  margin-top: 4px;
+}
+
+.lk-widget-install__verify-other-page-link {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #5288c1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lk-widget-install__verify-other-page-link:hover {
+  color: #6ba3d6;
+}
+
+[data-theme="light"] .lk-widget-install__verify-other-page-link {
+  color: #1565c0;
+}
+
 [data-theme="light"] .lk-widget-install__connection-check-status {
   border-color: rgba(15, 23, 42, 0.08);
   background: rgba(15, 23, 42, 0.03);
@@ -388,10 +663,323 @@
   margin-top: 4px;
 }
 
+.lk-widget-install__how-to-card {
+  max-width: 960px;
+}
+
+.lk-widget-install__step-block {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lk-widget-install__step-block:first-of-type {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: none;
+}
+
+.lk-widget-install__step-block_last {
+  margin-bottom: 0;
+}
+
+[data-theme="light"] .lk-widget-install__step-block {
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
+
+.lk-widget-install__step-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.lk-widget-install__step-text {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.lk-widget-install__step-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lk-widget-install__step-screenshot {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-top: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+}
+
+[data-theme="light"] .lk-widget-install__step-screenshot {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.lk-widget-install__step-screenshot-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 10px;
+  text-align: left;
+  font: inherit;
+}
+
+.lk-widget-install__step-screenshot-btn:focus-visible {
+  outline: 2px solid #5288c1;
+  outline-offset: 2px;
+}
+
+.lk-widget-install__step-screenshot-btn .lk-widget-install__step-screenshot {
+  margin-top: 0;
+  vertical-align: top;
+}
+
+[data-theme="light"] .lk-widget-install__step-screenshot-btn:focus-visible {
+  outline-color: #4f5fff;
+}
+
+.lk-widget-install__lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, 4vh) max(24px, 4vw);
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.88);
+  cursor: zoom-out;
+}
+
+.lk-widget-install__lightbox-img {
+  max-width: min(96vw, 1600px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+}
+
+.lk-widget-install__lightbox-close {
+  position: fixed;
+  top: max(16px, 2vh);
+  right: max(16px, 2vw);
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.lk-widget-install__lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.lk-widget-install__step-verify-actions {
+  margin-top: 14px;
+}
+
+.lk-widget-install__step-verify-actions .lk-widget-install__verify-status-wrap {
+  margin-top: 14px;
+}
+
+.lk-widget-install__verify-last-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.lk-widget-install__verify-advanced-fallback-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.lk-widget-install__verify-advanced-details_secondary {
+  margin-top: 12px;
+}
+
+.lk-widget-install__verify-advanced-summary_link {
+  list-style: none;
+  font-weight: 500;
+  color: var(--lk-link-color, #7eb8ff);
+  text-decoration: underline;
+}
+
+.lk-widget-install__verify-advanced-summary_link::-webkit-details-marker {
+  display: none;
+}
+
+.lk-widget-install__verify-advanced-details_secondary[open] > .lk-widget-install__verify-advanced-summary_link {
+  margin-bottom: 8px;
+}
+
+[data-theme="light"] .lk-widget-install__verify-advanced-summary_link {
+  color: #1565c0;
+}
+
 .lk-widget-install_focused {
   display: grid;
   gap: 20px;
   max-width: 960px;
+}
+
+.lk-widget-install_focused .lk-dashboard__title {
+  margin-bottom: 0;
+}
+
+/* Крупнее шаги, но меньше страничного h1 (28px) */
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-title {
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+/* Первое подключение: без разделительных линий между шагами */
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-block {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* Временно скрыто на первом подключении: «другая страница» (кнопка + advanced URL) */
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__verify-other-page-link,
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__verify-advanced-details_secondary {
+  display: none;
+}
+
+/* Шаг 7 (focused): блок проверки без рамок */
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 4px 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-actions {
+  margin: 0;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-actions .lk-widget-install__btn {
+  width: 100%;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions > .lk-widget-install__verify-status-wrap {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions > .lk-widget-install__verify-status-wrap {
+  border: none;
+  background: transparent;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status {
+  padding: 12px 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_pending,
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_ok,
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_bad,
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_idle {
+  border: none;
+  background: transparent;
+}
+
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_pending,
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_ok,
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_bad,
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-status_idle {
+  border: none;
+  background: transparent;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__connection-check-copy {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__verify-poll-steps {
+  margin-top: 12px;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__verify-other-page-link {
+  margin-top: 0;
+  padding-top: 2px;
+}
+
+.lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__verify-last-error {
+  margin: 8px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__how-to-card .lk-widget-install__step-verify-actions .lk-widget-install__verify-last-error {
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+/* Первое подключение: основная инструкция без «карточки» (рамка/фон с .lk-widget-install__card) */
+.lk-widget-install_focused .lk-widget-install__card.lk-widget-install__how-to-card {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__card.lk-widget-install__how-to-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .lk-widget-install_focused .page__returnButton {
@@ -422,17 +1010,6 @@
   color: #4f5fff;
 }
 
-.lk-widget-install_focused .lk-widget-install__install-hero,
-.lk-widget-install_focused .lk-widget-install__video-placeholder {
-  border: none;
-}
-
-.lk-widget-install_focused .lk-widget-install__video-placeholder {
-  opacity: 1;
-  border-radius: 0;
-  background: transparent;
-}
-
 .lk-widget-install_focused .lk-widget-install__install-hero {
   opacity: 1;
   border-radius: 0;
@@ -443,6 +1020,20 @@
   margin-right: 0;
   padding-left: 0;
   padding-right: 0;
+}
+
+/* Первое подключение сайта: блок проверки без отдельной «карточки», как у компактного сниппета на странице сайта */
+.lk-widget-install_focused .lk-widget-install__card.lk-widget-install__connection-check {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  max-width: none;
+}
+
+[data-theme="light"] .lk-widget-install_focused .lk-widget-install__card.lk-widget-install__connection-check {
+  border: none;
+  background: transparent;
 }
 
 .lk-widget-install__video-placeholder {
@@ -905,4 +1496,77 @@
 
 .lk-widget-install__switch-input:disabled + .lk-widget-install__switch-slider {
   opacity: 0.82;
+}
+
+.lk-widget-install__verify-url-block {
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.lk-widget-install__verify-url-block_compact {
+  margin-top: 12px;
+}
+
+.lk-widget-install__verify-persist-row {
+  margin-top: 12px;
+}
+
+.lk-widget-install__verify-status {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.lk-widget-install__verify-status-label {
+  font-weight: 600;
+}
+
+.lk-widget-install__verify-error {
+  color: #d32f2f;
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+[data-theme="light"] .lk-widget-install__verify-error {
+  color: #b71c1c;
+}
+
+.lk-widget-install__text-action {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--lk-link-color, #7eb8ff);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.lk-widget-install__text-action:hover {
+  opacity: 0.9;
+}
+
+[data-theme="light"] .lk-widget-install__text-action {
+  color: #1565c0;
+}
+
+.lk-widget-install__verify-advanced-details {
+  margin-top: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 12px 12px;
+}
+
+[data-theme="light"] .lk-widget-install__verify-advanced-details {
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.lk-widget-install__verify-advanced-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.lk-widget-install__verify-advanced-body {
+  padding-top: 4px;
 }

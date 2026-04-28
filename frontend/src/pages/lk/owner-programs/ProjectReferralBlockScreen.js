@@ -2651,6 +2651,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
 
   const expandLabel = isExpanded ? "Свернуть" : "На весь экран";
   const isScanning = scanStatus === "loading";
+  const isWorkspaceCanvasBootLoading = Boolean(sitePublicId) && workspaceBootstrap === "loading";
   const flowToolClass = isHandMode
     ? "owner-programs__referral-builder-flow--tool-hand"
     : "owner-programs__referral-builder-flow--tool-move";
@@ -2738,84 +2739,105 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
             </div>
           ) : null}
         </div>
-        <ReferralBuilderBlocksDock
-          visible={showScreenshotBuilderChrome && isBlockPickerOpen}
-          onPickType={handleAddBuilderBlockOfType}
-        />
-        <ReferralBuilderBlockInspector
-          visible={showScreenshotBuilderChrome}
-          selectedBlock={selectedBuilderBlock}
-          onChangeConfig={handleChangeBuilderBlockConfig}
-          onDuplicate={handleDuplicateBuilderBlock}
-          onDelete={handleDeleteBuilderBlock}
-        />
-        <ReactFlow
-          className={`owner-programs__referral-builder-flow ${flowToolClass}${
-            isExpanded ? ` owner-programs__referral-builder-flow--expanded-tool-${expandedCanvasTool}` : ""
-          }`}
-          nodes={displayNodes}
-          edges={[]}
-          nodeTypes={nodeTypes}
-          proOptions={{ hideAttribution: true }}
-          fitViewOptions={{ padding: 0.25, maxZoom: 0.9 }}
-          minZoom={0.25}
-          maxZoom={3}
-          panOnScroll
-          zoomOnScroll
-          panOnDrag={isHandMode ? [0, 1, 2] : isTextMode ? false : [1, 2]}
-          selectionOnDrag={false}
-          nodesConnectable={false}
-          nodesDraggable={isMoveMode}
-          elementsSelectable={isMoveMode}
-          onNodesChange={onNodesChange}
-          onNodeDragStart={logNodeDragStart}
-          onNodeDrag={logNodeDrag}
-          onNodeDragStop={logNodeDragStop}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
-          onInit={setFlowInstance}
-          onPaneClick={() => {
-            setSelectedBlockId("");
-            setSelectedBuilderBlockId("");
-            setSelectedInsertionSlotId(null);
-            setInsertAfterBuilderBlockId(null);
-            setIsBlockPickerOpen(false);
-          }}
-        >
-          <Background variant="dots" gap={40} size={1} color="rgba(148, 163, 184, 0.28)" />
-          <ReferralBuilderFlowToolbar
-            onToggleFullscreen={handleToggleExpanded}
-            fullscreenTitle={expandLabel}
-            isExpanded={isExpanded}
-          />
-          {isExpanded ? (
-            <ReferralBuilderExpandedToolDock tool={expandedCanvasTool} onToolChange={setExpandedCanvasTool} />
-          ) : null}
-        </ReactFlow>
-        {isScanning ? (
-          <div
-            className="owner-programs__referral-builder-import-loader"
-            aria-busy="true"
-            aria-live="polite"
-            data-testid="referral-builder-import-loader"
-          >
-            <div className="owner-programs__referral-builder-import-loader__veil" aria-hidden="true" />
-            <div className="owner-programs__referral-builder-import-loader__panel">
-              <div className="owner-programs__referral-builder-import-loader__orbit" aria-hidden="true">
-                <span className="owner-programs__referral-builder-import-loader__moon" />
-                <span className="owner-programs__referral-builder-import-loader__moon owner-programs__referral-builder-import-loader__moon--2" />
-                <span className="owner-programs__referral-builder-import-loader__moon owner-programs__referral-builder-import-loader__moon--3" />
-                <span className="owner-programs__referral-builder-import-loader__core" />
-              </div>
-              <p className="owner-programs__referral-builder-import-loader__title">Импорт страницы</p>
-              <p
-                key={scanLoaderPhase}
-                className="owner-programs__referral-builder-import-loader__subtitle owner-programs__referral-builder-import-loader__subtitle--pulse"
+        {!isWorkspaceCanvasBootLoading ? (
+          <Fragment>
+            <ReferralBuilderBlocksDock
+              visible={showScreenshotBuilderChrome && isBlockPickerOpen}
+              onPickType={handleAddBuilderBlockOfType}
+            />
+            <ReferralBuilderBlockInspector
+              visible={showScreenshotBuilderChrome}
+              selectedBlock={selectedBuilderBlock}
+              onChangeConfig={handleChangeBuilderBlockConfig}
+              onDuplicate={handleDuplicateBuilderBlock}
+              onDelete={handleDeleteBuilderBlock}
+            />
+            <ReactFlow
+              className={`owner-programs__referral-builder-flow ${flowToolClass}${
+                isExpanded ? ` owner-programs__referral-builder-flow--expanded-tool-${expandedCanvasTool}` : ""
+              }`}
+              nodes={displayNodes}
+              edges={[]}
+              nodeTypes={nodeTypes}
+              proOptions={{ hideAttribution: true }}
+              fitViewOptions={{ padding: 0.25, maxZoom: 0.9 }}
+              minZoom={0.25}
+              maxZoom={3}
+              panOnScroll
+              zoomOnScroll
+              panOnDrag={isHandMode ? [0, 1, 2] : isTextMode ? false : [1, 2]}
+              selectionOnDrag={false}
+              nodesConnectable={false}
+              nodesDraggable={isMoveMode}
+              elementsSelectable={isMoveMode}
+              onNodesChange={onNodesChange}
+              onNodeDragStart={logNodeDragStart}
+              onNodeDrag={logNodeDrag}
+              onNodeDragStop={logNodeDragStop}
+              defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
+              onInit={setFlowInstance}
+              onPaneClick={() => {
+                setSelectedBlockId("");
+                setSelectedBuilderBlockId("");
+                setSelectedInsertionSlotId(null);
+                setInsertAfterBuilderBlockId(null);
+                setIsBlockPickerOpen(false);
+              }}
+            >
+              <Background variant="dots" gap={40} size={1} color="rgba(148, 163, 184, 0.28)" />
+              <ReferralBuilderFlowToolbar
+                onToggleFullscreen={handleToggleExpanded}
+                fullscreenTitle={expandLabel}
+                isExpanded={isExpanded}
+              />
+              {isExpanded ? (
+                <ReferralBuilderExpandedToolDock tool={expandedCanvasTool} onToolChange={setExpandedCanvasTool} />
+              ) : null}
+            </ReactFlow>
+            {isScanning ? (
+              <div
+                className="owner-programs__referral-builder-import-loader"
+                aria-busy="true"
+                aria-live="polite"
+                data-testid="referral-builder-import-loader"
               >
-                {SCAN_LOADER_STATUS_MESSAGES[scanLoaderPhase]}
-              </p>
+                <div className="owner-programs__referral-builder-import-loader__veil" aria-hidden="true" />
+                <div className="owner-programs__referral-builder-import-loader__panel">
+                  <div className="owner-programs__referral-builder-import-loader__orbit" aria-hidden="true">
+                    <span className="owner-programs__referral-builder-import-loader__moon" />
+                    <span className="owner-programs__referral-builder-import-loader__moon owner-programs__referral-builder-import-loader__moon--2" />
+                    <span className="owner-programs__referral-builder-import-loader__moon owner-programs__referral-builder-import-loader__moon--3" />
+                    <span className="owner-programs__referral-builder-import-loader__core" />
+                  </div>
+                  <p className="owner-programs__referral-builder-import-loader__title">Импорт страницы</p>
+                  <p
+                    key={scanLoaderPhase}
+                    className="owner-programs__referral-builder-import-loader__subtitle owner-programs__referral-builder-import-loader__subtitle--pulse"
+                  >
+                    {SCAN_LOADER_STATUS_MESSAGES[scanLoaderPhase]}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </Fragment>
+        ) : (
+          <div
+            className="owner-programs__referral-builder-workspace-skel"
+            role="status"
+            aria-label="Загрузка рабочей области"
+            data-testid="referral-builder-workspace-skel"
+          >
+            <div className="owner-programs__referral-builder-workspace-skel__body">
+              <span className="owner-programs__skel owner-programs__referral-builder-workspace-skel__hero" aria-hidden />
+              <span className="owner-programs__skel owner-programs__referral-builder-workspace-skel__line" aria-hidden />
+              <div className="owner-programs__referral-builder-workspace-skel__cards">
+                {[0, 1, 2, 3].map((i) => (
+                  <span key={i} className="owner-programs__skel owner-programs__referral-builder-workspace-skel__card" aria-hidden />
+                ))}
+              </div>
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

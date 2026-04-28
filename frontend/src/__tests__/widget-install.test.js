@@ -5,7 +5,7 @@
  */
 
 import "@testing-library/jest-dom";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import WidgetInstallScreen from "../pages/lk/widget-install/widget-install";
@@ -56,6 +56,12 @@ describe("WidgetInstallScreen", () => {
         "  async></script>",
       public_api_base: "https://api.example",
       widget_script_base: "https://app.example",
+      verification_url: "",
+      verification_status: "not_started",
+      last_verification_at: null,
+      last_verification_error: "",
+      last_widget_seen_at: null,
+      last_widget_seen_origin: "",
       ...overrides,
     };
   }
@@ -201,15 +207,15 @@ describe("WidgetInstallScreen", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Установите код на сайт/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Как подключить сайт/i })).toBeInTheDocument();
     });
     expect(screen.getByTestId("widget-install-snippet-block")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Скопировать код/i })).toBeInTheDocument();
-    expect(screen.getByText(/Вставьте код на сайт, опубликуйте изменения/i)).toBeInTheDocument();
-    expect(screen.getByText("Вставьте код на сайт")).toBeInTheDocument();
-    expect(screen.getByText("Опубликуйте изменения")).toBeInTheDocument();
-    expect(screen.getByText("Откройте страницу сайта")).toBeInTheDocument();
-    expect(screen.getByText(/Вернитесь и нажмите «Проверить подключение»/i)).toBeInTheDocument();
+    expect(screen.getByTestId("widget-verify-primary-copy")).toBeInTheDocument();
+    expect(screen.getByText(/Скопируйте код, вставьте его в header сайта и опубликуйте сайт/i)).toBeInTheDocument();
+    expect(screen.getByText("Опубликуйте сайт, чтобы изменения появились для посетителей.")).toBeInTheDocument();
+    expect(screen.getByText("Нажмите «Проверить подключение» на этой странице.")).toBeInTheDocument();
+    expect(screen.getByTestId("widget-verify-advanced-details")).not.toHaveAttribute("open");
     expect(screen.getByRole("heading", { name: /Что подключается/i })).toBeInTheDocument();
     expect(screen.getByText("Demo shop")).toBeInTheDocument();
     expect(screen.getByText(/referral-widget\.v1\.js/)).toBeInTheDocument();
@@ -222,7 +228,7 @@ describe("WidgetInstallScreen", () => {
     renderWithLkRouter(<WidgetInstallScreen />);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Установите код на сайт/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Как подключить сайт/i })).toBeInTheDocument();
     });
     expect(screen.getByRole("heading", { name: /Какие данные отправлять/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Проверка и запуск/i })).toBeInTheDocument();
@@ -744,7 +750,7 @@ describe("WidgetInstallScreen", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Проверка подключения/i })).toBeInTheDocument();
+      expect(screen.getByTestId("project-site-connect-step-verify-title")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /Проверить подключение/i })).toBeInTheDocument();
     expect(screen.getByText("Ещё не проверяли")).toBeInTheDocument();
@@ -775,7 +781,8 @@ describe("WidgetInstallScreen", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
     expect(screen.getByRole("button", { name: /Проверяем/i })).toBeInTheDocument();
-    expect(screen.getByText("Идёт проверка")).toBeInTheDocument();
+    expect(screen.getByText("Проверяем подключение...")).toBeInTheDocument();
+    expect(screen.getByTestId("widget-verify-poll-steps")).toBeInTheDocument();
   });
 
   it("shows focused connection check success state", async () => {
@@ -824,18 +831,18 @@ describe("WidgetInstallScreen", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Подключение найдено")).toBeInTheDocument();
+      expect(screen.getByText("Сайт подключён")).toBeInTheDocument();
     });
-    expect(screen.getByText("Подключение найдено. Сайт подключён.")).toBeInTheDocument();
+    expect(screen.getByText("Виджет успешно запустился на сайте.")).toBeInTheDocument();
   });
 
   it.each([
-    ["detail only", { detail: "site_connection_not_found" }, undefined],
-    ["code only", { code: "site_connection_not_found" }, undefined],
+    ["detail only", { detail: "site_widget_verify_incomplete" }, undefined],
+    ["code only", { code: "site_widget_verify_incomplete" }, undefined],
     [
       "prefers code",
       {
-        code: "site_connection_not_found",
+        code: "site_widget_verify_incomplete",
         detail: "legacy_human_message_should_not_change_branch",
       },
       "legacy_human_message_should_not_change_branch",
@@ -848,6 +855,8 @@ describe("WidgetInstallScreen", () => {
           ok: false,
           status: 409,
           json: async () => ({
+            last_verification_error: "Проверка не удалась.",
+            verification_status: "failed",
             ...verifyErrorBody,
             connection_check: {
               status: "not_found",
@@ -875,14 +884,282 @@ describe("WidgetInstallScreen", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
+    const checkCard = await screen.findByTestId("site-connection-check-card");
     await waitFor(() => {
-      expect(screen.getByText("Подключение не найдено")).toBeInTheDocument();
+      expect(within(checkCard).getByText("Не удалось проверить подключение")).toBeInTheDocument();
     });
-    expect(
-      screen.getByText(/Проверьте установку, публикацию сайта и откройте страницу ещё раз/i)
-    ).toBeInTheDocument();
+    expect(within(checkCard).getByText(/Проверка не удалась/i)).toBeInTheDocument();
     if (legacyDetailMustNotAppear) {
       expect(screen.queryByText(legacyDetailMustNotAppear)).not.toBeInTheDocument();
     }
+  });
+
+  it("sends verification_url in PATCH when checking a specific page from advanced block", async () => {
+    let lastPatchBody = null;
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && !u.includes("diagnostics") && options.method === "PATCH") {
+        lastPatchBody = JSON.parse(options.body || "{}");
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              verification_url: lastPatchBody.verification_url || "",
+            }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockIntegrationPayload({ status: "verified", verified_at: "2026-01-15T12:00:00+00:00" }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("widget-verify-advanced-details")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("widget-verify-advanced-details")).not.toHaveAttribute("open");
+
+    await userEvent.click(screen.getByText("Проверить другую страницу"));
+    expect(screen.getByTestId("widget-verify-advanced-details")).toHaveAttribute("open");
+
+    await userEvent.type(screen.getByTestId("widget-verify-advanced-url-input"), "https://shop.example/with-code");
+    await userEvent.click(screen.getByTestId("widget-verify-this-page-btn"));
+
+    await waitFor(() => {
+      expect(lastPatchBody?.verification_url).toBe("https://shop.example/with-code");
+    });
+  });
+
+  it("does not expand advanced verify URL block by default", async () => {
+    mockFetchIntegrationAndDiagnostics();
+    renderWithLkRouter(<WidgetInstallScreen />);
+    await waitFor(() => {
+      expect(screen.getByTestId("widget-verify-advanced-details")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("widget-verify-advanced-details")).not.toHaveAttribute("open");
+  });
+
+  it("shows verify-incomplete message when automated check does not see widget", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/verify/") && options.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          json: async () => ({
+            code: "site_widget_verify_incomplete",
+            detail: "Мы открыли страницу, но виджет не запросил конфиг.",
+            verification_status: "html_found",
+            last_verification_error:
+              "Мы открыли страницу, но виджет не запросил конфиг. Проверьте, что код вставлен именно на эту страницу, страница опубликована, домен сайта указан в настройках и скрипт не заблокирован.",
+            connection_check: {
+              status: "not_found",
+              last_seen_at: null,
+              last_seen_origin: "",
+            },
+          }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderWithLkRouter(<WidgetInstallScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Проверить подключение/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /Проверить подключение/i }));
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId("widget-main-connection-check")).getByText("Не удалось проверить подключение")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("widget-verify-last-error")).toHaveTextContent(
+      /Мы открыли страницу, но виджет не запросил конфиг\. Проверьте, что код вставлен именно на эту страницу/i
+    );
+    expect(screen.getByTestId("widget-verify-status-line")).toHaveTextContent(/Код найден, но виджет не запустился/);
+  });
+
+  it("continues polling after verify POST returns pending until widget_seen", async () => {
+    jest.useFakeTimers();
+    let afterPendingPost = false;
+    let pollN = 0;
+
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      const method = options.method || "GET";
+      if (u.includes("/referrals/site/integration/verify/") && method === "POST") {
+        afterPendingPost = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              verification_status: "pending",
+              status: "draft",
+            }),
+        });
+      }
+      if (
+        method === "GET" &&
+        u.includes("/referrals/site/integration") &&
+        !u.includes("diagnostics") &&
+        !u.includes("/verify")
+      ) {
+        if (!afterPendingPost) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockIntegrationPayload(),
+          });
+        }
+        pollN += 1;
+        const vs = pollN >= 2 ? "widget_seen" : "pending";
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              verification_status: vs,
+              status: vs === "widget_seen" ? "verified" : "draft",
+              verified_at: vs === "widget_seen" ? "2026-01-15T12:00:00+00:00" : null,
+            }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockDiagnosticsPayload({
+              connection_check: {
+                status: "found",
+                last_seen_at: "2026-01-15T12:00:00Z",
+                last_seen_origin: "https://shop.example",
+              },
+              site_status: "verified",
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Проверяем подключение...")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Сайт подключён")).toBeInTheDocument();
+    });
+
+    jest.useRealTimers();
+  });
+
+  it("stops polling on failed verification_status from integration GET", async () => {
+    jest.useFakeTimers();
+    let afterPendingPost = false;
+
+    jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      const method = options.method || "GET";
+      if (u.includes("/referrals/site/integration/verify/") && method === "POST") {
+        afterPendingPost = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              verification_status: "pending",
+              status: "draft",
+            }),
+        });
+      }
+      if (
+        method === "GET" &&
+        u.includes("/referrals/site/integration") &&
+        !u.includes("diagnostics") &&
+        !u.includes("/verify")
+      ) {
+        if (!afterPendingPost) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockIntegrationPayload(),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            mockIntegrationPayload({
+              verification_status: "failed",
+              last_verification_error: "fail_from_poll",
+              status: "draft",
+            }),
+        });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
+
+    await act(async () => {
+      jest.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Не удалось проверить подключение")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("widget-verify-last-error")).toHaveTextContent(/fail_from_poll/);
+
+    jest.useRealTimers();
   });
 });

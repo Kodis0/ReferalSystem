@@ -83,6 +83,13 @@ class Site(models.Model):
         VERIFIED = "verified", "Verified"
         ACTIVE = "active", "Active"
 
+    class VerificationStatus(models.TextChoices):
+        NOT_STARTED = "not_started", "Not started"
+        PENDING = "pending", "Pending"
+        HTML_FOUND = "html_found", "Html found"
+        WIDGET_SEEN = "widget_seen", "Widget seen"
+        FAILED = "failed", "Failed"
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -134,6 +141,15 @@ class Site(models.Model):
     activated_at = models.DateTimeField(null=True, blank=True)
     last_widget_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)
     last_widget_seen_origin = models.CharField(max_length=255, blank=True, default="")
+    verification_url = models.CharField(max_length=2048, blank=True, default="")
+    verification_status = models.CharField(
+        max_length=32,
+        choices=VerificationStatus.choices,
+        default=VerificationStatus.NOT_STARTED,
+        db_index=True,
+    )
+    last_verification_at = models.DateTimeField(null=True, blank=True)
+    last_verification_error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

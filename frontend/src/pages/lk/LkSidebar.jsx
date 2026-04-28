@@ -113,6 +113,7 @@ export default function LkSidebar() {
   const { pathname, hash, search } = useLocation();
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [ownerProjects, setOwnerProjects] = useState([]);
+  const [ownerProjectsLoading, setOwnerProjectsLoading] = useState(true);
   const [dragHandleProjectId, setDragHandleProjectId] = useState("");
   const [draggedProjectId, setDraggedProjectId] = useState("");
   const [dragPlaceholderProjectId, setDragPlaceholderProjectId] = useState("");
@@ -148,11 +149,17 @@ export default function LkSidebar() {
 
   const ownerProjectsStaleKey = useMemo(() => ownerProjectsRouteStaleKey(pathname), [pathname]);
 
+  useLayoutEffect(() => {
+    setOwnerProjectsLoading(true);
+  }, [ownerProjectsStaleKey]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { ok, projects = [] } = await fetchOwnerSitesList();
-      if (!cancelled && ok) setOwnerProjects(projects);
+      if (cancelled) return;
+      if (ok) setOwnerProjects(projects);
+      setOwnerProjectsLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -388,13 +395,28 @@ export default function LkSidebar() {
             </div>
             <div
               id="lk-sidebar-projects-block"
-              className="lk-sidebar__collapse-inner"
+              className="lk-sidebar__collapse-inner lk-sidebar__collapse-inner--projects"
               role="navigation"
               aria-label="Подразделы проектов"
               aria-hidden={!projectsOpen}
             >
-              <div className="">
-                {ownerProjects.map((project) => {
+              <div className="lk-sidebar__collapse-inner-wrap">
+                {ownerProjectsLoading ? (
+                  <div
+                    className="lk-sidebar__projects-skel"
+                    role="status"
+                    aria-label="Загрузка проектов"
+                    data-testid="lk-sidebar-projects-skel"
+                  >
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <div key={i} className="lk-sidebar__projects-skel-row">
+                        <span className="lk-sidebar__skel lk-sidebar__projects-skel-avatar" aria-hidden />
+                        <span className="lk-sidebar__skel lk-sidebar__projects-skel-label" aria-hidden />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  ownerProjects.map((project) => {
                   const projectId = projectKey(project);
                   const label = projectTitle(project);
                   const avatarDataUrl = projectAvatarDataUrl(project);
@@ -497,33 +519,34 @@ export default function LkSidebar() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
-              <Link
-                to="/lk/partner/new"
-                data-test-id="add-project-btn"
-                className={sidebarItemClass(onCreateProject)}
-                aria-current={onCreateProject ? "page" : undefined}
-                tabIndex={projectsOpen ? undefined : -1}
-              >
-                <svg
-                  className="lk-sidebar__icon-svg"
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+                  })
+                )}
+                <Link
+                  to="/lk/partner/new"
+                  data-test-id="add-project-btn"
+                  className={sidebarItemClass(onCreateProject)}
+                  aria-current={onCreateProject ? "page" : undefined}
+                  tabIndex={projectsOpen ? undefined : -1}
                 >
-                  <path
-                    fill="currentColor"
-                    d="M19 11h-6V5a1 1 0 0 0-2 0v6H5a1 1 0 0 0 0 2h6v6a1 1 0 0 0 2 0v-6h6a1 1 0 0 0 0-2Z"
-                  />
-                </svg>
-                <span className="lk-sidebar__label lk-sidebar__icon-label lk-sidebar__text_sidebar">
-                  Создать проект
-                </span>
-              </Link>
+                  <svg
+                    className="lk-sidebar__icon-svg"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fill="currentColor"
+                      d="M19 11h-6V5a1 1 0 0 0-2 0v6H5a1 1 0 0 0 0 2h6v6a1 1 0 0 0 2 0v-6h6a1 1 0 0 0 0-2Z"
+                    />
+                  </svg>
+                  <span className="lk-sidebar__label lk-sidebar__icon-label lk-sidebar__text_sidebar">
+                    Создать проект
+                  </span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.utils.dateparse import parse_date
@@ -28,7 +29,7 @@ from .owner_diagnostics import (
     build_site_owner_diagnostics_payload,
 )
 from .owner_site_analytics import build_site_owner_analytics_payload
-from .page_scan import PageScanError, scan_page_url
+from .page_scan import PageScanError, PageScanUrlValidationError, scan_page_url, validate_page_scan_url
 from .serializers import (
     PageScanRequestSerializer,
     ProjectOwnerCreateSerializer,
@@ -39,6 +40,11 @@ from .serializers import (
     SiteOwnerIntegrationSerializer,
     SiteOwnerIntegrationUpdateSerializer,
     serialize_owner_project_metadata,
+)
+from .widget_install_verify import (
+    build_default_verify_page_url,
+    human_message_for_page_scan_url_error,
+    run_widget_install_headless_check,
 )
 from .services import (
     REFERRAL_BUILDER_WORKSPACE_KEY,
@@ -608,7 +614,22 @@ class SiteOwnerIntegrationView(APIView):
             site.config_json = cfg
         if "widget_enabled" in data:
             site.widget_enabled = data["widget_enabled"]
-        update_fields = ["allowed_origins", "platform_preset", "config_json", "widget_enabled", "updated_at"]
+        if "verification_url" in data:
+            raw_v = (data.get("verification_url") or "").strip()[:2048]
+            prev_v = (site.verification_url or "").strip()
+            site.verification_url = raw_v
+            if raw_v != prev_v:
+                site.verification_status = Site.VerificationStatus.NOT_STARTED
+                site.last_verification_error = ""
+        update_fields = [
+            "allowed_origins",
+            "platform_preset",
+            "config_json",
+            "widget_enabled",
+            "updated_at",
+        ]
+        if "verification_url" in data:
+            update_fields.extend(["verification_url", "verification_status", "last_verification_error"])
         if not _site_embed_ready(site) and site.status != Site.Status.DRAFT:
             site.status = Site.Status.DRAFT
             site.verified_at = None
@@ -761,14 +782,98 @@ class SiteOwnerIntegrationVerifyView(APIView):
                 ),
                 status=status.HTTP_409_CONFLICT,
             )
-        if connection_check["status"] != "found":
+
+        explicit_verification = (site.verification_url or "").strip()
+        if explicit_verification:
+            target_raw = explicit_verification
+        else:
+            target_raw = build_default_verify_page_url(site)
+
+        if not target_raw:
             return Response(
-                _owner_api_error_body(
-                    "site_connection_not_found",
-                    site_status=site.status,
-                    embed_readiness=readiness,
-                    connection_check=connection_check,
-                ),
+                {
+                    "detail": "Не удалось определить адрес сайта для проверки. Укажите домен сайта в расширенных настройках.",
+                    "code": "site_verification_home_url_missing",
+                    "connection_check": build_site_connection_check(site),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            normalized = validate_page_scan_url(target_raw)
+        except PageScanUrlValidationError as exc:
+            human = human_message_for_page_scan_url_error(exc)
+            site.verification_status = Site.VerificationStatus.FAILED
+            site.last_verification_error = human
+            site.last_verification_at = timezone.now()
+            site.save(
+                update_fields=[
+                    "verification_status",
+                    "last_verification_error",
+                    "last_verification_at",
+                    "updated_at",
+                ]
+            )
+            return Response(
+                {
+                    "detail": human,
+                    "code": "site_verification_url_invalid",
+                    "connection_check": build_site_connection_check(site),
+                    "verification_status": site.verification_status,
+                    "last_verification_error": site.last_verification_error,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        throttle_key = f"referrals:widget_verify_throttle:{site.pk}"
+        if not cache.add(throttle_key, "1", timeout=45):
+            return Response(
+                {
+                    "detail": "Слишком частые проверки. Подождите около минуты.",
+                    "code": "widget_verify_rate_limited",
+                    "connection_check": build_site_connection_check(site),
+                    "verification_status": site.verification_status,
+                    "last_verification_error": site.last_verification_error,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        check_started_at = timezone.now()
+        Site.objects.filter(pk=site.pk).update(
+            verification_status=Site.VerificationStatus.PENDING,
+            last_verification_at=check_started_at,
+            last_verification_error="",
+            updated_at=timezone.now(),
+        )
+        site.refresh_from_db()
+        run_widget_install_headless_check(
+            site_pk=site.pk,
+            normalized_url=normalized,
+            check_started_at=check_started_at,
+            widget_public_id=str(site.public_id),
+            publishable_key=site.publishable_key,
+        )
+        site.refresh_from_db()
+
+        connection_check = build_site_connection_check(site)
+        ok_verify = site.verification_status == Site.VerificationStatus.WIDGET_SEEN and connection_check["status"] == "found"
+
+        if not ok_verify:
+            detail = (site.last_verification_error or "").strip() or (
+                "Мы открыли страницу, но виджет не запросил конфиг. Проверьте, что код вставлен именно на эту страницу, "
+                "страница опубликована, домен добавлен в allowed origins и скрипт не заблокирован."
+            )
+            return Response(
+                {
+                    "detail": detail,
+                    "code": "site_widget_verify_incomplete",
+                    "site_status": site.status,
+                    "embed_readiness": readiness,
+                    "connection_check": connection_check,
+                    "verification_status": site.verification_status,
+                    "last_verification_error": site.last_verification_error,
+                    "last_verification_at": site.last_verification_at.isoformat() if site.last_verification_at else None,
+                },
                 status=status.HTTP_409_CONFLICT,
             )
         if site.status == Site.Status.DRAFT:

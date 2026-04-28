@@ -5,6 +5,7 @@ export const API_ENDPOINTS = {
   siteCtaJoin: `${API_BASE}/users/site/join/`,
   token: `${API_BASE}/users/token/`,
   tokenGoogle: `${API_BASE}/users/token/google/`,
+  tokenGithubStart: `${API_BASE}/users/token/github/start/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
   myPrograms: `${API_BASE}/users/me/programs/`,

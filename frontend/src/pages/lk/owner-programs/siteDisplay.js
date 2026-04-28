@@ -54,3 +54,23 @@ export function sitePrimaryDomainLabel(siteLike) {
   const line = formatDomainLine(raw, [raw]);
   return line === "Домен не задан" ? "" : line;
 }
+
+/** Absolute http(s) URL for opening the site in a browser tab, or empty string if none. */
+export function sitePrimaryBrowseHref(siteLike) {
+  const raw = typeof siteLike?.primary_origin === "string" ? siteLike.primary_origin.trim() : "";
+  if (raw) {
+    try {
+      const u = /^https?:\/\//i.test(raw) ? new URL(raw) : new URL(`https://${raw}`);
+      if (u.protocol === "http:" || u.protocol === "https:") return u.href;
+    } catch {
+      /* ignore */
+    }
+  }
+  const host = sitePrimaryDomainLabel(siteLike).trim();
+  if (!host) return "";
+  try {
+    return new URL(`https://${host}`).href;
+  } catch {
+    return "";
+  }
+}

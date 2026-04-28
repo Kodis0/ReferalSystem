@@ -20,6 +20,12 @@ function projectTitle(project) {
   );
 }
 
+function projectDisplayName(project) {
+  const raw = project?.project?.name;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return projectTitle(project);
+}
+
 function projectAvatarDataUrl(project) {
   const raw = project?.project?.avatar_data_url;
   return typeof raw === "string" ? raw.trim() : "";
@@ -335,6 +341,8 @@ export default function OwnerSitesListPage() {
 
   const handleCardDragEnd = resetDragState;
 
+  const projectSkeletonCount = loading ? Math.max(1, projects.length) : 0;
+
   return (
     <div className="owner-programs__projects-page lk-partner">
       <header className="owner-programs__projects-header">
@@ -349,9 +357,23 @@ export default function OwnerSitesListPage() {
       </header>
 
       {loading && (
-        <div className="owner-programs__projects-loader" role="status" aria-live="polite" aria-label="Загрузка">
-          <div className="owner-programs__projects-loader-inner">
-            <div className="owner-programs__projects-loader-icon" data-test-id="loader" />
+        <div
+          className="owner-programs__projects-skel"
+          role="status"
+          aria-live="polite"
+          aria-label="Загрузка проектов"
+          data-testid="projects-page-skel"
+        >
+          <div className="owner-programs__projects-list owner-programs__projects-list--tw-cards owner-programs__projects-skel-grid">
+            {Array.from({ length: projectSkeletonCount }, (_, i) => (
+              <div key={i} className="owner-programs__projects-skel-card">
+                <span className="owner-programs__skel owner-programs__projects-skel-avatar" aria-hidden />
+                <div className="owner-programs__projects-skel-lines">
+                  <span className="owner-programs__skel owner-programs__projects-skel-line owner-programs__projects-skel-line_wide" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__projects-skel-line" aria-hidden />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -373,8 +395,7 @@ export default function OwnerSitesListPage() {
         >
           {projects.map((project) => {
             const id = projectKey(project);
-            const title = projectTitle(project);
-            const desc = typeof project?.project?.description === "string" ? project.project.description.trim() : "";
+            const displayName = projectDisplayName(project);
             const avatarDataUrl = projectAvatarDataUrl(project);
             const isDragging = dragPlaceholderProjectId === id;
             const isDragOver = dragOverProjectId === id && draggedProjectId !== id;
@@ -393,6 +414,7 @@ export default function OwnerSitesListPage() {
                   to={targetHref}
                   state={{ projectViewMode: "overview" }}
                   className="owner-programs__project-card-link owner-programs__project-card-link_primary owner-programs__project-card-link_s"
+                  aria-label={`${displayName}, Сайтов: ${project.sites_count}`}
                   draggable
                   onDragStart={(event) => handleCardDragStart(event, id)}
                   onDragEnd={handleCardDragEnd}
@@ -409,9 +431,10 @@ export default function OwnerSitesListPage() {
                       <DefaultProjectAvatar />
                     )}
                   </div>
-                  <p className="owner-programs__project-card-name">{title}</p>
                   <div className="owner-programs__project-card-meta">
-                    {desc ? <p className="owner-programs__project-card-desc">{desc}</p> : null}
+                    <p className="owner-programs__project-card-name" data-testid={`project-card-name-${id}`}>
+                      {displayName}
+                    </p>
                     <p className="owner-programs__project-card-desc" data-testid={`project-card-sites-${id}`}>
                       Сайтов: {project.sites_count}
                     </p>

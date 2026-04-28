@@ -1,5 +1,4 @@
 import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
@@ -10,7 +9,6 @@ import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { SITE_OWNER_ACTIVITY_EVENT } from "./siteOwnerActivityBus";
-
 function authHeaders() {
   const token = localStorage.getItem("access_token");
   return {
@@ -37,10 +35,6 @@ function formatHistoryAt(iso) {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "long", timeStyle: "short" }).format(d);
 }
 
-function hasExpandableDetails(details) {
-  return details && typeof details === "object" && Object.keys(details).length > 0;
-}
-
 const SiteHistoryDateFilterTrigger = forwardRef(function SiteHistoryDateFilterTrigger(
   {
     value,
@@ -50,6 +44,7 @@ const SiteHistoryDateFilterTrigger = forwardRef(function SiteHistoryDateFilterTr
     name,
     className: classNameFromPicker,
     placeholder: _ignoredPlaceholder,
+    calendarOpen = false,
     ...rest
   },
   ref,
@@ -68,6 +63,7 @@ const SiteHistoryDateFilterTrigger = forwardRef(function SiteHistoryDateFilterTr
       onClick={onClick}
       disabled={disabled}
       aria-haspopup="dialog"
+      aria-expanded={calendarOpen}
       aria-label={hasValue ? `Фильтр по дате, выбрано ${value}` : "Фильтр по дате, открыть календарь"}
       {...rest}
     >
@@ -81,7 +77,7 @@ const SiteHistoryDateFilterTrigger = forwardRef(function SiteHistoryDateFilterTr
           height="4"
           fill="none"
           viewBox="0 0 8 4"
-          className="owner-programs__histSortArrow"
+          className={`owner-programs__histSortArrow${calendarOpen ? " owner-programs__histSortArrow_open" : ""}`}
           aria-hidden="true"
         >
           <path fill="currentColor" d="m4 4 4-4H0l4 4Z" />
@@ -107,7 +103,6 @@ export default function SiteHistoryPage() {
   const [rows, setRows] = useState([]);
   const [count, setCount] = useState(0);
   const [numPages, setNumPages] = useState(1);
-  const [expandedId, setExpandedId] = useState(null);
   const [filterDateYmd, setFilterDateYmd] = useState("");
 
   const baseUrl = useMemo(
@@ -259,8 +254,17 @@ export default function SiteHistoryPage() {
 
             {loading ? (
               <div className="owner-programs__histRow owner-programs__histRow_body">
-                <div className="owner-programs__histCell owner-programs__histCell_full">
-                  <p className="owner-programs__histText owner-programs__histText_muted">Загрузка…</p>
+                <div className="owner-programs__histCell owner-programs__histCell_full" role="status" aria-label="Загрузка">
+                  <div className="owner-programs__tab-page-skel_wide">
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <span
+                        key={i}
+                        className="owner-programs__skel owner-programs__tab-page-skel_history-row"
+                        style={{ display: "block", marginBottom: 8 }}
+                        aria-hidden
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : rows.length === 0 ? (
@@ -270,10 +274,7 @@ export default function SiteHistoryPage() {
                 </div>
               </div>
             ) : (
-              rows.map((row) => {
-                const open = expandedId === row.id;
-                const expandable = hasExpandableDetails(row.details);
-                return (
+              rows.map((row) => (
                   <div key={row.id} className="owner-programs__histBlock">
                     <div className="owner-programs__histRow owner-programs__histRow_body">
                       <div className="owner-programs__histCell owner-programs__histCell_date">
@@ -287,29 +288,14 @@ export default function SiteHistoryPage() {
                           >
                             {row.message || "—"}
                           </p>
-                          {expandable ? (
-                            <button
-                              type="button"
-                              className={`owner-programs__histInlineExpand${open ? " owner-programs__histInlineExpand_open" : ""}`}
-                              aria-expanded={open}
-                              aria-label={open ? "Скрыть детали" : "Показать детали"}
-                              onClick={() => setExpandedId(open ? null : row.id)}
-                            >
-                              <ChevronDown size={14} strokeWidth={2.25} className="owner-programs__histInlineExpandIcon" aria-hidden="true" />
-                            </button>
-                          ) : null}
                         </div>
                       </div>
                       <div className="owner-programs__histCell owner-programs__histCell_user">
                         <p className="owner-programs__histText owner-programs__histText_body">{row.actor_display || "—"}</p>
                       </div>
                     </div>
-                    {open && expandable ? (
-                      <pre className="owner-programs__histDetails">{JSON.stringify(row.details, null, 2)}</pre>
-                    ) : null}
                   </div>
-                );
-              })
+                ))
             )}
           </div>
         </div>

@@ -18,7 +18,6 @@ import {
 import SiteShellWidgetActionsBar from "../widget-install/SiteShellWidgetActionsBar";
 import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "./domainCountryFlagSvg";
 import { useSiteShellIntegrationActions } from "./useSiteShellIntegrationActions";
-
 function ServicesGridIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20" aria-hidden="true">
@@ -569,7 +568,7 @@ export default function ProjectOverviewPage() {
         }
 
         const updatedProject =
-          typeof projectEntry?.id === "number" ? await reloadProjectEntry(projectEntry.id) : null;
+          typeof projectEntry?.id === "number" ? await reloadProjectEntry(projectEntry.id, { silent: true }) : null;
 
         // After deletion, return to project sites list. We deliberately do NOT
         // pick a "next" site for the user — site identity belongs to the URL,
@@ -690,11 +689,6 @@ export default function ProjectOverviewPage() {
           <h2 className="owner-programs__overview-title">
             {currentProjectSites.length === 0 ? "Подключение сайта" : "Добавить сайт"}
           </h2>
-          <p className="owner-programs__muted owner-programs__connect-site-lead">
-            {currentProjectSites.length === 0
-              ? "Сначала добавьте сайт в проект, после этого откроются сайты, настройки интеграции и пользователи."
-              : "Добавьте ещё один сайт в текущий проект."}
-          </p>
           <div id="create-owner-project" className="owner-programs__connect-site-nested-create">
             <form className="form" onSubmit={handleAddSite}>
               <label className="formControl" htmlFor="project-add-site-name">
@@ -799,11 +793,21 @@ export default function ProjectOverviewPage() {
               </button>
             </div>
             <div className="owner-programs__services-count">
-              {projectEntryLoading ? "Загрузка…" : `Сайтов: ${visibleProjectSites.length}`}
+              {projectEntryLoading ? (
+                <span className="owner-programs__skel owner-programs__services-toolbar-skel-count" aria-hidden />
+              ) : (
+                `Сайтов: ${visibleProjectSites.length}`
+              )}
             </div>
           </div>
 
-          {projectEntryLoading ? <p className="lk-partner__muted">Загрузка сайтов проекта…</p> : null}
+          {projectEntryLoading ? (
+            <div className="owner-programs__project-services-skel-grid" role="status" aria-label="Загрузка сайтов проекта">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <span key={i} className="owner-programs__skel owner-programs__tab-page-skel_service-card" aria-hidden />
+              ))}
+            </div>
+          ) : null}
           {!projectEntryLoading && projectEntryError ? <div className="owner-programs__error">{projectEntryError}</div> : null}
           {!projectEntryLoading && !projectEntryError && deleteError ? <div className="owner-programs__error">{deleteError}</div> : null}
           {!projectEntryLoading && !projectEntryError && filteredSites.length === 0 && visibleProjectSites.length === 0 ? (
@@ -858,7 +862,7 @@ export default function ProjectOverviewPage() {
                         <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
                           <ServiceCountryFlag
                             domain={siteOriginForCountryFlag(site, domain)}
-                            fallback={serviceCountryFlagGlobeFallback(18)}
+                            fallback={serviceCountryFlagGlobeFallback(22)}
                             title={serverPingFromServerTitle(site, siteReachabilityById[site.public_id])}
                           />
                           <div className="owner-programs__service-card-menu" onClick={(event) => event.stopPropagation()}>
@@ -943,7 +947,7 @@ export default function ProjectOverviewPage() {
                           <div className="owner-programs__services-list-flag-wrap">
                             <ServiceCountryFlag
                               domain={siteOriginForCountryFlag(site, domain)}
-                              fallback={serviceCountryFlagGlobeFallback(16)}
+                              fallback={serviceCountryFlagGlobeFallback(20)}
                               title={serverPingFromServerTitle(site, siteReachabilityById[site.public_id])}
                             />
                           </div>

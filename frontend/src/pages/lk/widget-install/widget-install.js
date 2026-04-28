@@ -9,10 +9,28 @@ import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "../owner-programs/owner-programs.css";
 import "./widget-install.css";
+import widgetInstallTildaEditHeadHtmlPng from "../../../static/images/widget-install-tilda-edit-head-html.png";
+import widgetInstallTildaHeadEditorPng from "../../../static/images/widget-install-tilda-head-editor.png";
+import widgetInstallTildaInsertCodePng from "../../../static/images/widget-install-tilda-insert-code.png";
+import widgetInstallTildaPublishPng from "../../../static/images/widget-install-tilda-publish.png";
+import widgetInstallTildaSiteSettingsPng from "../../../static/images/widget-install-tilda-site-settings.png";
 import { siteLifecycleLabelRu } from "../owner-programs/siteDisplay";
 import { emitSiteOwnerActivity } from "../owner-programs/siteOwnerActivityBus";
 
 SyntaxHighlighter.registerLanguage("xml", xml);
+
+function WidgetInstallScreenshotExpandable({ src, description, onOpen }) {
+  return (
+    <button
+      type="button"
+      className="lk-widget-install__step-screenshot-btn"
+      onClick={() => onOpen({ src, alt: description })}
+      aria-label={`Увеличить изображение. ${description}`}
+    >
+      <img src={src} alt="" className="lk-widget-install__step-screenshot" loading="lazy" decoding="async" aria-hidden />
+    </button>
+  );
+}
 
 function useLkDocumentTheme() {
   return useSyncExternalStore(
@@ -316,7 +334,16 @@ function buildProjectSiteWidgetPath(integrationPayload, selectedSitePublicId, pr
   return `${base}/sites/${encodeURIComponent(siteId)}/widget`;
 }
 
-function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyHint, steps = null, compact = false }) {
+function WidgetInstallSnippetCard({
+  title,
+  subtitle = "",
+  snippet,
+  onCopy,
+  copyHint,
+  steps = null,
+  compact = false,
+  snippetOnly = false,
+}) {
   const lkTheme = useLkDocumentTheme();
   const snippetHlStyle = lkTheme === "light" ? atomOneLight : atomOneDarkReasonable;
   const copied = copyHint === "Скопировано";
@@ -324,18 +351,8 @@ function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyH
     ? "lk-widget-install__card owner-programs__site-snippet-card"
     : "lk-widget-install__card lk-widget-install__install-hero";
 
-  return (
-    <section className={sectionClass} data-testid="widget-install-snippet-block">
-      <div className={compact ? "owner-programs__site-snippet-head" : "lk-widget-install__install-copy"}>
-        <h2 className={`lk-partner__section-title${compact ? "" : " lk-widget-install__install-title"}`}>{title}</h2>
-        {subtitle ? (
-          <p className={compact ? "owner-programs__muted owner-programs__site-snippet-sub" : "lk-widget-install__install-subtitle"}>
-            {subtitle}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="lk-widget-install__snippet-card">
+  const snippetBlock = (
+    <div className="lk-widget-install__snippet-card">
         <div className="lk-widget-install__snippet-card-head">
           <span className="lk-widget-install__snippet-card-label">HTML</span>
           <button
@@ -368,6 +385,34 @@ function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyH
           </SyntaxHighlighter>
         </div>
       </div>
+  );
+
+  if (snippetOnly) {
+    if (compact) {
+      return (
+        <section
+          className="lk-widget-install__card owner-programs__site-snippet-card"
+          data-testid="widget-install-snippet-block"
+        >
+          {snippetBlock}
+        </section>
+      );
+    }
+    return <div data-testid="widget-install-snippet-block">{snippetBlock}</div>;
+  }
+
+  return (
+    <section className={sectionClass} data-testid="widget-install-snippet-block">
+      <div className={compact ? "owner-programs__site-snippet-head" : "lk-widget-install__install-copy"}>
+        <h2 className={`lk-partner__section-title${compact ? "" : " lk-widget-install__install-title"}`}>{title}</h2>
+        {subtitle ? (
+          <p className={compact ? "owner-programs__muted owner-programs__site-snippet-sub" : "lk-widget-install__install-subtitle"}>
+            {subtitle}
+          </p>
+        ) : null}
+      </div>
+
+      {snippetBlock}
 
       {steps ? (
         <div className="lk-widget-install__install-steps-block">
@@ -383,34 +428,79 @@ function WidgetInstallSnippetCard({ title, subtitle = "", snippet, onCopy, copyH
   );
 }
 
+const VERIFY_POLL_INTERVAL_MS = 3000;
+const VERIFY_MAX_WAIT_MS = 90_000;
+
+const VERIFY_POLL_STEPS_RU = [
+  "Открываем сайт",
+  "Проверяем установленный код",
+  "Ждём запуск виджета",
+];
+
+function pickIntegrationVerificationSnapshot(src) {
+  if (!src || typeof src !== "object") return {};
+  const keys = [
+    "verification_status",
+    "last_verification_at",
+    "last_verification_error",
+    "last_widget_seen_at",
+    "last_widget_seen_origin",
+    "status",
+    "verified_at",
+    "activated_at",
+  ];
+  const out = {};
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(src, k)) out[k] = src[k];
+  }
+  return out;
+}
+
+/** Кнопка основной проверки: после исхода «успех/ошибка» — «Проверить ещё раз». */
+function verifyPrimaryButtonLabel(verifyLoading, connectionCheckStatus) {
+  if (verifyLoading) return "Проверяем...";
+  if (connectionCheckStatus === "found" || connectionCheckStatus === "verify_incomplete" || connectionCheckStatus === "not_found") {
+    return "Проверить ещё раз";
+  }
+  return "Проверить подключение";
+}
+
 function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
   const verifyFromToolbar = Boolean(opts.verifyFromToolbar);
   const persistedFound = persistedCheck?.status === "found";
   const persistedOrigin = String(persistedCheck?.last_seen_origin || "").trim();
 
-  if (localState.status === "checking") {
+  if (localState.status === "polling" || localState.status === "checking") {
     return {
       tone: "pending",
-      title: "Идёт проверка",
-      message: "Проверяем, дошёл ли сигнал от установленного кода.",
+      title: "Проверяем подключение...",
+      message: "Открываем сайт, проверяем код и ждём запуск виджета.",
+      steps: VERIFY_POLL_STEPS_RU,
     };
   }
   if (localState.status === "found") {
     return {
       tone: "ok",
-      title: "Подключение найдено",
-      message: localState.message || "Сайт подключён.",
+      title: "Сайт подключён",
+      message: "Виджет успешно запустился на сайте.",
     };
   }
   if (localState.status === "not_found") {
     return {
       tone: "bad",
-      title: "Подключение не найдено",
+      title: "Не удалось проверить подключение",
       message:
         localState.message ||
         (verifyFromToolbar
           ? "Проверьте установку кода и публикацию страницы, затем снова запустите проверку вверху."
-          : "Проверьте установку и попробуйте снова после публикации сайта."),
+          : "Проверьте, что код вставлен в header сайта и сайт опубликован."),
+    };
+  }
+  if (localState.status === "verify_incomplete") {
+    return {
+      tone: "bad",
+      title: "Не удалось проверить подключение",
+      message: "Проверьте, что код вставлен в header сайта и сайт опубликован.",
     };
   }
   if (persistedFound) {
@@ -426,9 +516,128 @@ function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
     tone: "idle",
     title: "Ещё не проверяли",
     message: verifyFromToolbar
-      ? "Опубликуйте страницу с кодом, затем запустите проверку кнопкой у названия сайта вверху."
-      : "После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже.",
+      ? "Опубликуйте сайт с кодом в header, затем запустите проверку кнопкой у названия сайта вверху."
+      : "Опубликуйте сайт с кодом в header и нажмите «Проверить подключение».",
   };
+}
+
+const VERIFICATION_STATUS_LABEL_RU = {
+  not_started: "Ожидает проверки",
+  pending: "Проверяем",
+  html_found: "Код найден, но виджет не запустился",
+  widget_seen: "Виджет успешно запустился",
+  failed: "Ошибка проверки",
+};
+
+function formatVerificationInstant(value) {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return "";
+  }
+}
+
+function WidgetInstallVerifyPrimaryInstructions({ compact = false }) {
+  const cls = compact ? "owner-programs__muted" : "lk-partner__muted";
+  return (
+    <p className={cls} style={{ marginTop: 0, marginBottom: 10 }} data-testid="widget-verify-primary-copy">
+      Скопируйте код и вставьте его в header сайта. После публикации сайта нажмите «Проверить подключение».
+    </p>
+  );
+}
+
+function WidgetInstallVerifyStatusMeta({ verificationStatus, lastVerificationAt, lastWidgetSeenAt, lastWidgetSeenOrigin, verifyLoading = false }) {
+  const vs = verificationStatus || "not_started";
+  const statusLine = VERIFICATION_STATUS_LABEL_RU[vs] || VERIFICATION_STATUS_LABEL_RU.not_started;
+  const wrapClass = [
+    "lk-widget-install__verify-status-wrap",
+    verifyLoading ? "lk-widget-install__verify-status-wrap_is-checking" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className={wrapClass} data-testid="widget-verify-status-block">
+      <div className="lk-widget-install__verify-status" data-testid="widget-verify-status-line">
+        <span className="lk-widget-install__verify-status-label">Статус проверки:</span>{" "}
+        <span className="lk-widget-install__verify-status-value">{statusLine}</span>
+      </div>
+      <div className="lk-widget-install__verify-meta lk-partner__muted" style={{ marginTop: 8, fontSize: 13 }}>
+        {lastVerificationAt ? (
+          <div data-testid="widget-verify-last-run">
+            Последняя проверка: {formatVerificationInstant(lastVerificationAt)}
+          </div>
+        ) : null}
+        {lastWidgetSeenAt ? (
+          <div data-testid="widget-verify-last-widget-seen">
+            Сигнал виджета: {formatVerificationInstant(lastWidgetSeenAt)}
+            {lastWidgetSeenOrigin ? ` (${lastWidgetSeenOrigin})` : ""}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function WidgetInstallVerifyAdvancedOptions({
+  open,
+  onOpenChange,
+  verificationUrlInput,
+  setVerificationUrlInput,
+  onVerifyThisPage,
+  verifyLoading,
+  saving,
+  compact = false,
+}) {
+  const mutedClass = compact ? "owner-programs__muted" : "lk-partner__muted";
+  return (
+    <details
+      className="lk-widget-install__verify-advanced-details lk-widget-install__verify-advanced-details_secondary"
+      data-testid="widget-verify-advanced-details"
+      open={open}
+      onToggle={(e) => {
+        onOpenChange(e.currentTarget.open);
+      }}
+    >
+      <summary className="lk-widget-install__verify-advanced-summary lk-widget-install__verify-advanced-summary_link">
+        Проверить другую страницу
+      </summary>
+      <div className="lk-widget-install__verify-advanced-body">
+        <p className="lk-widget-install__verify-advanced-fallback-title" id="widget-verify-fallback-title">
+          Код установлен не на всех страницах?
+        </p>
+        <p className={mutedClass} style={{ marginTop: 8 }}>
+          Если вы вставили код не в общий header сайта, укажите ссылку на страницу, где точно установлен код.
+        </p>
+        <label className="lk-widget-install__field-label" htmlFor="widget-verify-advanced-url-input">
+          Ссылка на страницу с кодом
+        </label>
+        <input
+          id="widget-verify-advanced-url-input"
+          data-testid="widget-verify-advanced-url-input"
+          type="url"
+          className="lk-widget-install__select"
+          value={verificationUrlInput}
+          onChange={(e) => setVerificationUrlInput(e.target.value)}
+          placeholder="https://mysite.example/page-with-widget"
+          autoComplete="off"
+        />
+        <div className="lk-widget-install__verify-persist-row" style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            className="lk-widget-install__btn"
+            disabled={verifyLoading || saving}
+            onClick={() => void onVerifyThisPage()}
+            data-testid="widget-verify-this-page-btn"
+          >
+            {saving ? "Сохраняем…" : "Проверить эту страницу"}
+          </button>
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function WidgetInstallConnectionCheckCard({
@@ -439,16 +648,17 @@ function WidgetInstallConnectionCheckCard({
   statusView,
   showVerifyButton = true,
   hideIntro = false,
+  hideSectionTitle = false,
 }) {
   const actionBusy = verifyLoading || refreshBusy;
   return (
     <section className="lk-widget-install__card lk-widget-install__connection-check" data-testid="site-connection-check-card">
-      <h2 className="lk-partner__section-title">Проверка подключения</h2>
+      {!hideSectionTitle ? <h2 className="lk-partner__section-title">Проверка подключения</h2> : null}
       {!hideIntro ? (
         <p className="lk-partner__muted">
           {showVerifyButton
-            ? "После установки кода опубликуйте сайт, откройте страницу и затем нажмите кнопку ниже."
-            : "После установки кода опубликуйте сайт и откройте страницу. Проверку можно запустить кнопкой на панели действий у названия сайта."}
+            ? "Скопируйте код в header сайта, опубликуйте сайт и нажмите кнопку ниже."
+            : "После установки кода опубликуйте сайт. Проверку можно запустить кнопкой на панели действий у названия сайта."}
         </p>
       ) : null}
       {showVerifyButton || onRefreshStatus ? (
@@ -495,6 +705,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const inProjectShell = Boolean(routeSitePublicId);
   const projectSitePresentation = inProjectShell && presentation === "project-site";
   const focusedConnectView = inProjectShell && focused && !projectSitePresentation;
+  const focusedConnectViewRef = useRef(focusedConnectView);
+  focusedConnectViewRef.current = focusedConnectView;
+  const connectSiteIntroRu =
+    "Скопируйте код, вставьте его в header сайта и опубликуйте сайт. После этого мы автоматически проверим подключение.";
   const shellTitle = focusedConnectView ? "Подключите сайт" : inProjectShell ? "Виджет" : "Виджет на сайт";
   const shellSubtitle = focusedConnectView
     ? ""
@@ -520,6 +734,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const [diag, setDiag] = useState(null);
   const [diagError, setDiagError] = useState("");
   const [originInput, setOriginInput] = useState("");
+  const [verificationUrlInput, setVerificationUrlInput] = useState("");
   const [configText, setConfigText] = useState("{}");
   const [platformPreset, setPlatformPreset] = useState("tilda");
   const [widgetEnabled, setWidgetEnabled] = useState(true);
@@ -527,8 +742,15 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const [projectBasePath, setProjectBasePath] = useState("");
   const [connectionCheckUi, setConnectionCheckUi] = useState({ status: "idle", message: "" });
   const loadGenerationRef = useRef(0);
+  const [otherPageVerifyOpen, setOtherPageVerifyOpen] = useState(false);
+  const [screenshotLightbox, setScreenshotLightbox] = useState(null);
+  const verifyPollIntervalRef = useRef(null);
+  const verifySessionRef = useRef(0);
+  const verifyPostInFlightRef = useRef(false);
+  const selectedSitePublicIdRef = useRef(selectedSitePublicId);
   const locationRef = useRef(location);
   locationRef.current = location;
+  selectedSitePublicIdRef.current = selectedSitePublicId;
 
   const projectIdFromRoute = useMemo(() => {
     const raw = String(params?.projectId ?? "").trim();
@@ -541,6 +763,64 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     if (projectIdFromRoute) return `/lk/partner/project/${projectIdFromRoute}`;
     return "";
   }, [projectBasePath, projectIdFromRoute]);
+  const effectiveProjectBasePathRef = useRef(effectiveProjectBasePath);
+  effectiveProjectBasePathRef.current = effectiveProjectBasePath;
+  const projectIdFromRouteRef = useRef(projectIdFromRoute);
+  projectIdFromRouteRef.current = projectIdFromRoute;
+
+  const stopVerifyPolling = useCallback(() => {
+    if (verifyPollIntervalRef.current != null) {
+      clearInterval(verifyPollIntervalRef.current);
+      verifyPollIntervalRef.current = null;
+    }
+  }, []);
+
+  const refreshIntegrationSnapshotForPoll = useCallback(
+    async (signal) => {
+      const effectiveSitePublicId = routeSitePublicId || selectedSitePublicIdRef.current;
+      if (!effectiveSitePublicId) return null;
+      const fetchOpts = signal ? { signal } : {};
+      try {
+        const resInt = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, effectiveSitePublicId), {
+          method: "GET",
+          headers: authHeaders(),
+          credentials: "include",
+          ...fetchOpts,
+        });
+        const intPayload = await resInt.json().catch(() => ({}));
+        if (!resInt.ok) return null;
+        setData((prev) =>
+          prev && prev.public_id && intPayload.public_id && prev.public_id === intPayload.public_id
+            ? { ...prev, ...pickIntegrationVerificationSnapshot(intPayload) }
+            : intPayload,
+        );
+        const resDiag = await fetch(
+          siteDiagnosticsFetchUrl(
+            API_ENDPOINTS.siteIntegrationDiagnostics,
+            intPayload.public_id || effectiveSitePublicId,
+            false,
+          ),
+          {
+            method: "GET",
+            headers: authHeaders(),
+            credentials: "include",
+            ...fetchOpts,
+          },
+        );
+        if (resDiag.ok) {
+          const d = await resDiag.json().catch(() => null);
+          setDiag(d);
+          setDiagError("");
+        }
+        return intPayload;
+      } catch (e) {
+        if (e?.name === "AbortError") return null;
+        console.error(e);
+        return null;
+      }
+    },
+    [routeSitePublicId],
+  );
 
   const load = useCallback(async (sitePublicIdOverride, options = {}) => {
     const { quiet = false, activityRefresh = false } = options;
@@ -600,6 +880,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       if (generation !== loadGenerationRef.current) return;
       setData(intPayload);
       setOriginInput(Array.isArray(intPayload.allowed_origins) ? intPayload.allowed_origins[0] || "" : "");
+      setVerificationUrlInput(String(intPayload.verification_url || "").trim());
       setConfigText(prettyJson(intPayload.config_json));
       setPlatformPreset(intPayload.platform_preset || "tilda");
       setWidgetEnabled(Boolean(intPayload.widget_enabled));
@@ -660,6 +941,34 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   useEffect(() => {
     load();
   }, [load, location.search]);
+
+  useEffect(() => {
+    const st = data?.verification_status;
+    if (st === "failed" || st === "html_found") {
+      setOtherPageVerifyOpen(true);
+    }
+  }, [data?.verification_status]);
+
+  useEffect(() => {
+    if (!screenshotLightbox) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setScreenshotLightbox(null);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [screenshotLightbox]);
+
+  useEffect(
+    () => () => {
+      stopVerifyPolling();
+    },
+    [stopVerifyPolling],
+  );
 
   const siteManagementPath = useMemo(() => {
     if (!effectiveProjectBasePath || !selectedSitePublicId) return "";
@@ -746,6 +1055,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           capture_config: captureConfig,
           platform_preset: platformPreset,
           widget_enabled: nextWidgetEnabled,
+          verification_url: String(verificationUrlInput || "").trim(),
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -778,6 +1088,22 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     }
   };
 
+  const onVerifyThisPage = async () => {
+    if (!String(verificationUrlInput || "").trim()) {
+      setSaveHint("Введите ссылку на страницу.");
+      return;
+    }
+    setSaveHint("");
+    setConnectionCheckUi({ status: "idle", message: "" });
+    try {
+      await onSave();
+      await onVerify();
+    } catch (e) {
+      console.error(e);
+      setSaveHint("Не удалось выполнить проверку.");
+    }
+  };
+
   const onPickSite = async (sitePublicId) => {
     // Site picker is only used in legacy/standalone mode (no canonical route).
     // When a canonical route is active, this branch is unreachable, but we still
@@ -788,18 +1114,93 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   };
 
   const onVerify = async () => {
+    const session = ++verifySessionRef.current;
+    stopVerifyPolling();
     setVerifyLoading(true);
     setSaveHint("");
-    setConnectionCheckUi({ status: "checking", message: "" });
+    setConnectionCheckUi({ status: "polling", message: "" });
+
+    const verifyStartedAt = Date.now();
+    const abortController = new AbortController();
+    const postAbortTimer = window.setTimeout(() => {
+      abortController.abort();
+    }, VERIFY_MAX_WAIT_MS);
+
+    const clearPostAbortTimer = () => {
+      window.clearTimeout(postAbortTimer);
+    };
+
+    const applyPollTerminalSuccess = (intPayload) => {
+      if (verifySessionRef.current !== session) return;
+      stopVerifyPolling();
+      setVerifyLoading(false);
+      setConnectionCheckUi({ status: "found" });
+      setOtherPageVerifyOpen(false);
+      emitSiteOwnerActivity(String(intPayload?.public_id || selectedSitePublicIdRef.current || "").trim());
+      if (focusedConnectViewRef.current) {
+        const widgetPath = buildProjectSiteWidgetPath(
+          intPayload,
+          selectedSitePublicIdRef.current,
+          effectiveProjectBasePathRef.current,
+          projectIdFromRouteRef.current,
+        );
+        if (widgetPath) navigate(widgetPath, { replace: true });
+      }
+    };
+
+    const applyPollTerminalFailure = (intPayload) => {
+      if (verifySessionRef.current !== session) return;
+      stopVerifyPolling();
+      setVerifyLoading(false);
+      setConnectionCheckUi({
+        status: "verify_incomplete",
+        message: String(intPayload?.last_verification_error || "").trim() || undefined,
+      });
+    };
+
+    const runPollTick = async () => {
+      if (verifySessionRef.current !== session) return;
+      if (Date.now() - verifyStartedAt > VERIFY_MAX_WAIT_MS) {
+        stopVerifyPolling();
+        setVerifyLoading(false);
+        setConnectionCheckUi({ status: "idle", message: "" });
+        setSaveHint("Превышено время ожидания проверки. Попробуйте ещё раз.");
+        return;
+      }
+      const intPayload = await refreshIntegrationSnapshotForPoll();
+      if (!intPayload || verifySessionRef.current !== session) return;
+      if (verifyPostInFlightRef.current) return;
+      const vs = intPayload.verification_status;
+      if (vs === "widget_seen") {
+        applyPollTerminalSuccess(intPayload);
+        return;
+      }
+      if (vs === "failed" || vs === "html_found") {
+        applyPollTerminalFailure(intPayload);
+      }
+    };
+
+    verifyPollIntervalRef.current = window.setInterval(() => {
+      void runPollTick();
+    }, VERIFY_POLL_INTERVAL_MS);
+
     try {
+      verifyPostInFlightRef.current = true;
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationVerify, selectedSitePublicId), {
         method: "POST",
         headers: authHeaders(),
         credentials: "include",
         body: JSON.stringify({ site_public_id: selectedSitePublicId || undefined }),
+        signal: abortController.signal,
       });
       const payload = await res.json().catch(() => ({}));
+      verifyPostInFlightRef.current = false;
+
+      if (verifySessionRef.current !== session) return;
+
       if (!res.ok) {
+        stopVerifyPolling();
+        setVerifyLoading(false);
         const verifyErrorCode = apiErrorCode(payload);
         if (verifyErrorCode === "site_connection_not_found") {
           const nextMessage =
@@ -808,22 +1209,77 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           if (!focusedConnectView) setSaveHint(nextMessage);
           return;
         }
+        if (verifyErrorCode === "site_widget_verify_incomplete") {
+          const msg = String(payload.last_verification_error || payload.detail || "").trim();
+          setConnectionCheckUi({
+            status: "verify_incomplete",
+            message:
+              msg ||
+              "Мы открыли страницу, но виджет не запросил настройки. Проверьте, что код вставлен именно на эту страницу, страница опубликована, домен сайта указан в настройках и скрипт не заблокирован.",
+          });
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  verification_status: payload.verification_status ?? prev.verification_status,
+                  last_verification_error: payload.last_verification_error ?? prev.last_verification_error,
+                  last_verification_at: payload.last_verification_at ?? prev.last_verification_at,
+                }
+              : prev,
+          );
+          if (!focusedConnectView) setSaveHint(msg || "Проверка не завершена.");
+          return;
+        }
+        if (verifyErrorCode === "widget_verify_rate_limited") {
+          setConnectionCheckUi({ status: "idle", message: "" });
+          setSaveHint(String(payload.detail || "").trim() || "Подождите перед следующей проверкой.");
+          return;
+        }
+        if (verifyErrorCode === "site_verification_url_invalid") {
+          setConnectionCheckUi({ status: "idle", message: "" });
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  verification_status: payload.verification_status ?? prev.verification_status,
+                  last_verification_error: payload.last_verification_error ?? prev.last_verification_error,
+                  last_verification_at: prev.last_verification_at,
+                }
+              : prev,
+          );
+          setSaveHint(String(payload.detail || "").trim() || "Некорректный URL для проверки.");
+          return;
+        }
+        if (verifyErrorCode === "site_verification_home_url_missing") {
+          setConnectionCheckUi({ status: "idle", message: "" });
+          setSaveHint(String(payload.detail || "").trim() || "Не удалось определить адрес сайта для проверки.");
+          return;
+        }
         setConnectionCheckUi({ status: "idle", message: "" });
         const verifyHint = apiErrorDisplayText(payload);
         setSaveHint(verifyHint || `Проверка: ${res.status}`);
         return;
       }
+
+      if (payload.verification_status === "pending") {
+        setData(payload);
+        return;
+      }
+
+      stopVerifyPolling();
+      setVerifyLoading(false);
       setData(payload);
-      setConnectionCheckUi({
-        status: "found",
-        message: "Подключение найдено. Сайт подключён.",
-      });
+      setConnectionCheckUi({ status: "found" });
+      setOtherPageVerifyOpen(false);
       emitSiteOwnerActivity(String(selectedSitePublicId || payload?.public_id || "").trim());
-      const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId), {
-        method: "GET",
-        headers: authHeaders(),
-        credentials: "include",
-      });
+      const resDiag = await fetch(
+        siteDiagnosticsFetchUrl(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId, false),
+        {
+          method: "GET",
+          headers: authHeaders(),
+          credentials: "include",
+        },
+      );
       if (resDiag.ok) {
         setDiag(await resDiag.json().catch(() => null));
         setDiagError("");
@@ -838,11 +1294,21 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         if (widgetPath) navigate(widgetPath, { replace: true });
       }
     } catch (e) {
-      console.error(e);
-      setConnectionCheckUi({ status: "idle", message: "" });
-      setSaveHint("Сетевая ошибка при проверке");
-    } finally {
+      if (verifySessionRef.current !== session) return;
+      verifyPostInFlightRef.current = false;
+      stopVerifyPolling();
       setVerifyLoading(false);
+      if (e?.name === "AbortError") {
+        setConnectionCheckUi({ status: "idle", message: "" });
+        setSaveHint("Превышено время ожидания проверки. Попробуйте ещё раз.");
+      } else {
+        console.error(e);
+        setConnectionCheckUi({ status: "idle", message: "" });
+        setSaveHint("Сетевая ошибка при проверке");
+      }
+    } finally {
+      clearPostAbortTimer();
+      verifyPostInFlightRef.current = false;
     }
   };
 
@@ -904,8 +1370,11 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   if (loading) {
     if (projectSitePresentation) {
       return (
-        <div className="owner-programs__page owner-programs__site-page" aria-busy="true">
-          <p className="lk-partner__muted">Загрузка…</p>
+        <div className="owner-programs__page owner-programs__site-page" aria-busy="true" role="status" aria-label="Загрузка">
+          <div className="owner-programs__widget-site-skel">
+            <span className="owner-programs__skel owner-programs__widget-site-skel-snippet" aria-hidden />
+            <span className="owner-programs__skel owner-programs__widget-site-skel-section" aria-hidden />
+          </div>
         </div>
       );
     }
@@ -1029,6 +1498,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const connectionCheckView = connectionCheckPresentation(connectionCheckUi, diag?.connection_check, {
     verifyFromToolbar: projectSitePresentation,
   });
+  const verifyPrimaryLabel = verifyPrimaryButtonLabel(verifyLoading, connectionCheckUi.status);
+  const showVerifyOtherPageLink =
+    !verifyLoading && (connectionCheckUi.status === "verify_incomplete" || connectionCheckUi.status === "not_found");
+  const lastVerifyErr = String(data?.last_verification_error || "").trim();
   const enabledOptionalFields = captureConfig.enabled_optional_fields;
   const siteName =
     (typeof data?.site_display_name === "string" && data.site_display_name.trim()) ||
@@ -1039,10 +1512,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const integrationWarnings = (diag?.integration_warnings || []).map((item) => warningDescription(item));
   const setupStatusText = setupStatusDescription(diag, lifecycleStatus);
   const installSteps = [
-    "Вставьте код на сайт",
-    "Опубликуйте изменения",
-    "Откройте страницу сайта",
-    "Вернитесь и нажмите «Проверить подключение»",
+    "Скопируйте HTML-код из блока выше.",
+    "Откройте настройки сайта, к которому хотите подключить реферальную программу.",
+    "В левом меню настроек выберите раздел «Вставка кода».",
+    "В блоке «HTML-код для вставки внутрь HEAD» нажмите «Редактировать код».",
+    "Вставьте код в раздел для HTML-кода внутри HEAD.",
+    "Опубликуйте сайт, чтобы изменения появились для посетителей.",
+    "Нажмите «Проверить подключение» на этой странице.",
   ];
   const readinessItems = [
     {
@@ -1120,29 +1596,182 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           </Link>
         </div>
         <h1 className="lk-dashboard__title">{shellTitle}</h1>
+        {shellSubtitle ? <p className="lk-dashboard__subtitle">{shellSubtitle}</p> : null}
         {diagError ? <div className="lk-widget-install__diag-soft">{diagError}</div> : null}
 
-        <WidgetInstallSnippetCard
-          title="Код подключения"
-          snippet={data.widget_embed_snippet}
-          onCopy={onCopySnippet}
-          copyHint={copyHint}
-        />
+        <section className="lk-widget-install__card lk-widget-install__how-to-card">
+          <div className="lk-widget-install__step-block">
+            <h3 className="lk-widget-install__step-title">Шаг 1. Скопируйте код</h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              Скопируйте HTML-код ниже. Он подключает реферальный виджет к вашему сайту.
+            </p>
+            <WidgetInstallSnippetCard
+              snippetOnly
+              compact
+              snippet={data.widget_embed_snippet}
+              onCopy={onCopySnippet}
+              copyHint={copyHint}
+            />
+          </div>
 
-        <WidgetInstallConnectionCheckCard
-          verifyLoading={verifyLoading}
-          refreshBusy={refreshBusy}
-          onVerify={onVerify}
-          onRefreshStatus={onRefreshStatus}
-          statusView={connectionCheckView}
-        />
+          <div className="lk-widget-install__step-block">
+            <h3 className="lk-widget-install__step-title">Шаг 2. Откройте настройки сайта</h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              Откройте настройки сайта, к которому хотите подключить реферальную программу.
+            </p>
+            <WidgetInstallScreenshotExpandable
+              src={widgetInstallTildaSiteSettingsPng}
+              description="В конструкторе Tilda нажмите «Настройки сайта» рядом с названием сайта"
+              onOpen={setScreenshotLightbox}
+            />
+          </div>
 
-        <section className="lk-widget-install__card lk-widget-install__video-placeholder" aria-labelledby="project-site-connect-video-title">
-          <h2 id="project-site-connect-video-title" className="lk-partner__section-title">
-            Видеоинструкция
-          </h2>
-          <p className="lk-partner__muted">Здесь будет видеоинструкция по подключению.</p>
+          <div className="lk-widget-install__step-block">
+            <h3 className="lk-widget-install__step-title">Шаг 3. Перейдите в «Вставка кода»</h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              В левом меню настроек сайта выберите раздел «Вставка кода». В этом разделе можно добавить HTML-код, который будет загружаться на сайте.
+            </p>
+            <WidgetInstallScreenshotExpandable
+              src={widgetInstallTildaInsertCodePng}
+              description="В настройках сайта Tilda в левом меню выберите пункт «Вставка кода»"
+              onOpen={setScreenshotLightbox}
+            />
+          </div>
+
+          <div className="lk-widget-install__step-block">
+            <h3 className="lk-widget-install__step-title">Шаг 4. Откройте редактор HTML-кода</h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              В блоке «HTML-код для вставки внутрь HEAD» нажмите «Редактировать код».
+            </p>
+            <WidgetInstallScreenshotExpandable
+              src={widgetInstallTildaEditHeadHtmlPng}
+              description="В разделе «Вставка кода» в блоке HTML для HEAD нажмите кнопку «Редактировать код»"
+              onOpen={setScreenshotLightbox}
+            />
+          </div>
+
+          <div className="lk-widget-install__step-block">
+            <h3 className="lk-widget-install__step-title">Шаг 5. Вставьте код в HEAD</h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              Вставьте код в раздел для HTML-кода внутри HEAD. Так виджет будет загружаться на всех страницах сайта.
+            </p>
+            <WidgetInstallScreenshotExpandable
+              src={widgetInstallTildaHeadEditorPng}
+              description="В редакторе «Вставка кода в HEAD» вставьте скопированный скрипт и нажмите «Сохранить»"
+              onOpen={setScreenshotLightbox}
+            />
+          </div>
+
+          <div className="lk-widget-install__step-block">
+            <h3 className="lk-widget-install__step-title">Шаг 6. Опубликуйте сайт</h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              Опубликуйте сайт, чтобы изменения появились для посетителей.
+            </p>
+            <WidgetInstallScreenshotExpandable
+              src={widgetInstallTildaPublishPng}
+              description="На странице со списком страниц сайта в Tilda нажмите «Опубликовать все страницы»"
+              onOpen={setScreenshotLightbox}
+            />
+          </div>
+
+          <div className="lk-widget-install__step-block lk-widget-install__step-block_last">
+            <h3 className="lk-widget-install__step-title" data-testid="project-site-connect-step-verify-title">
+              Шаг 7. Проверьте подключение
+            </h3>
+            <p className="lk-widget-install__step-text lk-partner__muted">
+              Вернитесь сюда и нажмите «Проверить подключение». Мы автоматически проверим, что код установлен и виджет работает.
+            </p>
+            <div
+              className="lk-widget-install__step-verify-actions"
+              data-testid="site-connection-check-card"
+              data-verify-active={verifyLoading ? "true" : "false"}
+              data-connection-check-tone={connectionCheckView.tone}
+            >
+              <WidgetInstallVerifyStatusMeta
+                verificationStatus={data?.verification_status}
+                lastVerificationAt={data?.last_verification_at}
+                lastWidgetSeenAt={data?.last_widget_seen_at}
+                lastWidgetSeenOrigin={data?.last_widget_seen_origin}
+                verifyLoading={verifyLoading}
+              />
+              <div
+                className={`lk-widget-install__connection-check-status lk-widget-install__connection-check-status_${connectionCheckView.tone}`}
+                role="status"
+                aria-live="polite"
+              >
+                <div key={connectionCheckView.tone} className="lk-widget-install__connection-check-status-inner">
+                  <strong className="lk-widget-install__connection-check-title">{connectionCheckView.title}</strong>
+                  <p className="lk-widget-install__connection-check-copy">{connectionCheckView.message}</p>
+                  {connectionCheckView.steps?.length ? (
+                    <ul className="lk-widget-install__verify-poll-steps" data-testid="widget-verify-poll-steps">
+                      {connectionCheckView.steps.map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+              {showVerifyOtherPageLink ? (
+                <button
+                  type="button"
+                  className="lk-widget-install__verify-other-page-link"
+                  data-testid="widget-verify-open-other-page"
+                  onClick={() => setOtherPageVerifyOpen(true)}
+                >
+                  Проверить другую страницу
+                </button>
+              ) : null}
+              {lastVerifyErr && lastVerifyErr !== connectionCheckView.message ? (
+                <p className="lk-widget-install__verify-last-error lk-partner__muted" data-testid="widget-verify-last-error">
+                  {lastVerifyErr}
+                </p>
+              ) : null}
+              {saveHint ? <p className="lk-widget-install__hint">{saveHint}</p> : null}
+              <div className="lk-widget-install__connection-check-actions">
+                <button type="button" className="lk-widget-install__btn" disabled={verifyLoading || refreshBusy} onClick={onVerify}>
+                  {verifyPrimaryLabel}
+                </button>
+              </div>
+            </div>
+            <WidgetInstallVerifyAdvancedOptions
+              open={otherPageVerifyOpen}
+              onOpenChange={setOtherPageVerifyOpen}
+              verificationUrlInput={verificationUrlInput}
+              setVerificationUrlInput={setVerificationUrlInput}
+              onVerifyThisPage={onVerifyThisPage}
+              verifyLoading={verifyLoading}
+              saving={saving}
+              compact
+            />
+          </div>
         </section>
+        {screenshotLightbox ? (
+          <div
+            className="lk-widget-install__lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label={screenshotLightbox.alt}
+            onClick={() => setScreenshotLightbox(null)}
+          >
+            <button
+              type="button"
+              className="lk-widget-install__lightbox-close"
+              aria-label="Закрыть"
+              onClick={(e) => {
+                e.stopPropagation();
+                setScreenshotLightbox(null);
+              }}
+            >
+              ×
+            </button>
+            <img
+              src={screenshotLightbox.src}
+              alt={screenshotLightbox.alt}
+              className="lk-widget-install__lightbox-img"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1155,8 +1784,8 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       {diagError ? <div className="lk-widget-install__diag-soft">{diagError}</div> : null}
 
       <WidgetInstallSnippetCard
-        title="Установите код на сайт"
-        subtitle="Вставьте код на сайт, опубликуйте изменения и затем вернитесь для проверки подключения."
+        title="Как подключить сайт"
+        subtitle={connectSiteIntroRu}
         snippet={data.widget_embed_snippet}
         onCopy={onCopySnippet}
         copyHint={copyHint}
@@ -1198,8 +1827,25 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
 
         <section className="lk-widget-install__card">
           <h2 className="lk-partner__section-title">Проверка и запуск</h2>
-          <p className="lk-partner__muted" style={{ marginBottom: 10 }}>
-            После установки кода сохраните настройки, проверьте подключение и затем активируйте сайт.
+          <WidgetInstallVerifyPrimaryInstructions />
+          <WidgetInstallVerifyStatusMeta
+            verificationStatus={data?.verification_status}
+            lastVerificationAt={data?.last_verification_at}
+            lastWidgetSeenAt={data?.last_widget_seen_at}
+            lastWidgetSeenOrigin={data?.last_widget_seen_origin}
+            verifyLoading={verifyLoading}
+          />
+          <WidgetInstallVerifyAdvancedOptions
+            open={otherPageVerifyOpen}
+            onOpenChange={setOtherPageVerifyOpen}
+            verificationUrlInput={verificationUrlInput}
+            setVerificationUrlInput={setVerificationUrlInput}
+            onVerifyThisPage={onVerifyThisPage}
+            verifyLoading={verifyLoading}
+            saving={saving}
+          />
+          <p className="lk-partner__muted" style={{ marginBottom: 10, marginTop: 12 }}>
+            Сохраните настройки данных при необходимости, затем активируйте сайт.
           </p>
           <div className="lk-widget-install__readiness">
             {readinessItems.map((item) => (
@@ -1216,7 +1862,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               disabled={verifyLoading || refreshBusy}
               onClick={onVerify}
             >
-              {verifyLoading ? "Проверяем…" : "Проверить подключение"}
+              {verifyPrimaryLabel}
             </button>
             <button
               type="button"
@@ -1228,6 +1874,42 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
             </button>
           </div>
           {saveHint ? <p className="lk-widget-install__hint">{saveHint}</p> : null}
+          <div
+            className={`lk-widget-install__connection-check-status lk-widget-install__connection-check-status_${connectionCheckView.tone}`}
+            role="status"
+            aria-live="polite"
+            data-testid="widget-main-connection-check"
+            data-verify-active={verifyLoading ? "true" : "false"}
+            data-connection-check-tone={connectionCheckView.tone}
+            style={{ marginTop: 12 }}
+          >
+            <div key={connectionCheckView.tone} className="lk-widget-install__connection-check-status-inner">
+              <strong className="lk-widget-install__connection-check-title">{connectionCheckView.title}</strong>
+              <p className="lk-widget-install__connection-check-copy">{connectionCheckView.message}</p>
+              {connectionCheckView.steps?.length ? (
+                <ul className="lk-widget-install__verify-poll-steps" data-testid="widget-verify-poll-steps">
+                  {connectionCheckView.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+          {showVerifyOtherPageLink ? (
+            <button
+              type="button"
+              className="lk-widget-install__verify-other-page-link"
+              data-testid="widget-verify-open-other-page"
+              onClick={() => setOtherPageVerifyOpen(true)}
+            >
+              Проверить другую страницу
+            </button>
+          ) : null}
+          {lastVerifyErr && lastVerifyErr !== connectionCheckView.message ? (
+            <p className="lk-widget-install__verify-last-error lk-partner__muted" data-testid="widget-verify-last-error">
+              {lastVerifyErr}
+            </p>
+          ) : null}
           <div className="lk-widget-install__message-block" style={{ marginTop: 12 }}>
             {integrationWarnings.length ? (
               <>

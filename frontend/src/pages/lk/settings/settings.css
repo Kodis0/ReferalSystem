@@ -954,6 +954,16 @@
   overflow-y: auto;
 }
 
+.lk-settings-personal-page__select-dropdown_portal {
+  right: auto;
+  margin: 0;
+  z-index: 12000;
+  /* портал вне scope с --lk-form-*: фон задаётся инлайном с копией переменных; запас без просветов */
+  background-clip: padding-box;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .lk-settings-personal-page__select-option {
   display: block;
   box-sizing: border-box;

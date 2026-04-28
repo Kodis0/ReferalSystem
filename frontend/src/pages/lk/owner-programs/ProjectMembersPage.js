@@ -5,7 +5,6 @@ import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
-
 function authHeaders() {
   const token = localStorage.getItem("access_token");
   return {
@@ -103,7 +102,14 @@ export default function ProjectMembersPage() {
         <h2 className="owner-programs__overview-title">Пользователи</h2>
       </header>
 
-      {loading && <p className="lk-partner__muted">Загрузка…</p>}
+      {loading ? (
+        <div className="owner-programs__tab-page-skel owner-programs__tab-page-skel_wide" role="status" aria-label="Загрузка">
+          <span className="owner-programs__skel owner-programs__tab-page-skel_line-md" aria-hidden />
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="owner-programs__skel owner-programs__tab-page-skel_members-row" aria-hidden />
+          ))}
+        </div>
+      ) : null}
       {!loading && error && <div className="owner-programs__error">{error}</div>}
 
       {!loading && !error && (

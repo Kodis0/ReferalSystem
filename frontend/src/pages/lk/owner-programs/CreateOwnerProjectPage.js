@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import "./owner-programs.css";
 import "./CreateOwnerProjectPage.css";
 import { PROJECT_OWNER_DESCRIPTION_MAX_CHARS } from "./projectOwnerFormLimits";
 
@@ -228,7 +229,7 @@ export default function CreateOwnerProjectPage() {
   };
 
   return (
-    <div id="create-owner-project">
+    <div id="create-owner-project" className="owner-programs__create-owner-project-root">
       <div className="page">
         <div className="page__returnButton">
           <Link className="tw-link link_primary link_s" to="/lk/partner">
@@ -250,82 +251,84 @@ export default function CreateOwnerProjectPage() {
           </div>
         </div>
 
-        <form className="form" onSubmit={onSubmit}>
-          <label className="wrapper">
-            <input
-              ref={fileInputRef}
-              type="file"
-              name="avatar"
-              accept="image/gif, image/jpeg, image/png, image/webp"
-              className="input"
-              onChange={onAvatarChange}
-            />
-            <div className="avatarWrapper">
-              <div className="statusAvatarWrapper">
-                <div className="avatar">
-                  <img className="src" src={avatarPreview} alt="project-avatar" style={{ filter: "opacity(1)" }} />
+        <div className="owner-programs__connect-site-nested-create">
+          <form className="form" onSubmit={onSubmit}>
+            <label className="wrapper">
+              <input
+                ref={fileInputRef}
+                type="file"
+                name="avatar"
+                accept="image/gif, image/jpeg, image/png, image/webp"
+                className="input"
+                onChange={onAvatarChange}
+              />
+              <div className="avatarWrapper">
+                <div className="statusAvatarWrapper">
+                  <div className="avatar">
+                    <img className="src" src={avatarPreview} alt="project-avatar" style={{ filter: "opacity(1)" }} />
+                  </div>
                 </div>
               </div>
-            </div>
-            <button type="button" className="closeButton" onClick={clearAvatar} aria-label="Сгенерировать новый аватар">
-              <ProjectAvatarRemoveIcon />
+              <button type="button" className="closeButton" onClick={clearAvatar} aria-label="Сгенерировать новый аватар">
+                <ProjectAvatarRemoveIcon />
+              </button>
+            </label>
+
+            <label className="formControl">
+              <div className="formControl__label">
+                <span className="text text_s text_bold text_grey text_align_left">Название проекта</span>
+              </div>
+              <div className="input">
+                <div className="inputWrapper">
+                  <input
+                    className="inputField"
+                    name="name"
+                    value={displayName}
+                    onChange={(ev) => setDisplayName(ev.target.value)}
+                    autoComplete="off"
+                    maxLength={200}
+                    required
+                  />
+                </div>
+              </div>
+              {fieldErrors.display_name ? <div className="fieldError">{fieldErrors.display_name}</div> : null}
+            </label>
+
+            <label className="formControl">
+              <div className="formControl__label">
+                <span className="text text_s text_bold text_grey text_align_left">Описание проекта</span>
+              </div>
+              <div className="input">
+                <div className="inputWrapper">
+                  <input
+                    className="inputField"
+                    name="description"
+                    value={description}
+                    onChange={(ev) =>
+                      setDescription(ev.target.value.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS))
+                    }
+                    autoComplete="off"
+                    maxLength={PROJECT_OWNER_DESCRIPTION_MAX_CHARS}
+                  />
+                </div>
+              </div>
+              {fieldErrors.description ? <div className="fieldError">{fieldErrors.description}</div> : null}
+            </label>
+
+            {fieldErrors.platform_preset ? <div className="fieldError">{fieldErrors.platform_preset}</div> : null}
+            {error ? <div className="formError">{error}</div> : null}
+
+            <button
+              type="submit"
+              className="baseButton button button_size_medium baseButton__size_medium baseButton__color_primary"
+              data-testid="submit-form-btn"
+              data-test-id="submit-form-btn"
+              disabled={loading}
+            >
+              Создать
             </button>
-          </label>
-
-          <label className="formControl">
-            <div className="formControl__label">
-              <span className="text text_s text_bold text_grey text_align_left">Название проекта</span>
-            </div>
-            <div className="input">
-              <div className="inputWrapper">
-                <input
-                  className="inputField"
-                  name="name"
-                  value={displayName}
-                  onChange={(ev) => setDisplayName(ev.target.value)}
-                  autoComplete="off"
-                  maxLength={200}
-                  required
-                />
-              </div>
-            </div>
-            {fieldErrors.display_name ? <div className="fieldError">{fieldErrors.display_name}</div> : null}
-          </label>
-
-          <label className="formControl">
-            <div className="formControl__label">
-              <span className="text text_s text_bold text_grey text_align_left">Описание проекта</span>
-            </div>
-            <div className="input">
-              <div className="inputWrapper">
-                <input
-                  className="inputField"
-                  name="description"
-                  value={description}
-                  onChange={(ev) =>
-                    setDescription(ev.target.value.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS))
-                  }
-                  autoComplete="off"
-                  maxLength={PROJECT_OWNER_DESCRIPTION_MAX_CHARS}
-                />
-              </div>
-            </div>
-            {fieldErrors.description ? <div className="fieldError">{fieldErrors.description}</div> : null}
-          </label>
-
-          {fieldErrors.platform_preset ? <div className="fieldError">{fieldErrors.platform_preset}</div> : null}
-          {error ? <div className="formError">{error}</div> : null}
-
-          <button
-            type="submit"
-            className="baseButton button button_size_medium baseButton__size_medium baseButton__color_primary"
-            data-testid="submit-form-btn"
-            data-test-id="submit-form-btn"
-            disabled={loading}
-          >
-            Создать
-          </button>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

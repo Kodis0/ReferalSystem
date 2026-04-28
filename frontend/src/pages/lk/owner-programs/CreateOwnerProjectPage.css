@@ -1,15 +1,20 @@
 /* Разметка и классы как в референсе; палитра и отступы — как на скрине (тёмная тема). */
 
 #create-owner-project {
-  max-width: 560px;
   width: 100%;
   box-sizing: border-box;
-  margin-left: 0;
-  margin-right: auto;
   text-align: left;
   align-self: flex-start;
   color: rgba(255, 255, 255, 0.92);
   font-family: "Inter", "Stem-Regular", Arial, sans-serif;
+}
+
+/* «Создать проект» `/lk/partner/new`: полная ширина дорожки 920px, как у списка проектов и shell. */
+.owner-programs__create-owner-project-root {
+  width: calc(100% + 2 * var(--lk-content-padding-x));
+  max-width: calc(100% + 2 * var(--lk-content-padding-x));
+  margin-left: calc(-1 * var(--lk-content-padding-x));
+  margin-right: calc(-1 * var(--lk-content-padding-x));
 }
 
 #create-owner-project button,
@@ -25,6 +30,9 @@
 
 #create-owner-project .page {
   box-sizing: border-box;
+  max-width: 560px;
+  width: 100%;
+  margin-right: auto;
 }
 
 #create-owner-project .page__returnButton {
@@ -207,6 +215,11 @@
 }
 
 #create-owner-project label.formControl {
+  display: block;
+  margin-bottom: 16px;
+}
+
+#create-owner-project div.formControl {
   display: block;
   margin-bottom: 16px;
 }

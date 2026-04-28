@@ -120,6 +120,37 @@
   pointer-events: auto;
 }
 
+/* Список проектов: плавное раскрытие по реальной высоте (grid 0fr / 1fr). */
+.lk-sidebar__collapse-inner.lk-sidebar__collapse-inner--projects {
+  display: grid;
+  grid-template-rows: 0fr;
+  max-height: none;
+  flex-direction: unset;
+  gap: 0;
+  overflow: hidden;
+  transition:
+    grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.26s ease;
+}
+
+.lk-sidebar__collapse_open .lk-sidebar__collapse-inner.lk-sidebar__collapse-inner--projects {
+  grid-template-rows: 1fr;
+}
+
+.lk-sidebar__collapse-inner-wrap {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-sidebar__collapse-inner.lk-sidebar__collapse-inner--projects {
+    transition: none;
+  }
+}
+
 /* Проекты: при наведении без подложки и обводки — только цвет текста и иконок */
 .lk-sidebar__collapse-container_projects .lk-sidebar__sidebar-item:hover,
 .lk-sidebar__collapse-container_projects .lk-sidebar__project-link:hover {
@@ -129,7 +160,7 @@
   color: #fff;
 }
 
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item:hover {
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item:hover {
   color: #0f172a;
 }
 
@@ -176,8 +207,8 @@
   color: #fff;
 }
 
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item:hover .lk-sidebar__nav-item-projects,
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item:hover .lk-sidebar__icon-svg,
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item:hover .lk-sidebar__nav-item-projects,
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item:hover .lk-sidebar__icon-svg,
 [data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__project-link:hover .lk-sidebar__icon-svg {
   color: #0f172a;
 }
@@ -362,6 +393,83 @@
   text-align: left;
 }
 
+@keyframes lk-sidebar-skeleton-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.lk-sidebar__skel {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.12) 42%,
+    rgba(255, 255, 255, 0.06) 84%
+  );
+  background-size: 220% 100%;
+  animation: lk-sidebar-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+[data-theme="light"] .lk-sidebar__skel {
+  background: linear-gradient(
+    90deg,
+    rgba(38, 50, 92, 0.08) 0%,
+    rgba(38, 50, 92, 0.14) 42%,
+    rgba(38, 50, 92, 0.08) 84%
+  );
+  background-size: 220% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-sidebar__skel {
+    animation: none;
+    background: rgba(255, 255, 255, 0.09);
+    background-size: auto;
+  }
+
+  [data-theme="light"] .lk-sidebar__skel {
+    background: rgba(38, 50, 92, 0.11);
+    background-size: auto;
+  }
+}
+
+.lk-sidebar__projects-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.lk-sidebar__projects-skel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 6px 4px 4px;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.lk-sidebar__projects-skel-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+}
+
+.lk-sidebar__projects-skel-label {
+  flex: 1 1 auto;
+  height: 14px;
+  border-radius: 7px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .lk-sidebar__project {
   position: relative;
   display: flex;
@@ -536,29 +644,29 @@
 }
 
 /* «Создать проект» в списке: без фиолетовой рамки/подложки при выборе, текст и иконка белые */
-.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active,
-.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active:hover {
+.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active,
+.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active:hover {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
   color: #fff;
 }
 
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active,
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active:hover {
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active,
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active:hover {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
   color: #fff;
 }
 
-.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active .lk-sidebar__icon-svg,
-.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active:hover .lk-sidebar__icon-svg {
+.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active .lk-sidebar__icon-svg,
+.lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active:hover .lk-sidebar__icon-svg {
   color: #fff;
 }
 
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active .lk-sidebar__icon-svg,
-[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner > .lk-sidebar__sidebar-item_active:hover .lk-sidebar__icon-svg {
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active .lk-sidebar__icon-svg,
+[data-theme="light"] .lk-sidebar__collapse-container_projects .lk-sidebar__collapse-inner--projects .lk-sidebar__sidebar-item_active:hover .lk-sidebar__icon-svg {
   color: #fff;
 }
 

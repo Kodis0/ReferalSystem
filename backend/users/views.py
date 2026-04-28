@@ -1,8 +1,14 @@
 import logging
+import secrets
+import urllib.parse
 
+import requests
 from django.contrib.auth import login
 from django.db import transaction
+from django.http import HttpResponseRedirect
 from django.shortcuts import render
+from django.urls import reverse
+from django.views import View
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -413,3 +419,128 @@ class GoogleIdTokenLoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+def _frontend_login_base():
+    return (getattr(django_settings, "FRONTEND_URL", None) or "http://localhost:3000").strip().rstrip("/")
+
+
+def _github_oauth_redirect_uri(request):
+    fixed = (getattr(django_settings, "GITHUB_OAUTH_REDIRECT_URI", None) or "").strip()
+    if fixed:
+        return fixed
+    return request.build_absolute_uri(reverse("github_oauth_callback"))
+
+
+class GitHubOAuthStartView(View):
+    """
+    Начало OAuth: редирект на github.com с state в сессии бэкенда (localhost:8000).
+    """
+
+    def get(self, request):
+        fe = _frontend_login_base()
+        client_id = (getattr(django_settings, "GITHUB_OAUTH_CLIENT_ID", None) or "").strip()
+        if not client_id:
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_not_configured")
+
+        redirect_uri = _github_oauth_redirect_uri(request)
+        state = secrets.token_urlsafe(32)
+        request.session["github_oauth_state"] = state
+        request.session.modified = True
+
+        q = urllib.parse.urlencode(
+            {
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "scope": "user:email",
+                "state": state,
+            }
+        )
+        return HttpResponseRedirect(f"https://github.com/login/oauth/authorize?{q}")
+
+
+class GitHubOAuthCallbackView(View):
+    """
+    Callback GitHub: обмен code → токен GitHub → подтверждённый email → наш JWT → редирект на /login#...
+    """
+
+    def get(self, request):
+        fe = _frontend_login_base()
+
+        if request.GET.get("error") == "access_denied":
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_denied")
+
+        code = request.GET.get("code")
+        state = request.GET.get("state")
+        if not code or not state or not isinstance(code, str) or not isinstance(state, str):
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_invalid_callback")
+
+        expected = request.session.get("github_oauth_state")
+        if not expected or state != expected:
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_state_invalid")
+
+        try:
+            del request.session["github_oauth_state"]
+            request.session.modified = True
+        except KeyError:
+            pass
+
+        client_id = (getattr(django_settings, "GITHUB_OAUTH_CLIENT_ID", None) or "").strip()
+        client_secret = (getattr(django_settings, "GITHUB_OAUTH_CLIENT_SECRET", None) or "").strip()
+        if not client_id or not client_secret:
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_oauth_not_configured")
+
+        redirect_uri = _github_oauth_redirect_uri(request)
+
+        from .github_oauth import exchange_github_oauth_code, github_primary_verified_email
+
+        try:
+            token_payload = exchange_github_oauth_code(
+                code=code.strip(),
+                client_id=client_id,
+                client_secret=client_secret,
+                redirect_uri=redirect_uri,
+            )
+        except (requests.RequestException, ValueError):
+            logger.exception("GitHub OAuth token exchange failed")
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_token_exchange_failed")
+
+        gh_access = token_payload.get("access_token")
+        if not gh_access or not isinstance(gh_access, str):
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_token_exchange_failed")
+
+        try:
+            email_raw = github_primary_verified_email(github_access_token=gh_access.strip())
+        except requests.RequestException:
+            logger.exception("GitHub user/emails request failed")
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_email_fetch_failed")
+
+        if not email_raw:
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_email_missing")
+
+        email = email_raw.strip()
+        try:
+            user = CustomUser.objects.get(email__iexact=email)
+        except CustomUser.DoesNotExist:
+            return HttpResponseRedirect(f"{fe}/login?github_error=github_email_not_registered")
+
+        if not user.is_active:
+            return HttpResponseRedirect(f"{fe}/login?github_error=account_disabled")
+
+        link_session_attributions_to_user(
+            session_key=request.session.session_key,
+            user=user,
+        )
+
+        refresh = RefreshToken.for_user(user)
+        access_jwt = str(refresh.access_token)
+        refresh_jwt = str(refresh)
+
+        frag = urllib.parse.urlencode(
+            {
+                "oauth": "github",
+                "access_token": access_jwt,
+                "refresh_token": refresh_jwt,
+            }
+        )
+        return HttpResponseRedirect(f"{fe}/login#{frag}")

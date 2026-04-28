@@ -1,7 +1,9 @@
 import datetime
 import uuid
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -15,12 +17,14 @@ from referrals.models import (
     SiteOwnerActivityLog,
 )
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME, ensure_partner_profile
+from referrals.widget_install_verify import build_default_verify_page_url
 
 User = get_user_model()
 
 
 class SiteOwnerIntegrationApiTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.owner = User.objects.create_user(
             username="siteowner_api",
             email="owner-api@example.com",
@@ -76,6 +80,9 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIn(f'data-rs-site="{site.public_id}"', snippet)
         self.assertIn('data-rs-key="pk_integration_test"', snippet)
         self.assertEqual(r.data.get("site_avatar_data_url"), "")
+        self.assertEqual(r.data.get("verification_url"), "")
+        self.assertEqual(r.data.get("verification_status"), Site.VerificationStatus.NOT_STARTED)
+        self.assertIsNone(r.data.get("last_verification_at"))
 
     def test_patch_site_avatar_does_not_change_project_avatar(self):
         project = Project.objects.create(
@@ -844,7 +851,8 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIsNone(site.verified_at)
         self.assertIsNone(site.activated_at)
 
-    def test_verify_promotes_ready_draft_site(self):
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_promotes_ready_draft_site(self, mock_run):
         site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_verify_" + uuid.uuid4().hex,
@@ -853,6 +861,18 @@ class SiteOwnerIntegrationApiTests(TestCase):
             last_widget_seen_at=timezone.now(),
             last_widget_seen_origin="https://verify.example",
         )
+
+        def _fake(**kwargs):
+            Site.objects.filter(pk=kwargs["site_pk"]).update(
+                last_widget_seen_at=kwargs["check_started_at"] + datetime.timedelta(seconds=2),
+                last_widget_seen_origin="https://verify.example",
+                verification_status=Site.VerificationStatus.WIDGET_SEEN,
+                last_verification_error="",
+                last_verification_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+
+        mock_run.side_effect = _fake
         self.api.force_authenticate(self.owner)
         r = self.api.post(
             f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
@@ -865,8 +885,11 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(site.status, Site.Status.VERIFIED)
         self.assertIsNotNone(site.verified_at)
         self.assertEqual(r.data["connection_check"]["status"], "found")
+        mock_run.assert_called_once()
+        self.assertEqual(mock_run.call_args.kwargs["normalized_url"], "https://verify.example/")
 
-    def test_verify_repeat_on_verified_site_logs_connection_recheck(self):
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_repeat_on_verified_site_logs_connection_recheck(self, mock_run):
         site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_verify_repeat_" + uuid.uuid4().hex,
@@ -877,6 +900,18 @@ class SiteOwnerIntegrationApiTests(TestCase):
             last_widget_seen_at=timezone.now(),
             last_widget_seen_origin="https://verify-repeat.example",
         )
+
+        def _fake(**kwargs):
+            Site.objects.filter(pk=kwargs["site_pk"]).update(
+                last_widget_seen_at=kwargs["check_started_at"] + datetime.timedelta(seconds=1),
+                last_widget_seen_origin="https://verify-repeat.example",
+                verification_status=Site.VerificationStatus.WIDGET_SEEN,
+                last_verification_error="",
+                last_verification_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+
+        mock_run.side_effect = _fake
         self.api.force_authenticate(self.owner)
         before = SiteOwnerActivityLog.objects.filter(site=site).count()
         r = self.api.post(
@@ -942,11 +977,43 @@ class SiteOwnerIntegrationApiTests(TestCase):
         site.refresh_from_db()
         self.assertEqual(site.status, Site.Status.DRAFT)
 
-    def test_verify_reports_not_found_when_widget_signal_absent(self):
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_reports_incomplete_when_widget_signal_absent(self, mock_run):
         site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_verify_missing_" + uuid.uuid4().hex,
             allowed_origins=["https://verify.example"],
+            widget_enabled=True,
+        )
+
+        def _fake(**kwargs):
+            Site.objects.filter(pk=kwargs["site_pk"]).update(
+                verification_status=Site.VerificationStatus.FAILED,
+                last_verification_error="На странице не найден фрагмент кода виджета. Проверьте URL, публикацию и что код вставлен на эту страницу.",
+                last_verification_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+
+        mock_run.side_effect = _fake
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data.get("code"), "site_widget_verify_incomplete")
+        self.assertEqual(r.data["connection_check"]["status"], "not_found")
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.DRAFT)
+        mock_run.assert_called_once()
+        self.assertEqual(mock_run.call_args.kwargs["normalized_url"], "https://verify.example/")
+
+    @patch("referrals.views.build_default_verify_page_url", return_value="")
+    def test_verify_home_url_missing_returns_400(self, _mock_build):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_home_miss_" + uuid.uuid4().hex,
+            allowed_origins=["https://forced.example"],
             widget_enabled=True,
         )
         self.api.force_authenticate(self.owner)
@@ -954,12 +1021,188 @@ class SiteOwnerIntegrationApiTests(TestCase):
             f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
             format="json",
         )
-        self.assertEqual(r.status_code, 409)
-        self.assertEqual(r.data["detail"], "site_connection_not_found")
-        self.assertEqual(r.data.get("code"), "site_connection_not_found")
-        self.assertEqual(r.data["connection_check"]["status"], "not_found")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "site_verification_home_url_missing")
+
+    def test_build_default_verify_page_url_strips_path(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_home_url_" + uuid.uuid4().hex,
+            allowed_origins=["https://shop.example/path/deep"],
+            widget_enabled=True,
+        )
+        self.assertEqual(build_default_verify_page_url(site), "https://shop.example/")
+
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_explicit_verification_url_overrides_home(self, mock_run):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_explicit_home_" + uuid.uuid4().hex,
+            allowed_origins=["https://home.example"],
+            widget_enabled=True,
+            verification_url="https://shop.example/landing",
+            status=Site.Status.DRAFT,
+        )
+
+        def _fake(**kwargs):
+            Site.objects.filter(pk=kwargs["site_pk"]).update(
+                last_widget_seen_at=kwargs["check_started_at"] + datetime.timedelta(seconds=1),
+                last_widget_seen_origin="https://shop.example",
+                verification_status=Site.VerificationStatus.WIDGET_SEEN,
+                last_verification_error="",
+                last_verification_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+
+        mock_run.side_effect = _fake
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(mock_run.call_args.kwargs["normalized_url"], "https://shop.example/landing")
+
+    def test_patch_saves_verification_url(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_vurl_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={"verification_url": "https://shop.example/landing"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["verification_url"], "https://shop.example/landing")
+        self.assertEqual(r.data["verification_status"], Site.VerificationStatus.NOT_STARTED)
+
+    def test_verify_rejects_private_verification_url_without_headless(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_priv_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            widget_enabled=True,
+            verification_url="http://127.0.0.1/nope",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "site_verification_url_invalid")
         site.refresh_from_db()
-        self.assertEqual(site.status, Site.Status.DRAFT)
+        self.assertEqual(site.verification_status, Site.VerificationStatus.FAILED)
+
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_with_url_promotes_when_headless_records_widget(self, mock_run):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_head_ok_" + uuid.uuid4().hex,
+            allowed_origins=["https://verify.example"],
+            widget_enabled=True,
+            verification_url="https://verify.example/page",
+            status=Site.Status.DRAFT,
+        )
+
+        def _fake(**kwargs):
+            Site.objects.filter(pk=kwargs["site_pk"]).update(
+                last_widget_seen_at=kwargs["check_started_at"] + datetime.timedelta(seconds=2),
+                last_widget_seen_origin="https://verify.example",
+                verification_status=Site.VerificationStatus.WIDGET_SEEN,
+                last_verification_error="",
+                last_verification_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+
+        mock_run.side_effect = _fake
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], Site.Status.VERIFIED)
+        mock_run.assert_called_once()
+
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_with_url_409_when_headless_does_not_see_widget(self, mock_run):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_head_bad_" + uuid.uuid4().hex,
+            allowed_origins=["https://verify.example"],
+            widget_enabled=True,
+            verification_url="https://verify.example/page",
+        )
+
+        def _fake(**kwargs):
+            Site.objects.filter(pk=kwargs["site_pk"]).update(
+                verification_status=Site.VerificationStatus.FAILED,
+                last_verification_error=(
+                    "На странице не найден фрагмент кода виджета. Проверьте URL, публикацию и что код вставлен на эту страницу."
+                ),
+                last_verification_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+
+        mock_run.side_effect = _fake
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data["code"], "site_widget_verify_incomplete")
+
+    @patch("referrals.views.run_widget_install_headless_check")
+    def test_verify_with_url_rate_limit_second_call(self, mock_run):
+        mock_run.side_effect = lambda **kwargs: Site.objects.filter(pk=kwargs["site_pk"]).update(
+            last_widget_seen_at=kwargs["check_started_at"] + datetime.timedelta(seconds=1),
+            last_widget_seen_origin="https://verify.example",
+            verification_status=Site.VerificationStatus.WIDGET_SEEN,
+            last_verification_error="",
+            last_verification_at=timezone.now(),
+            updated_at=timezone.now(),
+        )
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_rate_" + uuid.uuid4().hex,
+            allowed_origins=["https://verify.example"],
+            widget_enabled=True,
+            verification_url="https://verify.example/page",
+            status=Site.Status.DRAFT,
+        )
+        self.api.force_authenticate(self.owner)
+        r1 = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 429)
+        self.assertEqual(r2.data.get("code"), "widget_verify_rate_limited")
+
+    def test_verify_stranger_cannot_access_owner_site(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_str_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            widget_enabled=True,
+        )
+        self.api.force_authenticate(self.stranger)
+        r = self.api.post(
+            f"/referrals/site/integration/verify/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data.get("code"), "site_missing")
 
     def test_activate_requires_verified_site(self):
         site = Site.objects.create(
@@ -1300,7 +1543,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIn("results", r.data)
         self.assertGreaterEqual(len(r.data["results"]), 1)
         self.assertEqual(r.data["results"][0]["actor_display"], "owner-api@example.com")
-        self.assertIn("отображаемое имя", r.data["results"][0]["message"].lower())
+        self.assertIn("имя сайта", r.data["results"][0]["message"].lower())
         self.assertEqual(r.data["results"][0]["action"], "site_settings")
         self.assertTrue(SiteOwnerActivityLog.objects.filter(site=site).exists())
 

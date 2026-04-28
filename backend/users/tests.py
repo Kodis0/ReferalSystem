@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
 
 
@@ -221,3 +221,77 @@ class GoogleIdTokenLoginTests(TestCase):
         )
         self.assertEqual(r.status_code, 503)
         self.assertEqual(r.data.get("code"), "google_oauth_not_configured")
+
+
+@override_settings(
+    GITHUB_OAUTH_CLIENT_ID="gh_client_id",
+    GITHUB_OAUTH_CLIENT_SECRET="gh_client_secret",
+    FRONTEND_URL="http://test-frontend.example:3000",
+)
+class GitHubOAuthFlowTests(TestCase):
+    def test_github_start_redirects_to_authorize(self):
+        c = Client()
+        r = c.get("/users/token/github/start/")
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("https://github.com/login/oauth/authorize?"), loc)
+        self.assertIn("client_id=gh_client_id", loc)
+        self.assertIn("scope=user%3Aemail", loc)
+        self.assertIn("state=", loc)
+        self.assertTrue(c.session.get("github_oauth_state"))
+
+    @override_settings(GITHUB_OAUTH_CLIENT_ID="")
+    def test_github_start_missing_config_redirects_frontend_error(self):
+        c = Client()
+        r = c.get("/users/token/github/start/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("github_error=github_oauth_not_configured", r["Location"])
+
+    def test_github_callback_rejects_bad_state(self):
+        c = Client()
+        c.get("/users/token/github/start/")
+        r = c.get("/users/token/github/callback/?code=fake&state=not-the-session-state")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("github_error=github_state_invalid", r["Location"])
+
+    @patch("users.github_oauth.github_primary_verified_email", return_value="gh-match@example.com")
+    @patch(
+        "users.github_oauth.exchange_github_oauth_code",
+        return_value={"access_token": "gh_token"},
+    )
+    def test_github_callback_success_redirects_login_hash_with_jwt(self, _mock_ex, _mock_email):
+        User.objects.create_user(
+            email="gh-match@example.com",
+            username="ghmatch",
+            password="secret123",
+        )
+        c = Client()
+        c.get("/users/token/github/start/")
+        state = c.session.get("github_oauth_state")
+        self.assertTrue(state)
+        r = c.get(f"/users/token/github/callback/?code=testcode&state={state}")
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("http://test-frontend.example:3000/login#"), loc)
+        self.assertIn("oauth=github", loc)
+        self.assertIn("access_token=", loc)
+        self.assertIn("refresh_token=", loc)
+
+    @patch("users.github_oauth.github_primary_verified_email", return_value="nobody@example.com")
+    @patch(
+        "users.github_oauth.exchange_github_oauth_code",
+        return_value={"access_token": "gh_token"},
+    )
+    def test_github_callback_unknown_email_redirects_error(self, _mock_ex, _mock_email):
+        c = Client()
+        c.get("/users/token/github/start/")
+        state = c.session["github_oauth_state"]
+        r = c.get(f"/users/token/github/callback/?code=testcode&state={state}")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("github_error=github_email_not_registered", r["Location"])
+
+    def test_github_callback_access_denied_redirects(self):
+        c = Client()
+        r = c.get("/users/token/github/callback/?error=access_denied")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("github_error=github_oauth_denied", r["Location"])

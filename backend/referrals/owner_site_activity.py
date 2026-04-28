@@ -41,28 +41,28 @@ def log_site_activity(
 def _site_settings_fragments(validated: dict[str, Any]) -> list[str]:
     parts: list[str] = []
     if "allowed_origins" in validated or "origin" in validated:
-        parts.append("разрешённые домены (origins)")
+        parts.append("домен")
     if "platform_preset" in validated:
-        parts.append("платформа / CMS")
+        parts.append("платформа")
     if "display_name" in validated or "site_display_name" in validated:
-        parts.append("отображаемое имя сайта")
+        parts.append("имя сайта")
     if "description" in validated or "site_description" in validated:
-        parts.append("описание сайта")
+        parts.append("описание")
     if "site_avatar_data_url" in validated:
         parts.append("аватар сайта")
     if "avatar_data_url" in validated:
         parts.append("аватар проекта")
     if "referral_builder_workspace" in validated:
-        parts.append("черновик конструктора реферального блока")
+        parts.append("черновик блока")
     return parts
 
 
 def _widget_settings_fragments(validated: dict[str, Any], *, widget_enabled_value: bool | None) -> list[str]:
     parts: list[str] = []
     if "capture_config" in validated:
-        parts.append("поля и селекторы, отправляемые в систему")
+        parts.append("поля формы")
     if "config_json" in validated:
-        parts.append("конфигурация виджета (JSON)")
+        parts.append("JSON виджета")
     if "widget_enabled" in validated and widget_enabled_value is not None:
         parts.append("виджет включён" if widget_enabled_value else "виджет отключён")
     return parts
@@ -81,14 +81,14 @@ def log_integration_patch(
     site_fr = _site_settings_fragments(validated)
     widget_fr = _widget_settings_fragments(validated, widget_enabled_value=we)
     if status_reset_to_draft:
-        site_fr.append("статус сброшен в черновик (код на сайте не готов)")
+        site_fr.append("сброс в черновик")
     keys = list(validated.keys())
     if site_fr:
         log_site_activity(
             site=site,
             actor=actor,
             action="site_settings",
-            message="Изменения настроек сайта: " + "; ".join(site_fr) + ".",
+            message="Изменены " + ", ".join(site_fr) + ".",
             details={"keys": keys},
         )
     if widget_fr:
@@ -96,7 +96,7 @@ def log_integration_patch(
             site=site,
             actor=actor,
             action="widget_settings",
-            message="Изменения настроек виджета: " + "; ".join(widget_fr) + ".",
+            message="Изменены " + ", ".join(widget_fr) + ".",
             details={"keys": keys},
         )
     if not site_fr and not widget_fr:
@@ -114,7 +114,7 @@ def log_site_verified(*, site: Site, actor) -> None:
         site=site,
         actor=actor,
         action="site_verified",
-        message="Сайт проверен: встроенный код найден, статус «Проверен».",
+        message="Сайт проверен, код на месте, статус «Проверен».",
     )
 
 
@@ -142,7 +142,7 @@ def log_site_connection_rechecked(*, site: Site, actor) -> None:
         site=site,
         actor=actor,
         action="connection_recheck",
-        message="Проверка подключения: встроенный код на сайте обнаружен (статус без изменений).",
+        message="Повторная проверка, код на месте, статус без изменений.",
     )
 
 
@@ -151,7 +151,7 @@ def log_site_status_refreshed_in_lk(*, site: Site, actor) -> None:
         site=site,
         actor=actor,
         action="status_refresh",
-        message="Обновление статуса в кабинете (диагностика и состояние виджета).",
+        message="Статус в ЛК обновлён (диагностика).",
     )
 
 

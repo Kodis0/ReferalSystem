@@ -536,73 +536,102 @@ export default function SiteDashboardPage() {
 
   return (
     <div className="lk-dashboard lk-partner owner-programs__site-dash">
-      <div className="owner-programs__site-dash-stat-toolbar">
-        <div className="owner-programs__site-dash-charts-header">
-          <h2 className="owner-programs__site-dash-charts-h2">
-            <span className="owner-programs__site-dash-charts-h2-prefix">Статистика за</span>
-            <span className="owner-programs__site-dash-stat-select-wrap" ref={periodSelectRef}>
-              <input type="hidden" name="site_dash_period" value={period} aria-hidden />
-              <button
-                type="button"
-                className="owner-programs__site-dash-stat-select-trigger"
-                data-test-id="stat-period-select"
-                aria-haspopup="listbox"
-                aria-expanded={periodMenuOpen}
-                aria-controls="site-dash-stat-period-listbox"
-                id="site-dash-stat-period-trigger"
-                onClick={() => setPeriodMenuOpen((o) => !o)}
-              >
-                <span className="owner-programs__site-dash-stat-select-value">{periodLabel}</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className={`owner-programs__site-dash-stat-select-arrow${periodMenuOpen ? " owner-programs__site-dash-stat-select-arrow_open" : ""}`}
-                  aria-hidden
-                >
-                  <path
-                    fill="currentColor"
-                    d="M12 16a1 1 0 0 1-.64-.23l-5-4a1 1 0 0 1 1.28-1.54L12 13.71l4.36-3.32a1 1 0 0 1 1.41.15 1 1 0 0 1-.14 1.46l-5 3.83A1 1 0 0 1 12 16Z"
-                  />
-                </svg>
-              </button>
-              {periodMenuOpen ? (
-                <ul
-                  className="owner-programs__site-dash-stat-select-list"
-                  id="site-dash-stat-period-listbox"
-                  role="listbox"
-                  aria-labelledby="site-dash-stat-period-trigger"
-                >
-                  {PERIODS.map((p) => (
-                    <li key={p.id} role="presentation">
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={period === p.id}
-                        className={`owner-programs__site-dash-stat-select-option${period === p.id ? " owner-programs__site-dash-stat-select-option_active" : ""}`}
-                        onClick={() => {
-                          setPeriod(p.id);
-                          setPeriodMenuOpen(false);
-                        }}
-                      >
-                        {p.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </span>
-          </h2>
-        </div>
-      </div>
-
-      {loading ? <p className="lk-partner__muted">Загрузка…</p> : null}
-      {!loading && error ? <div className="lk-partner__error">{error}</div> : null}
-
-      {!loading && !error && payload ? (
+      {loading ? (
         <>
+          <div className="owner-programs__site-dash-stat-toolbar owner-programs__site-dash-skeleton-toolbar">
+            <span className="owner-programs__skel owner-programs__site-dash-skeleton-toolbar-line" aria-hidden />
+          </div>
+          <div
+            className="owner-programs__site-dash-skeleton-analytics"
+            role="status"
+            aria-live="polite"
+            aria-label="Загрузка статистики"
+          >
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="owner-programs__site-dash-skeleton-row">
+                <div className="owner-programs__site-dash-skeleton-chart">
+                  <div className="owner-programs__site-dash-skeleton-chart-lines">
+                    <span className="owner-programs__skel" />
+                    <span className="owner-programs__skel" />
+                  </div>
+                  <span className="owner-programs__skel owner-programs__site-dash-skeleton-chart-body" aria-hidden />
+                </div>
+                <div className="owner-programs__site-dash-skeleton-kpis">
+                  <span className="owner-programs__skel" aria-hidden />
+                  <span className="owner-programs__skel" aria-hidden />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="owner-programs__site-dash-stat-toolbar">
+            <div className="owner-programs__site-dash-charts-header">
+              <h2 className="owner-programs__site-dash-charts-h2">
+                <span className="owner-programs__site-dash-charts-h2-prefix">Статистика за</span>
+                <span className="owner-programs__site-dash-stat-select-wrap" ref={periodSelectRef}>
+                  <input type="hidden" name="site_dash_period" value={period} aria-hidden />
+                  <button
+                    type="button"
+                    className="owner-programs__site-dash-stat-select-trigger"
+                    data-test-id="stat-period-select"
+                    aria-haspopup="listbox"
+                    aria-expanded={periodMenuOpen}
+                    aria-controls="site-dash-stat-period-listbox"
+                    id="site-dash-stat-period-trigger"
+                    onClick={() => setPeriodMenuOpen((o) => !o)}
+                  >
+                    <span className="owner-programs__site-dash-stat-select-value">{periodLabel}</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      className={`owner-programs__site-dash-stat-select-arrow${periodMenuOpen ? " owner-programs__site-dash-stat-select-arrow_open" : ""}`}
+                      aria-hidden
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M12 16a1 1 0 0 1-.64-.23l-5-4a1 1 0 0 1 1.28-1.54L12 13.71l4.36-3.32a1 1 0 0 1 1.41.15 1 1 0 0 1-.14 1.46l-5 3.83A1 1 0 0 1 12 16Z"
+                      />
+                    </svg>
+                  </button>
+                  {periodMenuOpen ? (
+                    <ul
+                      className="owner-programs__site-dash-stat-select-list"
+                      id="site-dash-stat-period-listbox"
+                      role="listbox"
+                      aria-labelledby="site-dash-stat-period-trigger"
+                    >
+                      {PERIODS.map((p) => (
+                        <li key={p.id} role="presentation">
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={period === p.id}
+                            className={`owner-programs__site-dash-stat-select-option${period === p.id ? " owner-programs__site-dash-stat-select-option_active" : ""}`}
+                            onClick={() => {
+                              setPeriod(p.id);
+                              setPeriodMenuOpen(false);
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </span>
+              </h2>
+            </div>
+          </div>
+
+          {error ? <div className="lk-partner__error">{error}</div> : null}
+
+          {!error && payload ? (
+            <div className="owner-programs__site-dash-data">
           <section className="owner-programs__site-dash-analytics" aria-label="Аналитика за период">
             <div className="owner-programs__site-dash-charts-grid">
               <div className="owner-programs__site-dash-analytics-row">
@@ -759,8 +788,10 @@ export default function SiteDashboardPage() {
               </div>
             )}
           </section>
+            </div>
+          ) : null}
         </>
-      ) : null}
+      )}
     </div>
   );
 }

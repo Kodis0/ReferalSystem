@@ -6,7 +6,7 @@ import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
-import { sitePrimaryDomainLabel } from "./siteDisplay";
+import { sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
 import {
   preserveResolvedReachabilityPhase,
   reachabilityDotPhase,
@@ -299,9 +299,12 @@ export default function SiteProjectLayout() {
   }, [deleteProjectDialogOpen, deleteProjectState]);
 
   const loadProjectEntry = useCallback(
-    async (projectId) => {
-      setProjectEntryLoading(true);
-      setProjectEntryError("");
+    async (projectId, options = {}) => {
+      const silent = Boolean(options.silent);
+      if (!silent) {
+        setProjectEntryLoading(true);
+        setProjectEntryError("");
+      }
       try {
         const { ok, projects = [], error } = await fetchOwnerSitesList();
         if (!ok) {
@@ -311,6 +314,9 @@ export default function SiteProjectLayout() {
         }
         const nextEntry = projects.find((project) => (projectId != null ? project.id === projectId : false)) || null;
         setProjectEntry(nextEntry);
+        if (silent) {
+          setProjectEntryError("");
+        }
         return nextEntry;
       } catch (err) {
         console.error(err);
@@ -318,7 +324,9 @@ export default function SiteProjectLayout() {
         setProjectEntryError("Не удалось загрузить сайты проекта");
         return null;
       } finally {
-        setProjectEntryLoading(false);
+        if (!silent) {
+          setProjectEntryLoading(false);
+        }
       }
     },
     [],
@@ -738,6 +746,11 @@ export default function SiteProjectLayout() {
       ? "Проект…"
       : headTitle;
   const siteShellOrigin = sitePrimaryDomainLabel(siteRowForShell);
+  const siteBrowseHref = useMemo(() => sitePrimaryBrowseHref(siteRowForShell), [siteRowForShell]);
+  const openSitePrimaryInNewTab = useCallback(() => {
+    if (!siteBrowseHref) return;
+    window.open(siteBrowseHref, "_blank", "noopener,noreferrer");
+  }, [siteBrowseHref]);
   const isProjectInfoPage = location.pathname === `${projectBasePath}/info`;
   const hideShellChromeForSiteCreate = addSiteOpen;
   const onProjectWidgetConnectPath =
@@ -871,11 +884,14 @@ export default function SiteProjectLayout() {
       siteReachability.phase === "online" ||
       siteReachability.phase === "offline");
 
+  const shellBusy = headLoading && !hideShellChrome;
+
   return (
     <div
       className={`lk-dashboard lk-partner owner-programs__shell${
         hideShellChrome ? " owner-programs__shell_first-site-connect" : ""
       }`}
+      aria-busy={shellBusy ? true : undefined}
     >
       {!isProjectInfoPage && !hideShellChrome ? (
         <>
@@ -897,234 +913,271 @@ export default function SiteProjectLayout() {
             </div>
           ) : null}
           <header className="owner-programs__shell-header">
-            <div className="owner-programs__shell-header-main">
-              {isSiteRouteShell ? (
-                <label
-                  className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
-                    avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
-                  }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
-                >
-                  <input
-                    type="file"
-                    accept="image/gif, image/jpeg, image/png, image/webp"
-                    className="owner-programs__shell-avatar-input"
-                    onChange={handleAvatarChange}
-                    disabled={avatarSaveState === "saving" || !hasProjectId || !routeSitePublicId}
-                  />
-                  {avatarDataUrl ? (
-                    <>
-                      <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото сайта" />
-                      <button
-                        type="button"
-                        className="owner-programs__shell-avatar-remove"
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onClick={handleAvatarRemove}
-                        disabled={avatarSaveState === "saving"}
-                        aria-label="Удалить фото сайта"
-                      >
-                        <ProjectAvatarRemoveIcon />
-                      </button>
-                    </>
-                  ) : (
-                    <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
-                      <ProjectShellAvatarIcon />
-                    </span>
-                  )}
-                </label>
-              ) : (
-                <label
-                  className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
-                    avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
-                  }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
-                >
-                  <input
-                    type="file"
-                    accept="image/gif, image/jpeg, image/png, image/webp"
-                    className="owner-programs__shell-avatar-input"
-                    onChange={handleAvatarChange}
-                    disabled={avatarSaveState === "saving" || !hasProjectId}
-                  />
-                  {avatarDataUrl ? (
-                    <>
-                      <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото проекта" />
-                      <button
-                        type="button"
-                        className="owner-programs__shell-avatar-remove"
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onClick={handleAvatarRemove}
-                        disabled={avatarSaveState === "saving"}
-                        aria-label="Удалить фото проекта"
-                      >
-                        <ProjectAvatarRemoveIcon />
-                      </button>
-                    </>
-                  ) : (
-                    <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
-                      <ProjectShellAvatarIcon />
-                    </span>
-                  )}
-                </label>
-              )}
-              {isSiteRouteShell ? (
-                <div className="owner-programs__shell-header-copy">
-                  <div
-                    className="owner-programs__shell-header-copy_clickable owner-programs__shell-header-title-hit"
-                    role="button"
-                    tabIndex={0}
-                    onClick={openSiteSettings}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      openSiteSettings();
-                    }}
-                    aria-label="Открыть настройки сайта"
-                  >
-                    <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
-                  </div>
-                  <div
-                    className={
-                      showSiteReachability
-                        ? "owner-programs__shell-meta-row owner-programs__shell-meta-row_site"
-                        : "owner-programs__shell-meta-row"
-                    }
-                  >
-                    {showSiteReachability ? (
-                      <p className="owner-programs__shell-reachability" role="status" aria-live="polite">
-                        <span
-                          className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(siteReachability.phase)}`}
-                          aria-hidden="true"
-                        />
-                        <span className="owner-programs__shell-reachability-text">{reachabilityLabel(siteReachability.phase)}</span>
-                      </p>
+            {headLoading ? (
+              <>
+                <div className="owner-programs__shell-header-skel-main">
+                  <span className="owner-programs__skel owner-programs__shell-header-skel-avatar" aria-hidden />
+                  <div className="owner-programs__shell-header-skel-copy">
+                    <span className="owner-programs__skel owner-programs__shell-header-skel-line_title" aria-hidden />
+                    <span className="owner-programs__skel owner-programs__shell-header-skel-line_sub" aria-hidden />
+                    {isSiteRouteShell ? (
+                      <span className="owner-programs__skel owner-programs__shell-header-skel-line_meta" aria-hidden />
                     ) : null}
+                  </div>
+                </div>
+                <div className="owner-programs__shell-header-skel-actions">
+                  <span
+                    className={`owner-programs__skel owner-programs__shell-header-skel-pill${
+                      isSiteRouteShell ? "" : " owner-programs__shell-header-skel-pill_wide"
+                    }`}
+                    aria-hidden
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="owner-programs__shell-header-main">
+                  {isSiteRouteShell ? (
+                    <label
+                      className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
+                        avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
+                      }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/gif, image/jpeg, image/png, image/webp"
+                        className="owner-programs__shell-avatar-input"
+                        onChange={handleAvatarChange}
+                        disabled={avatarSaveState === "saving" || !hasProjectId || !routeSitePublicId}
+                      />
+                      {avatarDataUrl ? (
+                        <>
+                          <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото сайта" />
+                          <button
+                            type="button"
+                            className="owner-programs__shell-avatar-remove"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={handleAvatarRemove}
+                            disabled={avatarSaveState === "saving"}
+                            aria-label="Удалить фото сайта"
+                          >
+                            <ProjectAvatarRemoveIcon />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
+                          <ProjectShellAvatarIcon />
+                        </span>
+                      )}
+                    </label>
+                  ) : (
+                    <label
+                      className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
+                        avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
+                      }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/gif, image/jpeg, image/png, image/webp"
+                        className="owner-programs__shell-avatar-input"
+                        onChange={handleAvatarChange}
+                        disabled={avatarSaveState === "saving" || !hasProjectId}
+                      />
+                      {avatarDataUrl ? (
+                        <>
+                          <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото проекта" />
+                          <button
+                            type="button"
+                            className="owner-programs__shell-avatar-remove"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={handleAvatarRemove}
+                            disabled={avatarSaveState === "saving"}
+                            aria-label="Удалить фото проекта"
+                          >
+                            <ProjectAvatarRemoveIcon />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
+                          <ProjectShellAvatarIcon />
+                        </span>
+                      )}
+                    </label>
+                  )}
+                  {isSiteRouteShell ? (
+                    <div className="owner-programs__shell-header-copy">
+                      <div
+                        className="owner-programs__shell-header-copy_clickable owner-programs__shell-header-title-hit"
+                        role="button"
+                        tabIndex={0}
+                        onClick={openSiteSettings}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          openSiteSettings();
+                        }}
+                        aria-label="Открыть настройки сайта"
+                      >
+                        <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
+                      </div>
+                      <div
+                        className={
+                          showSiteReachability
+                            ? "owner-programs__shell-meta-row owner-programs__shell-meta-row_site"
+                            : "owner-programs__shell-meta-row"
+                        }
+                      >
+                        {showSiteReachability ? (
+                          <p className="owner-programs__shell-reachability" role="status" aria-live="polite">
+                            <span
+                              className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(siteReachability.phase)}`}
+                              aria-hidden="true"
+                            />
+                            <span className="owner-programs__shell-reachability-text">{reachabilityLabel(siteReachability.phase)}</span>
+                          </p>
+                        ) : null}
+                        <div
+                          className={`owner-programs__shell-header-domain-hit${
+                            siteBrowseHref ? " owner-programs__shell-header-copy_clickable" : " owner-programs__shell-header-domain-hit_static"
+                          }`}
+                          role={siteBrowseHref ? "button" : undefined}
+                          tabIndex={siteBrowseHref ? 0 : -1}
+                          onClick={siteBrowseHref ? openSitePrimaryInNewTab : undefined}
+                          onKeyDown={
+                            siteBrowseHref
+                              ? (event) => {
+                                  if (event.key !== "Enter" && event.key !== " ") return;
+                                  event.preventDefault();
+                                  openSitePrimaryInNewTab();
+                                }
+                              : undefined
+                          }
+                          aria-label={siteBrowseHref ? "Открыть сайт в новой вкладке" : undefined}
+                        >
+                          <p className="owner-programs__shell-sub">{siteShellOrigin || "Адрес сайта не указан"}</p>
+                        </div>
+                      </div>
+                      {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
+                      {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
+                        <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
+                      ) : null}
+                      {!avatarError && deleteProjectError ? (
+                        <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p>
+                      ) : null}
+                    </div>
+                  ) : (
                     <div
-                      className="owner-programs__shell-header-copy_clickable owner-programs__shell-header-domain-hit"
+                      className="owner-programs__shell-header-copy owner-programs__shell-header-copy_clickable"
                       role="button"
                       tabIndex={0}
-                      onClick={openSiteSettings}
+                      onClick={openProjectInfo}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
-                        openSiteSettings();
+                        openProjectInfo();
                       }}
-                      aria-label="Открыть настройки сайта — домен и адрес"
+                      aria-label="Открыть информацию о проекте"
                     >
-                      <p className="owner-programs__shell-sub">
-                        {headLoading && !siteRowForShell ? (
-                          <span className="lk-partner__muted">Загрузка…</span>
-                        ) : (
-                          siteShellOrigin || "Адрес сайта не указан"
-                        )}
-                      </p>
+                      <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
+                      <div className="owner-programs__shell-meta-row">
+                        <p className="owner-programs__shell-sub">
+                          {projectComment ? projectComment : "Комментарий к проекту не указан"}
+                        </p>
+                      </div>
+                      {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
+                      {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
+                        <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
+                      ) : null}
+                      {!avatarError && deleteProjectError ? (
+                        <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p>
+                      ) : null}
                     </div>
-                  </div>
-                  {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
-                  {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
-                    <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
-                  ) : null}
-                  {!avatarError && deleteProjectError ? (
-                    <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p>
-                  ) : null}
+                  )}
                 </div>
-              ) : (
-                <div
-                  className="owner-programs__shell-header-copy owner-programs__shell-header-copy_clickable"
-                  role="button"
-                  tabIndex={0}
-                  onClick={openProjectInfo}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    openProjectInfo();
-                  }}
-                  aria-label="Открыть информацию о проекте"
-                >
-                  <h1 className="owner-programs__shell-title">{shellTitleText}</h1>
-                  <div className="owner-programs__shell-meta-row">
-                    <p className="owner-programs__shell-sub">
-                      {headLoading ? (
-                        <span className="lk-partner__muted">Загрузка…</span>
-                      ) : projectComment ? (
-                        projectComment
-                      ) : (
-                        "Комментарий к проекту не указан"
-                      )}
-                    </p>
-                  </div>
-                  {avatarError ? <p className="owner-programs__shell-avatar-note">{avatarError}</p> : null}
-                  {!avatarError && avatarSaveState === "success" && avatarSuccessMessage ? (
-                    <p className="owner-programs__shell-avatar-note">{avatarSuccessMessage}</p>
+                <div className="owner-programs__shell-header-actions">
+                  {isSiteRouteShell && siteShellToolbar ? (
+                    <div className="owner-programs__site-shell-toolbar" role="toolbar" aria-label="Действия по сайту">
+                      {siteShellToolbar}
+                    </div>
                   ) : null}
-                  {!avatarError && deleteProjectError ? (
-                    <p className="owner-programs__shell-avatar-note">{deleteProjectError}</p>
+                  {!isDefaultProject && Array.isArray(projectEntry?.sites) && projectEntry.sites.length === 0 ? (
+                    <button
+                      type="button"
+                      className="owner-programs__icon-action owner-programs__icon-action_danger"
+                      onClick={openDeleteProjectDialog}
+                      disabled={deleteProjectState === "deleting"}
+                      aria-label="Удалить проект"
+                      data-testid="project-delete-empty-button"
+                    >
+                      <RemoveProjectIcon />
+                    </button>
                   ) : null}
-                </div>
-              )}
-            </div>
-            <div className="owner-programs__shell-header-actions">
-              {isSiteRouteShell && siteShellToolbar ? (
-                <div className="owner-programs__site-shell-toolbar" role="toolbar" aria-label="Действия по сайту">
-                  {siteShellToolbar}
-                </div>
-              ) : null}
-              {!isDefaultProject && Array.isArray(projectEntry?.sites) && projectEntry.sites.length === 0 ? (
-                <button
-                  type="button"
-                  className="owner-programs__icon-action owner-programs__icon-action_danger"
-                  onClick={openDeleteProjectDialog}
-                  disabled={deleteProjectState === "deleting"}
-                  aria-label="Удалить проект"
-                  data-testid="project-delete-empty-button"
-                >
-                  <RemoveProjectIcon />
-                </button>
-              ) : null}
-              {!isSiteRouteShell ? (
-                <div className="owner-programs__create-menu" ref={createMenuRef}>
-                  <button
-                    type="button"
-                    className="owner-programs__projects-create-btn owner-programs__create-menu-trigger"
-                    onClick={() => setCreateMenuOpen((value) => !value)}
-                    aria-haspopup="menu"
-                    aria-expanded={createMenuOpen}
-                    data-testid="project-create-menu-trigger"
-                  >
-                    <span>Создать</span>
-                    <CreateMenuChevronIcon open={createMenuOpen} />
-                  </button>
-                  {createMenuOpen ? (
-                    <div className="owner-programs__create-menu-dropdown" role="menu" data-testid="project-create-menu-dropdown">
+                  {!isSiteRouteShell ? (
+                    <div className="owner-programs__create-menu" ref={createMenuRef}>
                       <button
                         type="button"
-                        className="owner-programs__create-menu-item"
-                        onClick={openCreateSite}
-                        role="menuitem"
-                        data-testid="project-create-menu-site"
+                        className="owner-programs__projects-create-btn owner-programs__create-menu-trigger"
+                        onClick={() => setCreateMenuOpen((value) => !value)}
+                        aria-haspopup="menu"
+                        aria-expanded={createMenuOpen}
+                        data-testid="project-create-menu-trigger"
                       >
-                        Сайт
+                        <span>Создать</span>
+                        <CreateMenuChevronIcon open={createMenuOpen} />
                       </button>
+                      {createMenuOpen ? (
+                        <div className="owner-programs__create-menu-dropdown" role="menu" data-testid="project-create-menu-dropdown">
+                          <button
+                            type="button"
+                            className="owner-programs__create-menu-item"
+                            onClick={openCreateSite}
+                            role="menuitem"
+                            data-testid="project-create-menu-site"
+                          >
+                            Сайт
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            )}
           </header>
 
           <nav
-            className="owner-programs__tabs"
+            className={`owner-programs__tabs${headLoading ? " owner-programs__tabs_skel" : ""}`}
             aria-label={
-              isSiteRouteShell
-                ? "Дашборд, виджет, блок для сайта, настройки, пользователи и история сайта"
-                : "Сервисы и пользователи проекта"
+              headLoading
+                ? "Загрузка"
+                : isSiteRouteShell
+                  ? "Дашборд, виджет, блок для сайта, настройки, пользователи и история сайта"
+                  : "Сервисы и пользователи проекта"
             }
           >
-            {isSiteRouteShell ? (
+            {headLoading ? (
+              isSiteRouteShell ? (
+                <>
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w80" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w72" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w104" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w96" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w104" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w76" aria-hidden />
+                </>
+              ) : (
+                <>
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w88" aria-hidden />
+                  <span className="owner-programs__skel owner-programs__tab-skel owner-programs__tab-skel_w120" aria-hidden />
+                </>
+              )
+            ) : isSiteRouteShell ? (
               <>
                 <NavLink to={dashboardSiteNavPath} end className={tabClass} preventScrollReset>
                   Дашборд

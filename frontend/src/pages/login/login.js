@@ -1,6 +1,6 @@
 import "./login.css";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
 import { LoginBrandLogo } from "./LoginBrandLogo";
 
@@ -27,8 +27,28 @@ function loginFieldLabelRu(key) {
   return key;
 }
 
+function githubErrorMessageRu(code) {
+  const byCode = {
+    github_oauth_not_configured: "Вход через GitHub не настроен на сервере.",
+    github_oauth_denied: "Вход через GitHub отменён.",
+    github_oauth_invalid_callback: "Некорректный ответ GitHub. Попробуйте войти снова.",
+    github_state_invalid: "Сессия входа GitHub устарела. Откройте вход снова с этой страницы.",
+    github_token_exchange_failed: "Не удалось завершить вход через GitHub. Попробуйте позже.",
+    github_email_fetch_failed: "Не удалось получить email из GitHub. Попробуйте позже.",
+    github_email_missing: "В аккаунте GitHub нет подтверждённого email.",
+    github_email_not_registered:
+      "Нет аккаунта с этим email. Зарегистрируйтесь или войдите по паролю.",
+    account_disabled: "Аккаунт отключён.",
+  };
+  return byCode[code] || "";
+}
+
 function formatLoginApiErrors(data) {
   if (!data || typeof data !== "object") return "";
+  if (typeof data.code === "string" && data.code.startsWith("github_")) {
+    const msg = githubErrorMessageRu(data.code);
+    if (msg) return msg;
+  }
   if (typeof data.code === "string" && data.code.startsWith("google_")) {
     const byCode = {
       google_oauth_not_configured: "Вход через Google не настроен на сервере.",
@@ -244,6 +264,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [{ returning: isReturningUser, name: storedWelcomeName }] = useState(() => readLoginWelcomeFromStorage());
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const googleCredentialHandlerRef = useRef(() => {});
 
   googleCredentialHandlerRef.current = async (credentialResponse) => {
@@ -292,6 +313,71 @@ function Login() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const ghErr = searchParams.get("github_error");
+    if (!ghErr) return undefined;
+    const text = githubErrorMessageRu(ghErr) || ghErr;
+    setMessage(text);
+    const next = new URLSearchParams(searchParams);
+    next.delete("github_error");
+    setSearchParams(next, { replace: true });
+    return undefined;
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const rawHash = (window.location.hash || "").replace(/^#/, "");
+    if (!rawHash) return undefined;
+    const hp = new URLSearchParams(rawHash);
+    if (hp.get("oauth") !== "github") return undefined;
+    const access = hp.get("access_token");
+    const refresh = hp.get("refresh_token");
+    if (!access || !refresh) return undefined;
+
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setMessage("");
+
+      localStorage.setItem("access_token", access);
+      localStorage.setItem("refresh_token", refresh);
+      try {
+        const response = await fetch(API_ENDPOINTS.currentUser, {
+          headers: { Authorization: `Bearer ${access}` },
+          credentials: "include",
+        });
+        if (response.ok) {
+          const user = await response.json();
+          if (!cancelled && user && typeof user === "object") {
+            localStorage.setItem("user", JSON.stringify(user));
+            const displayName = pickLoginDisplayName(user);
+            try {
+              localStorage.setItem(LOGIN_RETURNING_KEY, "1");
+              if (displayName) {
+                localStorage.setItem(LOGIN_DISPLAY_NAME_KEY, displayName);
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch {
+        /* still navigate; LK may refetch user */
+      }
+      if (!cancelled) {
+        setMessage("✅ Вход выполнен!");
+        navigate("/lk/partner");
+      }
+      setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   useEffect(() => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
@@ -361,6 +447,11 @@ function Login() {
         }
       }
     });
+  };
+
+  const handleGitHubClick = () => {
+    setMessage("");
+    window.location.assign(API_ENDPOINTS.tokenGithubStart);
   };
 
   const handleSubmit = async (e) => {
@@ -530,7 +621,13 @@ function Login() {
                 <button type="button" className="login-page__social-btn" aria-label="Войти через VK">
                   <VkIcon />
                 </button>
-                <button type="button" className="login-page__social-btn" aria-label="Войти через GitHub">
+                <button
+                  type="button"
+                  className="login-page__social-btn"
+                  aria-label="Войти через GitHub"
+                  disabled={loading}
+                  onClick={handleGitHubClick}
+                >
                   <GitHubIcon />
                 </button>
                 <button

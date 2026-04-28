@@ -9,7 +9,6 @@ import "../settings/settings.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
-
 function authHeaders() {
   const token = localStorage.getItem("access_token");
   return {
@@ -184,7 +183,23 @@ export default function ProjectSettingsPage() {
           </div>
         </div>
 
-        {loadState === "loading" ? <p className="owner-programs__muted">Загрузка…</p> : null}
+        {loadState === "loading" ? (
+          <div
+            className="owner-programs__connect-site-nested-create owner-programs__tab-page-skel_wide"
+            role="status"
+            aria-label="Загрузка настроек"
+          >
+            <div className="owner-programs__tab-page-skel owner-programs__tab-page-skel_wide">
+              <span className="owner-programs__skel owner-programs__tab-page-skel_line-md" aria-hidden />
+              <span className="owner-programs__skel owner-programs__tab-page-skel_line-sm" aria-hidden />
+              <span className="owner-programs__skel owner-programs__tab-page-skel_input" aria-hidden />
+              <span className="owner-programs__skel owner-programs__tab-page-skel_input" aria-hidden />
+              <span className="owner-programs__skel owner-programs__tab-page-skel_textarea" aria-hidden />
+              <span className="owner-programs__skel owner-programs__tab-page-skel_input" aria-hidden />
+              <span className="owner-programs__skel owner-programs__tab-page-skel_btn" aria-hidden />
+            </div>
+          </div>
+        ) : null}
         {loadState === "error" ? <div className="formError">{loadError}</div> : null}
 
         {loadState === "ready" ? (

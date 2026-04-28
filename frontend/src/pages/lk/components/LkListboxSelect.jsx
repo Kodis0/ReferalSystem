@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Кастомный listbox в стиле «Личные данные» (`lk-settings-personal-page__select-*`).
@@ -14,13 +15,72 @@ export default function LkListboxSelect({
   dataTestId,
 }) {
   const [open, setOpen] = useState(false);
+  const [dropdownLayout, setDropdownLayout] = useState(null);
   const rootRef = useRef(null);
+  const dropdownRef = useRef(null);
   const currentLabel = options.find((o) => o.value === value)?.label ?? String(value ?? "");
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setDropdownLayout(null);
+      return undefined;
+    }
+    const el = rootRef.current;
+    if (!el) {
+      setDropdownLayout(null);
+      return undefined;
+    }
+    const gap = 4;
+    const formVarNames = [
+      "--lk-form-surface",
+      "--lk-form-line-color",
+      "--lk-form-text-color",
+      "--lk-form-text-secondary",
+      "--lk-form-radius-medium",
+      "--lk-form-font-medium",
+      "--lk-form-transition",
+    ];
+
+    const sync = () => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const cssVars = {};
+      for (const name of formVarNames) {
+        const v = cs.getPropertyValue(name).trim();
+        if (v) cssVars[name] = v;
+      }
+      const themeLight = document.documentElement.getAttribute("data-theme") === "light";
+      if (!cssVars["--lk-form-surface"]) {
+        cssVars["--lk-form-surface"] = themeLight ? "#ffffff" : "#242f3d";
+      }
+      if (!cssVars["--lk-form-line-color"]) {
+        cssVars["--lk-form-line-color"] = themeLight ? "rgba(15, 23, 42, 0.12)" : "#2c3743";
+      }
+      if (!cssVars["--lk-form-text-color"]) {
+        cssVars["--lk-form-text-color"] = themeLight ? "#0f172a" : "#ffffff";
+      }
+      setDropdownLayout({
+        top: r.bottom + gap,
+        left: r.left,
+        width: r.width,
+        cssVars,
+      });
+    };
+    sync();
+    window.addEventListener("scroll", sync, true);
+    window.addEventListener("resize", sync);
+    return () => {
+      window.removeEventListener("scroll", sync, true);
+      window.removeEventListener("resize", sync);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
     function handlePointerDown(event) {
-      if (!rootRef.current || rootRef.current.contains(event.target)) return;
+      const t = event.target;
+      if (rootRef.current?.contains(t)) return;
+      if (dropdownRef.current?.contains(t)) return;
       setOpen(false);
     }
     function handleKeyDown(event) {
@@ -67,25 +127,44 @@ export default function LkListboxSelect({
           />
         </svg>
       </button>
-      {open ? (
-        <div id={listboxId} className="lk-settings-personal-page__select-dropdown" role="listbox" aria-labelledby={labelledBy}>
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              role="option"
-              aria-selected={value === opt.value}
-              className={`lk-settings-personal-page__select-option${value === opt.value ? " lk-settings-personal-page__select-option_active" : ""}`}
-              onClick={() => {
-                onChange(opt.value);
-                setOpen(false);
+      {open && dropdownLayout && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={dropdownRef}
+              id={listboxId}
+              className="lk-settings-personal-page__select-dropdown lk-settings-personal-page__select-dropdown_portal"
+              role="listbox"
+              aria-labelledby={labelledBy}
+              style={{
+                ...dropdownLayout.cssVars,
+                position: "fixed",
+                top: dropdownLayout.top,
+                left: dropdownLayout.left,
+                width: dropdownLayout.width,
+                zIndex: 12000,
+                opacity: 1,
+                isolation: "isolate",
               }}
             >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+              {options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="option"
+                  aria-selected={value === opt.value}
+                  className={`lk-settings-personal-page__select-option${value === opt.value ? " lk-settings-personal-page__select-option_active" : ""}`}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -1524,7 +1524,7 @@ describe("SiteProjectLayout child sites", () => {
     const snippetAfterCreate = screen.getByTestId("widget-install-snippet-block");
     expect(snippetAfterCreate).toHaveTextContent(siteB);
     expect(snippetAfterCreate).toHaveTextContent("pk_site_b");
-    expect(screen.getByRole("heading", { name: "Видеоинструкция" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-site-connect-step-verify-title")).toBeInTheDocument();
     expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/501");
     expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
     expect(screen.queryByText("Shared project")).not.toBeInTheDocument();
@@ -1631,7 +1631,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByRole("heading", { name: "Подключите сайт" })).toBeInTheDocument();
     expect(screen.getByTestId("widget-install-snippet-block")).toHaveTextContent(siteA);
     expect(screen.getByRole("button", { name: "Скопировать код" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Видеоинструкция" })).toBeInTheDocument();
+    expect(screen.getByTestId("project-site-connect-step-verify-title")).toBeInTheDocument();
     expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/502");
     expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("project-services-page")).not.toBeInTheDocument();
@@ -2374,7 +2374,7 @@ describe("Canonical site identity contract", () => {
       expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("link", { name: "Блок для сайта" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Блок для сайта" })).toBeInTheDocument();
     expect(screen.getByTestId("referral-builder-shell")).toBeInTheDocument();
     expect(screen.getByTestId("referral-builder-canvas")).toBeInTheDocument();
     expect(screen.queryByTestId("referral-builder-preview-node")).not.toBeInTheDocument();
