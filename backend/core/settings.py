@@ -270,6 +270,13 @@ LEAD_INGEST_EXPOSE_COUNTERS = (
     os.getenv("LEAD_INGEST_EXPOSE_COUNTERS", "False").lower() == "true"
 )
 
+# LK «Статус сервисов»: optional JSON merged into GET /referrals/platform-service-status/.
+# Object keyed by service id: {"lumo-widget": {"ok": false, "message": "…"}}.
+# Allowed ids: lumo-owner, lumo-widget, lumo-referral.
+PLATFORM_SERVICE_STATUS_OVERRIDES_JSON = os.getenv(
+    "PLATFORM_SERVICE_STATUS_OVERRIDES_JSON", ""
+).strip()
+
 # Tilda / payment POST webhook at /users/api/orders/
 # When non-empty: require X-Order-Webhook-Secret or Authorization: Bearer <same value>.
 # When empty: allowed only while DJANGO_DEBUG=True (local/tests); production must set this.
@@ -287,3 +294,9 @@ GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "").strip()
 GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "").strip()
 # Optional: fixed callback URL if it differs from request.build_absolute_uri (proxies / custom domains).
 GITHUB_OAUTH_REDIRECT_URI = os.getenv("GITHUB_OAUTH_REDIRECT_URI", "").strip()
+
+# VK ID (vk.com): App ID = client_id, «Защищённый ключ» = client_secret.
+# Callback URL in VK app settings must match .../users/token/vk/callback/
+VK_OAUTH_APP_ID = os.getenv("VK_OAUTH_APP_ID", "").strip()
+VK_OAUTH_CLIENT_SECRET = os.getenv("VK_OAUTH_CLIENT_SECRET", "").strip()
+VK_OAUTH_REDIRECT_URI = os.getenv("VK_OAUTH_REDIRECT_URI", "").strip()

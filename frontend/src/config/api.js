@@ -1,13 +1,18 @@
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 export const API_ENDPOINTS = {
+  platformServiceStatus: `${API_BASE}/referrals/platform-service-status/`,
   register: `${API_BASE}/users/register/`,
   siteCtaJoin: `${API_BASE}/users/site/join/`,
   token: `${API_BASE}/users/token/`,
   tokenGoogle: `${API_BASE}/users/token/google/`,
   tokenGithubStart: `${API_BASE}/users/token/github/start/`,
+  tokenVkStart: `${API_BASE}/users/token/vk/start/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
+  supportTickets: `${API_BASE}/users/me/support-tickets/`,
+  supportTicketDetail: (ticketId) =>
+    `${API_BASE}/users/me/support-tickets/${encodeURIComponent(ticketId)}/`,
   myPrograms: `${API_BASE}/users/me/programs/`,
   myProgramDetail: (sitePublicId) => `${API_BASE}/users/me/programs/${encodeURIComponent(sitePublicId)}/`,
   referralCapture: `${API_BASE}/referrals/capture/`,

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Globe } from "lucide-react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
+import "../lk.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
@@ -1132,15 +1134,18 @@ export default function SiteProjectLayout() {
                         <CreateMenuChevronIcon open={createMenuOpen} />
                       </button>
                       {createMenuOpen ? (
-                        <div className="owner-programs__create-menu-dropdown" role="menu" data-testid="project-create-menu-dropdown">
+                        <div className="lk-header__menu" role="menu" data-testid="project-create-menu-dropdown">
                           <button
                             type="button"
-                            className="owner-programs__create-menu-item"
+                            className="lk-header__menu-item"
                             onClick={openCreateSite}
                             role="menuitem"
                             data-testid="project-create-menu-site"
                           >
-                            Сайт
+                            <span className="lk-header__menu-item-icon" aria-hidden="true">
+                              <Globe size={20} strokeWidth={1.75} />
+                            </span>
+                            <span className="lk-header__menu-item-text">Сайт</span>
                           </button>
                         </div>
                       ) : null}

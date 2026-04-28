@@ -333,7 +333,7 @@ function fioFromUser(user) {
   return parts.join(" ").trim();
 }
 
-export default function AccountPersonalDataPage({ user, fetchUser }) {
+export default function AccountPersonalDataPage({ user, fetchUser, setUser }) {
   const [accountType, setAccountType] = useState("individual");
   const [fio, setFio] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -420,6 +420,9 @@ export default function AccountPersonalDataPage({ user, fetchUser }) {
           setError(msg);
           return;
         }
+        if (payload && typeof payload === "object" && "id" in payload && typeof setUser === "function") {
+          setUser(payload);
+        }
         await fetchUser();
         setSaved(true);
       } catch (err) {
@@ -441,6 +444,7 @@ export default function AccountPersonalDataPage({ user, fetchUser }) {
       passportRegistrationAddress,
       email,
       fetchUser,
+      setUser,
     ],
   );
 

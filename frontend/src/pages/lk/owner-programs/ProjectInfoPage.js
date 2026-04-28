@@ -180,56 +180,58 @@ export default function ProjectInfoPage() {
         {loading ? <p className="owner-programs__muted">Загрузка…</p> : null}
 
         {!loading ? (
-          <form className="form" onSubmit={onSubmit}>
-            <label className="formControl">
-              <div className="formControl__label">
-                <span className="text text_s text_bold text_grey text_align_left">Название</span>
-              </div>
-              <div className="input">
-                <div className="inputWrapper">
-                  <input
-                    className="inputField"
-                    name="name"
-                    value={name}
-                    onChange={(ev) => setName(ev.target.value)}
-                    autoComplete="off"
-                    maxLength={200}
-                  />
+          <div className="owner-programs__connect-site-nested-create">
+            <form className="form" onSubmit={onSubmit}>
+              <label className="formControl">
+                <div className="formControl__label">
+                  <span className="text text_s text_bold text_grey text_align_left">Название</span>
                 </div>
-              </div>
-            </label>
-
-            <label className="formControl">
-              <div className="formControl__label">
-                <span className="text text_s text_bold text_grey text_align_left">Комментарий</span>
-              </div>
-              <div className="input">
-                <div className="inputWrapper">
-                  <input
-                    className="inputField"
-                    name="description"
-                    value={description}
-                    onChange={(ev) =>
-                      setDescription(ev.target.value.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS))
-                    }
-                    autoComplete="off"
-                    maxLength={PROJECT_OWNER_DESCRIPTION_MAX_CHARS}
-                  />
+                <div className="input">
+                  <div className="inputWrapper">
+                    <input
+                      className="inputField"
+                      name="name"
+                      value={name}
+                      onChange={(ev) => setName(ev.target.value)}
+                      autoComplete="off"
+                      maxLength={200}
+                    />
+                  </div>
                 </div>
-              </div>
-            </label>
+              </label>
 
-            {error ? <div className="formError">{error}</div> : null}
+              <label className="formControl">
+                <div className="formControl__label">
+                  <span className="text text_s text_bold text_grey text_align_left">Комментарий</span>
+                </div>
+                <div className="input">
+                  <div className="inputWrapper">
+                    <input
+                      className="inputField"
+                      name="description"
+                      value={description}
+                      onChange={(ev) =>
+                        setDescription(ev.target.value.slice(0, PROJECT_OWNER_DESCRIPTION_MAX_CHARS))
+                      }
+                      autoComplete="off"
+                      maxLength={PROJECT_OWNER_DESCRIPTION_MAX_CHARS}
+                    />
+                  </div>
+                </div>
+              </label>
 
-            <button
-              type="submit"
-              className="baseButton button button_size_medium baseButton__size_medium baseButton__color_primary"
-              data-testid="submit-form-btn"
-              disabled={saving}
-            >
-              {saving ? "Сохранение…" : "Сохранить"}
-            </button>
-          </form>
+              {error ? <div className="formError">{error}</div> : null}
+
+              <button
+                type="submit"
+                className="baseButton button button_size_medium baseButton__size_medium baseButton__color_primary"
+                data-testid="submit-form-btn"
+                disabled={saving}
+              >
+                {saving ? "Сохранение…" : "Сохранить"}
+              </button>
+            </form>
+          </div>
         ) : null}
       </div>
     </div>

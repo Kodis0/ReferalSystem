@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { KeyRound, User } from "lucide-react";
 import AccountSettingsAvatar from "./AccountSettingsAvatar";
 import "./settings.css";
@@ -66,10 +66,10 @@ function AccountSettingsMessageModal({ open, title, message, onClose }) {
   );
 }
 
-function Settings({ user, fetchUser }) {
+function Settings({ user, fetchUser, setUser }) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState("general");
   const [loginStubOpen, setLoginStubOpen] = useState(false);
-  const [bindStubOpen, setBindStubOpen] = useState(false);
 
   const hasToken = typeof window !== "undefined" && !!localStorage.getItem("access_token");
   const loadingProfile = hasToken && user === null;
@@ -85,7 +85,7 @@ function Settings({ user, fetchUser }) {
     <div className="lk-settings" data-testid="lk-account-settings">
       <div className="lk-settings__identity">
         <div className="lk-settings__identity-avatar-col">
-          <AccountSettingsAvatar user={user} fetchUser={fetchUser} disabled={loadingProfile || !user} />
+          <AccountSettingsAvatar user={user} fetchUser={fetchUser} setUser={setUser} disabled={loadingProfile || !user} />
         </div>
         <div className="lk-settings__identity-text">
           {loadingProfile && (
@@ -194,7 +194,7 @@ function Settings({ user, fetchUser }) {
               </h3>
               <div className="lk-settings__linked-card">
                 <p className="lk-settings__linked-text">Нет привязанных аккаунтов</p>
-                <button type="button" className="lk-settings__linked-btn" onClick={() => setBindStubOpen(true)}>
+                <button type="button" className="lk-settings__linked-btn" onClick={() => navigate("/lk/settings/bind-account")}>
                   Привязать аккаунт
                 </button>
               </div>
@@ -276,12 +276,6 @@ function Settings({ user, fetchUser }) {
         title="Логин аккаунта"
         message="Изменение логина появится в этом разделе позже. Пока используйте текущий логин для входа."
         onClose={() => setLoginStubOpen(false)}
-      />
-      <AccountSettingsMessageModal
-        open={bindStubOpen}
-        title="Привязка аккаунта"
-        message="Привязка внешних аккаунтов будет доступна в следующих версиях."
-        onClose={() => setBindStubOpen(false)}
       />
     </div>
   );

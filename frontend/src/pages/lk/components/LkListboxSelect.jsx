@@ -18,7 +18,9 @@ export default function LkListboxSelect({
   const [dropdownLayout, setDropdownLayout] = useState(null);
   const rootRef = useRef(null);
   const dropdownRef = useRef(null);
-  const currentLabel = options.find((o) => o.value === value)?.label ?? String(value ?? "");
+  const current = options.find((o) => o.value === value);
+  const currentLabel = current?.label ?? String(value ?? "");
+  const currentIcon = current?.icon;
 
   useLayoutEffect(() => {
     if (!open) {
@@ -107,7 +109,16 @@ export default function LkListboxSelect({
         data-testid={dataTestId}
         onClick={() => setOpen((v) => !v)}
       >
-        <div className="lk-settings-personal-page__select-trigger-label">{currentLabel}</div>
+        <div
+          className={`lk-settings-personal-page__select-trigger-label${currentIcon ? " lk-settings-personal-page__select-trigger-label_row" : ""}`}
+        >
+          {currentIcon ? (
+            <span className="lk-settings-personal-page__select-option-icon" aria-hidden>
+              {currentIcon}
+            </span>
+          ) : null}
+          <span className="lk-settings-personal-page__select-trigger-label-text">{currentLabel}</span>
+        </div>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"
@@ -158,7 +169,16 @@ export default function LkListboxSelect({
                     setOpen(false);
                   }}
                 >
-                  {opt.label}
+                  {opt.icon ? (
+                    <span className="lk-settings-personal-page__select-option_row">
+                      <span className="lk-settings-personal-page__select-option-icon" aria-hidden>
+                        {opt.icon}
+                      </span>
+                      <span className="lk-settings-personal-page__select-option-text">{opt.label}</span>
+                    </span>
+                  ) : (
+                    opt.label
+                  )}
                 </button>
               ))}
             </div>,

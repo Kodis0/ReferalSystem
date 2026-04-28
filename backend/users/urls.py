@@ -8,6 +8,8 @@ from .views import (
     GoogleIdTokenLoginView,
     GitHubOAuthStartView,
     GitHubOAuthCallbackView,
+    VkOAuthStartView,
+    VkOAuthCallbackView,
     CurrentUserView,
     MyProgramsView,
     MyProgramDetailView,
@@ -15,6 +17,7 @@ from .views import (
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views_orders import OrderReceiveView
+from .support_views import SupportTicketListCreateView, SupportTicketRetrieveView
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -25,10 +28,18 @@ urlpatterns = [
     path('token/google/', GoogleIdTokenLoginView.as_view(), name='token_google'),
     path('token/github/start/', GitHubOAuthStartView.as_view(), name='github_oauth_start'),
     path('token/github/callback/', GitHubOAuthCallbackView.as_view(), name='github_oauth_callback'),
+    path('token/vk/start/', VkOAuthStartView.as_view(), name='vk_oauth_start'),
+    path('token/vk/callback/', VkOAuthCallbackView.as_view(), name='vk_oauth_callback'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('me/programs/<uuid:site_public_id>/', MyProgramDetailView.as_view(), name='my_program_detail'),
     path('me/programs/', MyProgramsView.as_view(), name='my_programs'),
     path('me/', CurrentUserView.as_view(), name='current_user'),  # 🔹 текущий пользователь
+    path('me/support-tickets/', SupportTicketListCreateView.as_view(), name='support_tickets'),
+    path(
+        'me/support-tickets/<uuid:ticket_id>/',
+        SupportTicketRetrieveView.as_view(),
+        name='support_ticket_detail',
+    ),
     path('api/orders/', OrderReceiveView.as_view(), name='receive_order'),
 ]

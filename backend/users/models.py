@@ -1,4 +1,5 @@
 import secrets
+import uuid
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -49,3 +50,30 @@ class CustomUser(AbstractUser):
         Username может быть пустым, поэтому безопасно подставляем email.
         """
         return self.username or self.email
+
+
+class SupportTicket(models.Model):
+    """Обращение пользователя в поддержку из ЛК (список в хабе поддержки)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="support_tickets",
+    )
+    type_slug = models.CharField(max_length=64)
+    target_key = models.CharField(max_length=512, blank=True, default="")
+    target_label = models.CharField(max_length=512, blank=True, default="")
+    body = models.TextField()
+    attachment_names = models.TextField(blank=True, default="")
+    is_closed = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"SupportTicket({self.id}) user={self.user_id}"

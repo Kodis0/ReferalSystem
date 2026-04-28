@@ -11,10 +11,11 @@
 
 /* «Создать проект» `/lk/partner/new`: полная ширина дорожки 920px, как у списка проектов и shell. */
 .owner-programs__create-owner-project-root {
-  width: calc(100% + 2 * var(--lk-content-padding-x));
-  max-width: calc(100% + 2 * var(--lk-content-padding-x));
-  margin-left: calc(-1 * var(--lk-content-padding-x));
-  margin-right: calc(-1 * var(--lk-content-padding-x));
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 #create-owner-project button,

@@ -27,6 +27,21 @@ function loginFieldLabelRu(key) {
   return key;
 }
 
+function vkErrorMessageRu(code) {
+  const byCode = {
+    vk_oauth_not_configured: "Вход через VK не настроен на сервере.",
+    vk_oauth_denied: "Вход через VK отменён.",
+    vk_oauth_invalid_callback: "Некорректный ответ VK. Попробуйте войти снова.",
+    vk_state_invalid: "Сессия входа VK устарела. Откройте вход снова с этой страницы.",
+    vk_token_exchange_failed: "Не удалось завершить вход через VK. Попробуйте позже.",
+    vk_email_missing: "VK не передал email. Разрешите доступ к email в окне VK или привяжите email в настройках VK.",
+    vk_email_not_registered:
+      "Нет аккаунта с этим email. Зарегистрируйтесь или войдите по паролю.",
+    account_disabled: "Аккаунт отключён.",
+  };
+  return byCode[code] || "";
+}
+
 function githubErrorMessageRu(code) {
   const byCode = {
     github_oauth_not_configured: "Вход через GitHub не настроен на сервере.",
@@ -326,11 +341,23 @@ function Login() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    const vkErr = searchParams.get("vk_error");
+    if (!vkErr) return undefined;
+    const text = vkErrorMessageRu(vkErr) || vkErr;
+    setMessage(text);
+    const next = new URLSearchParams(searchParams);
+    next.delete("vk_error");
+    setSearchParams(next, { replace: true });
+    return undefined;
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return undefined;
     const rawHash = (window.location.hash || "").replace(/^#/, "");
     if (!rawHash) return undefined;
     const hp = new URLSearchParams(rawHash);
-    if (hp.get("oauth") !== "github") return undefined;
+    const oauth = hp.get("oauth");
+    if (oauth !== "github" && oauth !== "vk") return undefined;
     const access = hp.get("access_token");
     const refresh = hp.get("refresh_token");
     if (!access || !refresh) return undefined;
@@ -452,6 +479,11 @@ function Login() {
   const handleGitHubClick = () => {
     setMessage("");
     window.location.assign(API_ENDPOINTS.tokenGithubStart);
+  };
+
+  const handleVkClick = () => {
+    setMessage("");
+    window.location.assign(API_ENDPOINTS.tokenVkStart);
   };
 
   const handleSubmit = async (e) => {
@@ -618,7 +650,13 @@ function Login() {
                   <PasskeyIcon />
                   <span>Passkey</span>
                 </button>
-                <button type="button" className="login-page__social-btn" aria-label="Войти через VK">
+                <button
+                  type="button"
+                  className="login-page__social-btn"
+                  aria-label="Войти через VK"
+                  disabled={loading}
+                  onClick={handleVkClick}
+                >
                   <VkIcon />
                 </button>
                 <button

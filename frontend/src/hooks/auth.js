@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { API_ENDPOINTS } from "../config/api";
+import { clearMultiAccounts } from "../utils/lkMultiAccounts";
 
 export default function useAuth() {
   const navigate = useNavigate();
@@ -62,6 +63,9 @@ export default function useAuth() {
 
       if (response.ok) {
         localStorage.setItem("access_token", data.access);
+        if (data.refresh) {
+          localStorage.setItem("refresh_token", data.refresh);
+        }
         return data.access;
       } else {
         logout();
@@ -79,6 +83,7 @@ export default function useAuth() {
 
   // ✅ Выход из аккаунта
   const logout = () => {
+    clearMultiAccounts();
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");

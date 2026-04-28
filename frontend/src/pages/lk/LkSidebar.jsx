@@ -27,6 +27,7 @@ function projectAvatarDataUrl(project) {
 /** Avoid refetch + FLIP layout on every nested tab under the same owner project. */
 function ownerProjectsRouteStaleKey(pathname) {
   const p = pathname || "";
+  if (p === "/lk/support" || p.startsWith("/lk/support/")) return "/lk/support";
   if (!p.startsWith("/lk/partner")) return p;
   const m = p.match(/^\/lk\/partner\/project\/(\d+)/);
   if (m) return `/lk/partner/project/${m[1]}`;
@@ -108,7 +109,7 @@ function ProgramsNavIcon() {
   );
 }
 
-export default function LkSidebar() {
+export default function LkSidebar({ ownerSessionKey = "" }) {
   const projectAvatarClipId = useId().replace(/:/g, "");
   const { pathname, hash, search } = useLocation();
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -147,11 +148,21 @@ export default function LkSidebar() {
     if (ok) setOwnerProjects(projects);
   }, []);
 
-  const ownerProjectsStaleKey = useMemo(() => ownerProjectsRouteStaleKey(pathname), [pathname]);
+  /** Последний ключ маршрута под `/lk/partner` — при переходе в поддержку/настройки и т.д. не меняем,
+   *  чтобы не дергать загрузку списка проектов и не мигать `.lk-sidebar__frame`. */
+  const lastPartnerOwnerFetchKeyRef = useRef(null);
+  const ownerProjectsFetchKey = useMemo(() => {
+    if (pathname.startsWith("/lk/partner")) {
+      const k = ownerProjectsRouteStaleKey(pathname);
+      lastPartnerOwnerFetchKeyRef.current = k;
+      return k;
+    }
+    return lastPartnerOwnerFetchKeyRef.current ?? "__lk_non_partner_boot__";
+  }, [pathname]);
 
   useLayoutEffect(() => {
     setOwnerProjectsLoading(true);
-  }, [ownerProjectsStaleKey]);
+  }, [ownerProjectsFetchKey, ownerSessionKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,7 +175,7 @@ export default function LkSidebar() {
     return () => {
       cancelled = true;
     };
-  }, [ownerProjectsStaleKey]);
+  }, [ownerProjectsFetchKey, ownerSessionKey]);
 
   useEffect(() => {
     function handleProjectAvatarUpdated() {

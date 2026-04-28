@@ -1,8 +1,9 @@
-/* Account settings (top-level LK) — tabs + cards, aligned с owner-programs / dashboard */
+/* Account settings (top-level LK) — на всю ширину дорожки `.LK-content` (без узкой колонки 720px справа). */
 
 .lk-settings {
   width: 100%;
-  max-width: 720px;
+  max-width: none;
+  box-sizing: border-box;
   color: rgba(255, 255, 255, 0.95);
 }
 
@@ -102,6 +103,14 @@
 
 .lk-settings__section_linked {
   margin-top: 28px;
+}
+
+.lk-settings__section_linked .lk-settings__manage-section-title {
+  margin-bottom: 6px;
+}
+
+.lk-settings__section_linked .lk-settings__linked-card {
+  padding-top: 0;
 }
 
 /* Шапка вкладки «Информация»: аватар + имя + email */
@@ -294,21 +303,17 @@
   flex-shrink: 0;
   padding: 8px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: none;
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.92);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
 
 .lk-settings__manage-action:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .lk-settings__manage-action:disabled {
@@ -662,14 +667,13 @@
 }
 
 [data-theme="light"] .lk-settings__manage-action {
-  border-color: rgba(15, 23, 42, 0.12);
+  border: none;
   background: #ffffff;
   color: #0f172a;
 }
 
 [data-theme="light"] .lk-settings__manage-action:hover:not(:disabled) {
   background: rgba(15, 23, 42, 0.04);
-  border-color: rgba(15, 23, 42, 0.18);
 }
 
 [data-theme="light"] .lk-settings__linked-card {
@@ -736,7 +740,8 @@
 }
 
 /* Страница «Личные данные» — референс: тёмный холст, плоская форма, ФИО одной строкой */
-#lk-settings-personal-page.lk-settings-personal-page {
+#lk-settings-personal-page.lk-settings-personal-page,
+#lk-settings-bind-account-page.lk-settings-personal-page {
   --lk-form-line-color: #2c3743;
   --lk-form-text-color: #fff;
   --lk-form-text-secondary: #7f91a4;
@@ -759,7 +764,8 @@
   -webkit-font-smoothing: antialiased;
 }
 
-[data-theme="light"] #lk-settings-personal-page.lk-settings-personal-page {
+[data-theme="light"] #lk-settings-personal-page.lk-settings-personal-page,
+[data-theme="light"] #lk-settings-bind-account-page.lk-settings-personal-page {
   --lk-form-line-color: rgba(15, 23, 42, 0.12);
   --lk-form-text-color: #0f172a;
   --lk-form-text-secondary: #64748b;
@@ -768,7 +774,8 @@
   background: #f1f5f9;
 }
 
-#lk-settings-personal-page .page {
+#lk-settings-personal-page .page,
+#lk-settings-bind-account-page .page {
   box-sizing: border-box;
 }
 
@@ -776,7 +783,12 @@
   margin-bottom: 12px;
 }
 
-#lk-settings-personal-page .tw-link.link_primary.link_s {
+#lk-settings-bind-account-page .page__returnButton {
+  margin-bottom: 24px;
+}
+
+#lk-settings-personal-page .tw-link.link_primary.link_s,
+#lk-settings-bind-account-page .tw-link.link_primary.link_s {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -787,17 +799,79 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
-#lk-settings-personal-page .tw-link.link_primary.link_s:hover {
+#lk-settings-personal-page .tw-link.link_primary.link_s:hover,
+#lk-settings-bind-account-page .tw-link.link_primary.link_s:hover {
   text-decoration: none;
   color: rgba(255, 255, 255, 0.85);
 }
 
-[data-theme="light"] #lk-settings-personal-page .tw-link.link_primary.link_s {
+[data-theme="light"] #lk-settings-personal-page .tw-link.link_primary.link_s,
+[data-theme="light"] #lk-settings-bind-account-page .tw-link.link_primary.link_s {
   color: #64748b;
 }
 
-[data-theme="light"] #lk-settings-personal-page .tw-link.link_primary.link_s:hover {
+[data-theme="light"] #lk-settings-personal-page .tw-link.link_primary.link_s:hover,
+[data-theme="light"] #lk-settings-bind-account-page .tw-link.link_primary.link_s:hover {
   color: #4f5fff;
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-shell {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  border-radius: var(--lk-form-radius-medium);
+  border: 1px solid var(--lk-form-line-color);
+  background: transparent;
+  overflow: hidden;
+  transition:
+    var(--lk-form-transition),
+    box-shadow 0.15s ease;
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-shell:focus-within {
+  border-color: rgba(113, 119, 248, 0.75);
+  box-shadow: 0 0 0 2px rgba(113, 119, 248, 0.2);
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-input:focus {
+  box-shadow: none;
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--lk-form-text-secondary);
+  cursor: pointer;
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle:hover {
+  color: var(--lk-form-text-color);
+}
+
+#lk-settings-bind-account-page .lk-settings-bind-account-page__password-toggle:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.75);
+  outline-offset: -2px;
+}
+
+[data-theme="light"] #lk-settings-bind-account-page .lk-settings-bind-account-page__password-input {
+  background: #fff;
 }
 
 .lk-settings-personal-page__header {
@@ -919,6 +993,17 @@
 }
 
 .lk-settings-personal-page__select-trigger-label {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lk-settings-personal-page__select-trigger-label_row {
+  gap: 10px;
+}
+
+.lk-settings-personal-page__select-trigger-label-text {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -978,6 +1063,28 @@
   text-align: left;
   cursor: pointer;
   transition: background 0.15s ease;
+}
+
+.lk-settings-personal-page__select-option_row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.lk-settings-personal-page__select-option-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lk-form-text-secondary);
+  opacity: 0.92;
+}
+
+.lk-settings-personal-page__select-option-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
 }
 
 .lk-settings-personal-page__select-option:hover {
@@ -1302,7 +1409,8 @@
   justify-content: flex-start;
 }
 
-#lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
+#lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary,
+#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
   align-self: flex-start;
   min-height: 44px;
   padding: 0 26px;
@@ -1316,20 +1424,24 @@
   font-family: inherit;
 }
 
-#lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
+#lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled),
+#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
   background: #5c6bef;
 }
 
-#lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled {
+#lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled,
+#lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
-[data-theme="light"] #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
+[data-theme="light"] #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary,
+[data-theme="light"] #lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary {
   background: #4f5fff;
 }
 
-[data-theme="light"] #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
+[data-theme="light"] #lk-settings-personal-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled),
+[data-theme="light"] #lk-settings-bind-account-page .baseButton.button.button_size_medium.baseButton__size_medium.baseButton__color_primary:hover:not(:disabled) {
   background: #3d4de8;
 }
 
@@ -1348,7 +1460,8 @@
     grid-template-columns: 1fr;
   }
 
-  #lk-settings-personal-page.lk-settings-personal-page {
+  #lk-settings-personal-page.lk-settings-personal-page,
+  #lk-settings-bind-account-page.lk-settings-personal-page {
     padding: 12px 14px 28px;
     margin-right: 0;
   }

@@ -8,7 +8,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -30,6 +30,7 @@ from .owner_diagnostics import (
 )
 from .owner_site_analytics import build_site_owner_analytics_payload
 from .page_scan import PageScanError, PageScanUrlValidationError, scan_page_url, validate_page_scan_url
+from .platform_service_status import build_platform_service_status_payload
 from .serializers import (
     PageScanRequestSerializer,
     ProjectOwnerCreateSerializer,
@@ -971,3 +972,16 @@ class SiteOwnerSiteActivityListView(APIView):
                 "num_pages": paginator.num_pages,
             }
         )
+
+
+class PlatformServiceStatusView(APIView):
+    """
+    Public GET: per-service ok/message for LK support sidebar.
+    Ops may set ``PLATFORM_SERVICE_STATUS_OVERRIDES_JSON`` in Django settings (env).
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(build_platform_service_status_payload())

@@ -1,11 +1,12 @@
 import { Routes, Route, Link, useNavigate, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, MessageCircle, Palette, Send, Settings as SettingsGearIcon, UserPlus, UserRound } from "lucide-react";
 import { LkHeaderBrandMark } from "./LkHeaderBrandMark";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
 import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
 import Settings from "./settings/settings"; // импорт компонента Settings
 import AccountPersonalDataPage from "./settings/AccountPersonalDataPage";
+import BindAccountPage from "./settings/BindAccountPage";
 import LkSidebar from "./LkSidebar";
 import NewsPage from "./news/news";
 import BugPage from "./bug/bug";
@@ -22,11 +23,20 @@ import ProjectOverviewPage from "./owner-programs/ProjectOverviewPage";
 import ProjectMembersPage from "./owner-programs/ProjectMembersPage";
 import ProjectSettingsPage from "./owner-programs/ProjectSettingsPage";
 import ProjectInfoPage from "./owner-programs/ProjectInfoPage";
+import SupportHubPage from "./support/SupportHubPage";
+import SupportTicketDetailPage from "./support/SupportTicketDetailPage";
+import SupportTicketPage from "./support/SupportTicketPage";
 import SiteDashboardPage from "./owner-programs/SiteDashboardPage";
 import SiteHistoryPage from "./owner-programs/SiteHistoryPage";
 import ProjectReferralBlockScreen from "./owner-programs/ProjectReferralBlockScreen";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
+import {
+  accountKeyFromUser,
+  applySessionToLocalStorage,
+  listSessionsForSwitcher,
+  persistCurrentSessionFromLs,
+} from "../../utils/lkMultiAccounts";
 import { isUuidString } from "../registration/postJoinNavigation";
 import "./lk.css";
 
@@ -230,11 +240,45 @@ function LK() {
   const personalizationRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, fetchUser } = useCurrentUser();
-  const { logout } = useAuth();
+  const { user, setUser, fetchUser } = useCurrentUser();
+  const { logout, refreshAccessToken, setUser: setAuthUser } = useAuth();
   const [ideaNavBadgeCount, setIdeaNavBadgeCount] = useState(0);
 
   const accountId = formatAccountId(user);
+  const accountSwitcherSessions = listSessionsForSwitcher(user);
+  const currentAccountKey = accountKeyFromUser(user);
+
+  const handleSwitchAccount = useCallback(
+    async (session) => {
+      if (!session?.key || currentAccountKey === session.key) return;
+      persistCurrentSessionFromLs();
+      applySessionToLocalStorage(session);
+      if (session.user) {
+        setUser(session.user);
+        setAuthUser(session.user);
+      }
+      /* Сохранённый access из момента привязки почти всегда истёк — обновляем по refresh до fetchUser и навигации. */
+      const newAccess = await refreshAccessToken();
+      if (!newAccess) return;
+      persistCurrentSessionFromLs();
+      setMenuOpen(false);
+      setSupportOpen(false);
+      setPersonalizationOpen(false);
+      setLanguageOpen(false);
+      const fresh = await fetchUser();
+      if (fresh) {
+        try {
+          localStorage.setItem("user", JSON.stringify(fresh));
+          persistCurrentSessionFromLs();
+        } catch {
+          /* ignore */
+        }
+        setAuthUser(fresh);
+      }
+      navigate("/lk/partner");
+    },
+    [currentAccountKey, fetchUser, navigate, refreshAccessToken, setAuthUser, setUser],
+  );
 
   const THEME_KEY = "lumo-theme";
   const PANEL_WIDTH_KEY = "lk-panel-width";
@@ -257,9 +301,6 @@ function LK() {
 
   const lkHeaderBg = lkTheme === "light" ? "#ffffff" : "#242F3D";
   const currentPath = location.pathname.toLowerCase();
-  /** Та же дорожка 920px, что `.LK-content` / shell: partner, настройки аккаунта (без скачка шапки при переходе). */
-  const headerSearchAlignShellTrack =
-    /^\/lk\/partner(\/|$)/i.test(location.pathname) || /^\/lk\/settings(\/|$)/i.test(location.pathname);
 
   useEffect(() => {
     function onIdeasBadgeEvent(event) {
@@ -343,7 +384,7 @@ function LK() {
   return (
     <div
       ref={lkRootRef}
-      className={`LK${headerSearchAlignShellTrack ? " LK--header-search-align-shell" : ""}`}
+      className="LK"
       data-lk-theme={lkTheme}
       style={{ backgroundColor: lkTheme === "light" ? "#ffffff" : "#17212B" }}
     >
@@ -574,13 +615,29 @@ function LK() {
 
               {supportOpen && (
                 <div className="lk-header__menu" role="menu" data-test-id="support-dropdown-menu">
-                  <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => setSupportOpen(false)}>
+                  <button
+                    type="button"
+                    className="lk-header__menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setSupportOpen(false);
+                      navigate("/lk/support");
+                    }}
+                  >
                     <span className="lk-header__menu-item-icon" aria-hidden="true">
                       <MessageCircle size={20} strokeWidth={1.75} />
                     </span>
                     <span className="lk-header__menu-item-text">Центр поддержки</span>
                   </button>
-                  <button type="button" className="lk-header__menu-item" role="menuitem" onClick={() => setSupportOpen(false)}>
+                  <button
+                    type="button"
+                    className="lk-header__menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setSupportOpen(false);
+                      navigate("/lk/support/help-question");
+                    }}
+                  >
                     <span className="lk-header__menu-item-icon" aria-hidden="true">
                       <Send size={20} strokeWidth={1.75} />
                     </span>
@@ -661,13 +718,49 @@ function LK() {
                   type="button"
                   className="lk-header__menu-item lk-header__menu-item_muted"
                   role="menuitem"
-                  onClick={() => setMenuOpen(false)}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setSupportOpen(false);
+                    setPersonalizationOpen(false);
+                    setLanguageOpen(false);
+                    navigate("/lk/settings/bind-account");
+                  }}
                 >
                   <span className="lk-header__menu-item-icon" aria-hidden="true">
                     <UserPlus size={20} strokeWidth={1.75} />
                   </span>
                   <span className="lk-header__menu-item-text">Добавить аккаунт</span>
                 </button>
+                {accountSwitcherSessions.length > 0
+                  ? accountSwitcherSessions.map((session) => {
+                      const isCurrent = session.key === currentAccountKey;
+                      const emailLabel = String(session.user?.email || session.key || "").trim() || session.key;
+                      const sid = formatAccountId(session.user);
+                      return (
+                        <button
+                          key={session.key}
+                          type="button"
+                          className={`lk-header__menu-item lk-header__menu-item_account-switch${
+                            isCurrent ? " lk-header__menu-item_account-switch_current" : ""
+                          }`}
+                          role="menuitem"
+                          disabled={isCurrent}
+                          onClick={() => handleSwitchAccount(session)}
+                        >
+                          <span className="lk-header__menu-item-icon" aria-hidden="true">
+                            <UserRound size={20} strokeWidth={1.75} />
+                          </span>
+                          <span className="lk-header__menu-item-text lk-header__menu-item-text_stack">
+                            <span className="lk-header__menu-item-text-primary">{emailLabel}</span>
+                            <span className="lk-header__menu-item-text-meta">
+                              {sid}
+                              {isCurrent ? " · текущий" : ""}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })
+                  : null}
               </div>
             )}
             </div>
@@ -812,20 +905,28 @@ function LK() {
       )}
 
       <div className="lk-layout">
-        <LkSidebar />
+        <LkSidebar ownerSessionKey={currentAccountKey} />
         <div className="LK-content">
           <Routes>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route
               path="settings/personal"
-              element={<AccountPersonalDataPage user={user} fetchUser={fetchUser} />}
+              element={<AccountPersonalDataPage user={user} fetchUser={fetchUser} setUser={setUser} />}
             />
-            <Route path="settings" element={<Settings user={user} fetchUser={fetchUser} />} />
+            <Route
+              path="settings/bind-account"
+              element={<BindAccountPage fetchUser={fetchUser} setUser={setUser} setAuthUser={setAuthUser} />}
+            />
+            <Route path="settings" element={<Settings user={user} fetchUser={fetchUser} setUser={setUser} />} />
             <Route path="news" element={<NewsPage />} />
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />
-            <Route path="partner" element={<Outlet />}>
+            <Route path="support" element={<SupportHubPage />}>
+              <Route path="tickets/:ticketId" element={<SupportTicketDetailPage />} />
+            </Route>
+            <Route path="support/:ticketSlug" element={<SupportTicketPage />} />
+            <Route path="partner" element={<Outlet key={currentAccountKey || "lk-partner-boot"} />}>
               <Route index element={<OwnerSitesListPage />} />
               <Route path="new" element={<CreateOwnerProjectPage />} />
               <Route path="project/:projectId" element={<SiteProjectLayout />}>

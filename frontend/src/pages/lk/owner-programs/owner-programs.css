@@ -2,13 +2,13 @@
 
 /* Projects list page (header + vertical cards, Timeweb-like layout) */
 
-/* Как `.owner-programs__shell`: на всю ширину дорожки 920px (компенсация padding `.LK-content`). */
+/* На ширину дорожки `.LK-content` без горизонтального «вылезания» в зазор с сайдбаром (--lk-content-padding-x сейчас 0). */
 .owner-programs__projects-page {
-  width: calc(100% + 2 * var(--lk-content-padding-x));
-  max-width: calc(100% + 2 * var(--lk-content-padding-x));
-  margin-left: calc(-1 * var(--lk-content-padding-x));
-  margin-right: calc(-1 * var(--lk-content-padding-x));
   box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .owner-programs__projects-header {
@@ -126,51 +126,7 @@
   transform: rotate(180deg);
 }
 
-.owner-programs__create-menu-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 160px;
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #242f3d;
-  box-shadow: 0 12px 32px rgba(5, 12, 38, 0.22);
-  z-index: 20;
-}
-
-[data-theme="light"] .owner-programs__create-menu-dropdown {
-  border-color: rgba(15, 23, 42, 0.08);
-  background: #ffffff;
-  box-shadow: 0 12px 32px rgba(5, 12, 38, 0.12);
-}
-
-.owner-programs__create-menu-item {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #ffffff;
-  text-align: left;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.owner-programs__create-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="light"] .owner-programs__create-menu-item {
-  color: #26325c;
-}
-
-[data-theme="light"] .owner-programs__create-menu-item:hover {
-  background: rgba(15, 23, 42, 0.05);
-}
+/* Выпадающее «Создать»: те же классы, что у шапки `.lk-header__menu` (см. lk.css), подключается в SiteProjectLayout. */
 
 .owner-programs__projects-skel {
   width: 100%;
@@ -625,8 +581,12 @@
 }
 
 .owner-programs__shell {
-  width: calc(100% + 48px);
-  margin: 0 -24px 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-left: 0;
+  margin-right: 0;
   border-radius: 12px;
   box-shadow: none;
   overflow: hidden;
@@ -951,6 +911,9 @@
   justify-content: flex-start;
   gap: 16px 24px;
   padding: 0 0 20px;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .owner-programs__shell-header-main {
@@ -2502,13 +2465,13 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  font-size: 28px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -2975,14 +2938,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
+  min-width: 16px;
+  min-height: 16px;
 }
 
 .owner-programs__services-list-flag-wrap .owner-programs__service-card-flag,
 .owner-programs__services-list-flag-wrap .owner-programs__service-card-flag_globe {
-  width: 28px;
-  height: 28px;
+  width: 16px;
+  height: 16px;
 }
 
 .owner-programs__services-list-flag-wrap .owner-programs__service-card-flag_svg {
@@ -2990,7 +2953,7 @@
 }
 
 .owner-programs__services-list-flag-wrap .owner-programs__service-card-flag:not(.owner-programs__service-card-flag_svg):not(.owner-programs__service-card-flag_globe) {
-  font-size: 22px;
+  font-size: 12px;
 }
 
 .owner-programs__services-list-menu {
@@ -4746,9 +4709,12 @@
 }
 
 .owner-programs__page.owner-programs__site-page.owner-programs__referral-builder-page {
-  width: calc(100% + 48px);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   min-height: calc(100vh - 176px);
-  margin: 0 -24px;
+  margin-left: 0;
+  margin-right: 0;
   padding: 20px 24px 28px;
   box-sizing: border-box;
   display: flex;

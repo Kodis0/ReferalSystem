@@ -37,6 +37,18 @@ function ServicesListIcon() {
   );
 }
 
+const OWNER_PROJECT_SERVICES_LAYOUT_KEY = "lumo_owner_project_services_layout";
+
+function readStoredServicesLayoutMode() {
+  try {
+    const raw = localStorage.getItem(OWNER_PROJECT_SERVICES_LAYOUT_KEY);
+    if (raw === "list" || raw === "cards") return raw;
+  } catch {
+    /* private mode / quota */
+  }
+  return "cards";
+}
+
 function serviceSearchValue(site) {
   const title = serviceTitle(site);
   const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
@@ -71,6 +83,13 @@ function domainHostFromValue(value) {
     /* ignore */
   }
   return raw.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
+}
+
+/** Вторая строка списка сайтов: только хост (без схемы/пути), плейсхолдер без изменений. */
+function servicesListDomainOnly(domain) {
+  if (!domain || domain === "Домен не задан") return domain || "Домен не задан";
+  const host = domainHostFromValue(domain);
+  return host || domain;
 }
 
 function countryCodeFromDomain(value) {
@@ -324,7 +343,7 @@ export default function ProjectOverviewPage() {
   const sitePublicId = (searchParams.get("site_public_id") || "").trim();
   const hasSiteId = Boolean(sitePublicId);
   const [searchValue, setSearchValue] = useState("");
-  const [layoutMode, setLayoutMode] = useState("cards");
+  const [layoutMode, setLayoutMode] = useState(() => readStoredServicesLayoutMode());
   const [activeMenuSiteId, setActiveMenuSiteId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingSiteId, setDeletingSiteId] = useState("");
@@ -377,6 +396,14 @@ export default function ProjectOverviewPage() {
     () => reachabilityProbeTargets.map((site) => `${site.public_id}:${site.primary_origin_label}:${site.primary_origin}`).join("|"),
     [reachabilityProbeTargets],
   );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OWNER_PROJECT_SERVICES_LAYOUT_KEY, layoutMode);
+    } catch {
+      /* ignore */
+    }
+  }, [layoutMode]);
 
   useEffect(() => {
     siteReachabilityByIdRef.current = siteReachabilityById;
@@ -862,7 +889,7 @@ export default function ProjectOverviewPage() {
                         <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
                           <ServiceCountryFlag
                             domain={siteOriginForCountryFlag(site, domain)}
-                            fallback={serviceCountryFlagGlobeFallback(22)}
+                            fallback={serviceCountryFlagGlobeFallback(16)}
                             title={serverPingFromServerTitle(site, siteReachabilityById[site.public_id])}
                           />
                           <div className="owner-programs__service-card-menu" onClick={(event) => event.stopPropagation()}>
@@ -901,7 +928,6 @@ export default function ProjectOverviewPage() {
               <div className="owner-programs__members-list owner-programs__services-list" data-testid="project-child-sites-list">
                 {filteredSites.map((site) => {
                   const isCurrent = site.public_id === sitePublicId;
-                  const title = serviceTitle(site);
                   const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
                   const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
                   const siteListAvatarUrl =
@@ -931,15 +957,14 @@ export default function ProjectOverviewPage() {
                               className="owner-programs__service-card-avatar-img"
                             />
                           ) : (
-                            <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
+                            <span>{(servicesListDomainOnly(domain) || "S").slice(0, 1).toUpperCase() || "S"}</span>
                           )}
                         </div>
                       </div>
                       <div className="owner-programs__services-list-middle">
                         <div className={status.listDotClassName} aria-hidden="true" />
                         <div className="owner-programs__services-list-middle-main">
-                          <p className="owner-programs__services-list-title">{title}</p>
-                          <p className="owner-programs__services-list-domain">{domain}</p>
+                          <p className="owner-programs__services-list-title">{servicesListDomainOnly(domain)}</p>
                         </div>
                       </div>
                       <div className="owner-programs__services-list-bottom">
@@ -947,7 +972,7 @@ export default function ProjectOverviewPage() {
                           <div className="owner-programs__services-list-flag-wrap">
                             <ServiceCountryFlag
                               domain={siteOriginForCountryFlag(site, domain)}
-                              fallback={serviceCountryFlagGlobeFallback(20)}
+                              fallback={serviceCountryFlagGlobeFallback(16)}
                               title={serverPingFromServerTitle(site, siteReachabilityById[site.public_id])}
                             />
                           </div>

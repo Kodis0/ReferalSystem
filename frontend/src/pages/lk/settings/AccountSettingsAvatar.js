@@ -40,7 +40,7 @@ function authHeaders() {
 /**
  * Аватар аккаунта: выбор файла и удаление — те же классы, что у shell в `SiteProjectLayout`.
  */
-export default function AccountSettingsAvatar({ user, fetchUser, disabled }) {
+export default function AccountSettingsAvatar({ user, fetchUser, setUser, disabled }) {
   /** Локальный превью URL на время запроса; после успеха сбрасываем — источник правды `user` из родителя. */
   const [pendingAvatar, setPendingAvatar] = useState(null);
   const [saveState, setSaveState] = useState("idle");
@@ -70,9 +70,12 @@ export default function AccountSettingsAvatar({ user, fetchUser, disabled }) {
                 : "";
         throw new Error(detailMsg || `Не удалось сохранить фото (${res.status})`);
       }
+      if (payload && typeof payload === "object" && "id" in payload && typeof setUser === "function") {
+        setUser(payload);
+      }
       await fetchUser();
     },
-    [fetchUser],
+    [fetchUser, setUser],
   );
 
   const handleAvatarChange = useCallback(

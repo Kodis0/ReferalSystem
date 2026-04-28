@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
 
+from .models import SupportTicket
+
 
 User = get_user_model()
 
@@ -295,3 +297,174 @@ class GitHubOAuthFlowTests(TestCase):
         r = c.get("/users/token/github/callback/?error=access_denied")
         self.assertEqual(r.status_code, 302)
         self.assertIn("github_error=github_oauth_denied", r["Location"])
+
+
+@override_settings(
+    VK_OAUTH_APP_ID="vk_app_id",
+    VK_OAUTH_CLIENT_SECRET="vk_secret",
+    FRONTEND_URL="http://test-frontend.example:3000",
+)
+class VkOAuthFlowTests(TestCase):
+    def test_vk_start_redirects_to_authorize(self):
+        c = Client()
+        r = c.get("/users/token/vk/start/")
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("https://oauth.vk.com/authorize?"), loc)
+        self.assertIn("client_id=vk_app_id", loc)
+        self.assertIn("scope=email", loc)
+        self.assertIn("state=", loc)
+        self.assertTrue(c.session.get("vk_oauth_state"))
+
+    @override_settings(VK_OAUTH_APP_ID="")
+    def test_vk_start_missing_config_redirects_frontend_error(self):
+        c = Client()
+        r = c.get("/users/token/vk/start/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("vk_error=vk_oauth_not_configured", r["Location"])
+
+    def test_vk_callback_rejects_bad_state(self):
+        c = Client()
+        c.get("/users/token/vk/start/")
+        r = c.get("/users/token/vk/callback/?code=fake&state=not-the-session-state")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("vk_error=vk_state_invalid", r["Location"])
+
+    @patch(
+        "users.vk_oauth.exchange_vk_oauth_code",
+        return_value={
+            "access_token": "vk_token",
+            "user_id": 1,
+            "email": "vk-match@example.com",
+        },
+    )
+    def test_vk_callback_success_redirects_login_hash_with_jwt(self, _mock_ex):
+        User.objects.create_user(
+            email="vk-match@example.com",
+            username="vkmatch",
+            password="secret123",
+        )
+        c = Client()
+        c.get("/users/token/vk/start/")
+        state = c.session.get("vk_oauth_state")
+        self.assertTrue(state)
+        r = c.get(f"/users/token/vk/callback/?code=testcode&state={state}")
+        self.assertEqual(r.status_code, 302)
+        loc = r["Location"]
+        self.assertTrue(loc.startswith("http://test-frontend.example:3000/login#"), loc)
+        self.assertIn("oauth=vk", loc)
+        self.assertIn("access_token=", loc)
+        self.assertIn("refresh_token=", loc)
+
+    @patch(
+        "users.vk_oauth.exchange_vk_oauth_code",
+        return_value={
+            "access_token": "vk_token",
+            "user_id": 1,
+            "email": "nobody@example.com",
+        },
+    )
+    def test_vk_callback_unknown_email_redirects_error(self, _mock_ex):
+        c = Client()
+        c.get("/users/token/vk/start/")
+        state = c.session["vk_oauth_state"]
+        r = c.get(f"/users/token/vk/callback/?code=testcode&state={state}")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("vk_error=vk_email_not_registered", r["Location"])
+
+    def test_vk_callback_access_denied_redirects(self):
+        c = Client()
+        r = c.get("/users/token/vk/callback/?error=access_denied")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("vk_error=vk_oauth_denied", r["Location"])
+
+
+class SupportTicketApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="support-api@example.com",
+            username="supportapi",
+            password="secret123",
+        )
+        self.other = User.objects.create_user(
+            email="support-other@example.com",
+            username="supportother",
+            password="secret123",
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def test_support_tickets_list_empty(self):
+        r = self.api.get("/users/me/support-tickets/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tickets"], [])
+
+    def test_support_ticket_create_and_list(self):
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {
+                "type_slug": "help-question",
+                "target_key": "x",
+                "target_label": "Кабинет владельца",
+                "body": "Первое сообщение\nВторая строка",
+                "attachment_names": "a.txt",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        self.assertEqual(r.data["body"], "Первое сообщение\nВторая строка")
+        self.assertEqual(r.data["type_title"], "По общему вопросу")
+        self.assertEqual(r.data["is_closed"], False)
+
+        lst = self.api.get("/users/me/support-tickets/")
+        self.assertEqual(lst.status_code, 200)
+        self.assertEqual(len(lst.data["tickets"]), 1)
+        self.assertEqual(lst.data["tickets"][0]["id"], tid)
+        self.assertEqual(lst.data["tickets"][0]["preview"], "Первое сообщение")
+        self.assertEqual(lst.data["tickets"][0]["is_closed"], False)
+        self.assertTrue(SupportTicket.objects.filter(id=tid, user=self.user).exists())
+
+    def test_support_ticket_patch_close(self):
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {"type_slug": "help-question", "target_label": "X", "body": "Текст"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        p = self.api.patch(f"/users/me/support-tickets/{tid}/", {"is_closed": True}, format="json")
+        self.assertEqual(p.status_code, 200)
+        self.assertEqual(p.data["is_closed"], True)
+        t = SupportTicket.objects.get(id=tid)
+        self.assertTrue(t.is_closed)
+
+    def test_support_ticket_detail(self):
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {
+                "type_slug": "help-problem",
+                "target_label": "Тест",
+                "body": "Тело",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        tid = r.data["id"]
+        d = self.api.get(f"/users/me/support-tickets/{tid}/")
+        self.assertEqual(d.status_code, 200)
+        self.assertEqual(d.data["body"], "Тело")
+
+        other_api = APIClient()
+        other_api.force_authenticate(self.other)
+        denied = other_api.get(f"/users/me/support-tickets/{tid}/")
+        self.assertEqual(denied.status_code, 404)
+
+    def test_support_ticket_invalid_slug(self):
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {"type_slug": "unknown", "body": "x"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "invalid_type_slug")

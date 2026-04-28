@@ -3,7 +3,9 @@
   /* Совпадают со 2–4 дорожками сетки шапки / макета (fallback без subgrid) */
   --lk-shell-sidebar: 256px;
   --lk-shell-gutter: 40px;
-  --lk-content-padding-x: 24px;
+  /* 0: контент и шапка на одной ширине дорожки 920px без бокового «зазора» (раньше 24px сдвигал относительно полосы шапки).
+     При смене значения верните горизонтальную компенсацию в owner-programs.css / CreateOwnerProjectPage.css (full-bleed). */
+  --lk-content-padding-x: 0px;
 
   box-sizing: border-box;
   width: 100%;
@@ -117,13 +119,6 @@ html:has(.LK) {
   grid-template-columns: var(--lk-shell-grid);
   align-items: center;
   box-sizing: border-box;
-}
-
-/* Та же дорожка сетки, что `.LK-content` / full-bleed `.owner-programs__shell` (920px): без колонки 3+5 шапка не «уезжает» влево/вправо. */
-.LK.LK--header-search-align-shell .lk-header__content-strip {
-  grid-column: 4 / 5;
-  padding-left: 0;
-  padding-right: 0;
 }
 
 .lk-layout {
@@ -316,16 +311,17 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   overflow: visible;
 }
 
+/* Та же дорожка 920px, что `.LK-content` (колонка 4): поиск и аккаунт не смещаются при смене раздела (дашборд → настройки и т.д.). */
 .lk-header__content-strip {
-  grid-column: 3 / 6;
+  grid-column: 4 / 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
   min-width: 0;
   box-sizing: border-box;
-  padding-left: var(--lk-content-padding-x);
-  /* .owner-programs__shell и т.п. выходят на полную ширину дорожки 920px (margin -24px); без правого padding, чтобы аккаунт совпал с правым краем shell */
+  padding-left: 0;
+  /* .owner-programs__shell и т.п. на полную ширину дорожки; без правого padding — край аккаунта с краем контента */
   padding-right: 0;
 }
 
@@ -802,6 +798,57 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   min-width: 0;
 }
 
+.lk-header__menu-item_account-switch {
+  align-items: flex-start;
+  min-height: 48px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.lk-header__menu-item_account-switch_current,
+.lk-header__menu-item_account-switch:disabled {
+  cursor: default;
+  color: #7f91a4;
+}
+
+.lk-header__menu-item_account-switch_current:hover,
+.lk-header__menu-item_account-switch:disabled:hover {
+  background: transparent;
+  color: #7f91a4;
+}
+
+.lk-header__menu-item_account-switch:not(:disabled):hover {
+  color: #fff;
+}
+
+.lk-header__menu-item-text_stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 20px;
+}
+
+.lk-header__menu-item-text-primary {
+  font-weight: 500;
+  color: inherit;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lk-header__menu-item-text-meta {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: #7f91a4;
+}
+
+.lk-header__menu-item_account-switch:not(:disabled) .lk-header__menu-item-text-meta {
+  color: #7f91a4;
+}
+
 .lk-header__menu-item:focus-visible {
   outline: 2px solid rgba(113, 119, 248, 0.65);
   outline-offset: -2px;
@@ -902,6 +949,24 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   background: #e8ebef;
 }
 
+[data-theme="light"] .lk-header__menu-item_account-switch_current,
+[data-theme="light"] .lk-header__menu-item_account-switch:disabled {
+  color: #83899f;
+}
+
+[data-theme="light"] .lk-header__menu-item_account-switch_current:hover,
+[data-theme="light"] .lk-header__menu-item_account-switch:disabled:hover {
+  color: #83899f;
+}
+
+[data-theme="light"] .lk-header__menu-item_account-switch:not(:disabled):hover {
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-header__menu-item-text-meta {
+  color: #83899f;
+}
+
 @media (max-width: 1320px) {
   .LK-header > .lk-header__inner {
     grid-template-columns: auto minmax(0, 1fr);
@@ -918,10 +983,6 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
     grid-column: 2;
     padding-left: 0;
     padding-right: 0;
-  }
-
-  .LK.LK--header-search-align-shell .lk-header__content-strip {
-    grid-column: 2;
   }
 }
 

@@ -544,3 +544,118 @@ class GitHubOAuthCallbackView(View):
             }
         )
         return HttpResponseRedirect(f"{fe}/login#{frag}")
+
+
+def _vk_oauth_redirect_uri(request):
+    fixed = (getattr(django_settings, "VK_OAUTH_REDIRECT_URI", None) or "").strip()
+    if fixed:
+        return fixed
+    return request.build_absolute_uri(reverse("vk_oauth_callback"))
+
+
+class VkOAuthStartView(View):
+    """Начало OAuth VK: редирект на oauth.vk.com, state в сессии бэкенда."""
+
+    def get(self, request):
+        fe = _frontend_login_base()
+        app_id = (getattr(django_settings, "VK_OAUTH_APP_ID", None) or "").strip()
+        if not app_id:
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_not_configured")
+
+        redirect_uri = _vk_oauth_redirect_uri(request)
+        state = secrets.token_urlsafe(32)
+        request.session["vk_oauth_state"] = state
+        request.session.modified = True
+
+        q = urllib.parse.urlencode(
+            {
+                "client_id": app_id,
+                "display": "page",
+                "redirect_uri": redirect_uri,
+                "scope": "email",
+                "response_type": "code",
+                "state": state,
+                "v": "5.199",
+            }
+        )
+        return HttpResponseRedirect(f"https://oauth.vk.com/authorize?{q}")
+
+
+class VkOAuthCallbackView(View):
+    """Callback VK: code → access_token (и email при scope email) → JWT → редирект на /login#..."""
+
+    def get(self, request):
+        fe = _frontend_login_base()
+
+        if request.GET.get("error") == "access_denied":
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_denied")
+
+        code = request.GET.get("code")
+        state = request.GET.get("state")
+        if not code or not state or not isinstance(code, str) or not isinstance(state, str):
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_invalid_callback")
+
+        expected = request.session.get("vk_oauth_state")
+        if not expected or state != expected:
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_state_invalid")
+
+        try:
+            del request.session["vk_oauth_state"]
+            request.session.modified = True
+        except KeyError:
+            pass
+
+        app_id = (getattr(django_settings, "VK_OAUTH_APP_ID", None) or "").strip()
+        client_secret = (getattr(django_settings, "VK_OAUTH_CLIENT_SECRET", None) or "").strip()
+        if not app_id or not client_secret:
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_oauth_not_configured")
+
+        redirect_uri = _vk_oauth_redirect_uri(request)
+
+        from .vk_oauth import exchange_vk_oauth_code
+
+        try:
+            token_payload = exchange_vk_oauth_code(
+                code=code.strip(),
+                app_id=app_id,
+                client_secret=client_secret,
+                redirect_uri=redirect_uri,
+            )
+        except (requests.RequestException, ValueError):
+            logger.exception("VK OAuth token exchange failed")
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
+
+        vk_access = token_payload.get("access_token")
+        if not vk_access or not isinstance(vk_access, str):
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
+
+        email_raw = token_payload.get("email")
+        if not email_raw or not isinstance(email_raw, str):
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_missing")
+
+        email = email_raw.strip()
+        try:
+            user = CustomUser.objects.get(email__iexact=email)
+        except CustomUser.DoesNotExist:
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_not_registered")
+
+        if not user.is_active:
+            return HttpResponseRedirect(f"{fe}/login?vk_error=account_disabled")
+
+        link_session_attributions_to_user(
+            session_key=request.session.session_key,
+            user=user,
+        )
+
+        refresh = RefreshToken.for_user(user)
+        access_jwt = str(refresh.access_token)
+        refresh_jwt = str(refresh)
+
+        frag = urllib.parse.urlencode(
+            {
+                "oauth": "vk",
+                "access_token": access_jwt,
+                "refresh_token": refresh_jwt,
+            }
+        )
+        return HttpResponseRedirect(f"{fe}/login#{frag}")
