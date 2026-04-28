@@ -41,11 +41,10 @@ from .serializers import (
 )
 from .vk_oauth import (
     VK_ID_AUTHORIZE_URL,
-    email_from_vk_id_token_response,
     exchange_vk_oauth_code,
-    fetch_vk_id_user_email,
     generate_pkce_pair,
     parse_vk_id_callback_query,
+    resolve_vk_login_email,
 )
 
 logger = logging.getLogger(__name__)
@@ -457,11 +456,12 @@ class VkOAuthStartView(View):
         request.session["vk_code_verifier"] = code_verifier
         request.session.modified = True
 
+        vk_scope = (getattr(django_settings, "VK_OAUTH_SCOPE", None) or "email").strip()
         q = urllib.parse.urlencode(
             {
                 "response_type": "code",
                 "client_id": app_id,
-                "scope": "email",
+                "scope": vk_scope,
                 "redirect_uri": redirect_uri,
                 "state": state,
                 "code_challenge": code_challenge,
@@ -530,18 +530,21 @@ class VkOAuthCallbackView(View):
         if not vk_access or not isinstance(vk_access, str):
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_token_exchange_failed")
 
-        email_raw = email_from_vk_id_token_response(token_payload)
-        if not email_raw:
-            try:
-                email_raw = fetch_vk_id_user_email(
-                    access_token=vk_access.strip(),
-                    client_id=app_id,
-                )
-            except requests.RequestException:
-                logger.exception("VK ID user_info request failed")
-                return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_fetch_failed")
+        try:
+            email_raw = resolve_vk_login_email(
+                token_payload=token_payload,
+                access_token=vk_access.strip(),
+                client_id=app_id,
+            )
+        except requests.RequestException:
+            logger.exception("VK ID resolve email failed")
+            return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_fetch_failed")
 
         if not email_raw or not isinstance(email_raw, str):
+            logger.warning(
+                "VK ID: no unmasked email after resolve; scope=%r",
+                token_payload.get("scope"),
+            )
             return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_missing")
 
         email = email_raw.strip()

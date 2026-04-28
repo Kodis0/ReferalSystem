@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 VK_ID_AUTHORIZE_URL = "https://id.vk.com/authorize"
 VK_ID_TOKEN_URL = "https://id.vk.com/oauth2/auth"
-VK_ID_USER_INFO_URL = "https://id.vk.com/oauth2/user_info"
+# Часть установок отвечает только на одном хосте — пробуем оба (док: id.vk.ru / id.vk.com).
+VK_ID_USER_INFO_URLS = (
+    "https://id.vk.com/oauth2/user_info",
+    "https://id.vk.ru/oauth2/user_info",
+)
 
 
 def generate_pkce_pair() -> tuple[str, str]:
@@ -85,6 +89,15 @@ def _email_from_mapping(data: dict[str, Any]) -> str | None:
     return None
 
 
+def _is_unmasked_email(value: str) -> bool:
+    """Маскированная почта VK (u***@…) не подходит для входа по совпадению с аккаунтом."""
+    v = value.strip()
+    if "@" not in v:
+        return False
+    local = v.split("@", 1)[0]
+    return "*" not in local and "..." not in v
+
+
 def _find_email_deep(obj: Any) -> str | None:
     """Обход вложенных dict/list на случай смены схемы ответа VK ID."""
     if isinstance(obj, dict):
@@ -102,21 +115,68 @@ def _find_email_deep(obj: Any) -> str | None:
     return None
 
 
+def _decode_jwt_payload(jwt: str) -> dict[str, Any] | None:
+    try:
+        parts = jwt.split(".")
+        if len(parts) < 2:
+            return None
+        b64 = parts[1]
+        pad = (-len(b64)) % 4
+        raw = base64.urlsafe_b64decode(b64 + ("=" * pad))
+        data = json.loads(raw.decode("utf-8"))
+        return data if isinstance(data, dict) else None
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def email_from_id_token_jwt(id_token: str) -> str | None:
+    """Claims JWT id_token (без проверки подписи) — только если email выглядит полным."""
+    payload = _decode_jwt_payload(id_token)
+    if not payload:
+        return None
+    e = payload.get("email")
+    if isinstance(e, str) and _is_unmasked_email(e):
+        return e.strip()
+    return None
+
+
 def fetch_vk_id_user_email(*, access_token: str, client_id: str) -> str | None:
     """
     Документация VK ID: POST user_info, form-urlencoded, client_id + access_token.
-    Только GET + Bearer часто не отдают email, даже при scope=email.
     """
-    resp = requests.post(
-        VK_ID_USER_INFO_URL,
-        data={"client_id": str(client_id), "access_token": access_token},
-        timeout=25,
-    )
-    resp.raise_for_status()
-    payload = resp.json()
-    if not isinstance(payload, dict):
-        return None
-    return _email_from_mapping(payload) or _find_email_deep(payload)
+    data = {"client_id": str(client_id), "access_token": access_token}
+    for url in VK_ID_USER_INFO_URLS:
+        try:
+            resp = requests.post(url, data=data, timeout=25)
+            resp.raise_for_status()
+            payload = resp.json()
+            if not isinstance(payload, dict):
+                continue
+            em = _email_from_mapping(payload) or _find_email_deep(payload)
+            if em and _is_unmasked_email(em):
+                return em.strip()
+        except requests.RequestException as ex:
+            logger.info("VK ID user_info %s failed: %s", url, ex)
+            continue
+    return None
+
+
+def resolve_vk_login_email(
+    *,
+    token_payload: dict[str, Any],
+    access_token: str,
+    client_id: str,
+) -> str | None:
+    """Полный email для логина: тело /oauth2/auth, id_token, затем user_info (два хоста)."""
+    em = email_from_vk_id_token_response(token_payload)
+    if em and _is_unmasked_email(em):
+        return em.strip()
+    it = token_payload.get("id_token")
+    if isinstance(it, str):
+        em = email_from_id_token_jwt(it)
+        if em:
+            return em
+    return fetch_vk_id_user_email(access_token=access_token, client_id=client_id)
 
 
 def exchange_vk_oauth_code(
@@ -162,5 +222,8 @@ def exchange_vk_oauth_code(
 
 
 def email_from_vk_id_token_response(token_payload: dict[str, Any]) -> str | None:
-    """Email из ответа /oauth2/auth, если VK отдал его сразу."""
-    return _email_from_mapping(token_payload)
+    """Email из ответа /oauth2/auth, если VK отдал его сразу (не маску)."""
+    em = _email_from_mapping(token_payload)
+    if em and _is_unmasked_email(em):
+        return em.strip()
+    return None

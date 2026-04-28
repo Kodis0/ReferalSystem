@@ -294,3 +294,5 @@ GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 VK_OAUTH_APP_ID = os.getenv("VK_OAUTH_APP_ID", "").strip()
 VK_OAUTH_CLIENT_SECRET = os.getenv("VK_OAUTH_CLIENT_SECRET", "").strip()
 VK_OAUTH_REDIRECT_URI = os.getenv("VK_OAUTH_REDIRECT_URI", "").strip()
+# Права в authorize (пробел в строке). По доке VK ID для почты: email; при необходимости: "email phone"
+VK_OAUTH_SCOPE = os.getenv("VK_OAUTH_SCOPE", "email").strip() or "email"
