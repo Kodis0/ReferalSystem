@@ -533,7 +533,10 @@ class VkOAuthCallbackView(View):
         email_raw = email_from_vk_id_token_response(token_payload)
         if not email_raw:
             try:
-                email_raw = fetch_vk_id_user_email(access_token=vk_access.strip())
+                email_raw = fetch_vk_id_user_email(
+                    access_token=vk_access.strip(),
+                    client_id=app_id,
+                )
             except requests.RequestException:
                 logger.exception("VK ID user_info request failed")
                 return HttpResponseRedirect(f"{fe}/login?vk_error=vk_email_fetch_failed")

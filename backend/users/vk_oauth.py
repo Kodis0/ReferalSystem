@@ -85,22 +85,38 @@ def _email_from_mapping(data: dict[str, Any]) -> str | None:
     return None
 
 
-def fetch_vk_id_user_email(*, access_token: str) -> str | None:
-    resp = requests.get(
+def _find_email_deep(obj: Any) -> str | None:
+    """Обход вложенных dict/list на случай смены схемы ответа VK ID."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "email" and isinstance(v, str) and "@" in v:
+                return v.strip()
+            found = _find_email_deep(v)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _find_email_deep(item)
+            if found:
+                return found
+    return None
+
+
+def fetch_vk_id_user_email(*, access_token: str, client_id: str) -> str | None:
+    """
+    Документация VK ID: POST user_info, form-urlencoded, client_id + access_token.
+    Только GET + Bearer часто не отдают email, даже при scope=email.
+    """
+    resp = requests.post(
         VK_ID_USER_INFO_URL,
-        headers={"Authorization": f"Bearer {access_token}"},
+        data={"client_id": str(client_id), "access_token": access_token},
         timeout=25,
     )
     resp.raise_for_status()
     payload = resp.json()
-    if isinstance(payload, dict):
-        em = _email_from_mapping(payload)
-        if em:
-            return em
-        inner = payload.get("user")
-        if isinstance(inner, dict):
-            return _email_from_mapping(inner)
-    return None
+    if not isinstance(payload, dict):
+        return None
+    return _email_from_mapping(payload) or _find_email_deep(payload)
 
 
 def exchange_vk_oauth_code(
