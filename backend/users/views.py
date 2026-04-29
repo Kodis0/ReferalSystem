@@ -489,13 +489,15 @@ class ProgramCatalogDetailView(APIView):
 
     def get(self, request, site_public_id):
         site = get_site_by_public_id(site_public_id)
-        if site is None or not site_allows_cta_signup_membership(site):
+        if site is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         membership = (
             SiteMembership.objects.filter(site=site, user=request.user)
             .select_related("site", "partner")
             .first()
         )
+        if not site_allows_cta_signup_membership(site) and membership is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         payload = _member_program_payload(site, membership=membership)
         payload["joined"] = membership is not None
         if membership is not None:

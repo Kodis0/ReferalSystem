@@ -504,6 +504,46 @@ class MyProgramsApiTests(TestCase):
         r = self.api.get(f"/users/programs/{site.public_id}/")
         self.assertEqual(r.status_code, 404)
 
+    def test_programs_catalog_hides_verified_site_when_widget_disabled(self):
+        site = self._site(
+            "catalog_widget_hidden",
+            allowed_origins=["https://widget-off.example"],
+            config_json={"site_display_name": "Widget Off Catalog"},
+        )
+        Site.objects.filter(pk=site.pk).update(widget_enabled=False)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/programs/")
+        self.assertEqual(r.status_code, 200)
+        ids = [x["site_public_id"] for x in r.data["programs"]]
+        self.assertNotIn(str(site.public_id), ids)
+
+    def test_program_catalog_detail_unjoined_returns_404_when_widget_disabled(self):
+        site = self._site(
+            "catalog_widget_off_stranger",
+            config_json={"site_display_name": "Widget Off Stranger"},
+        )
+        Site.objects.filter(pk=site.pk).update(widget_enabled=False)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_program_catalog_detail_joined_shows_inactive_when_widget_disabled(self):
+        site = self._site(
+            "catalog_widget_off_member",
+            config_json={"site_display_name": "Widget Off Member"},
+        )
+        Site.objects.filter(pk=site.pk).update(widget_enabled=False)
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 200)
+        prog = r.data["program"]
+        self.assertFalse(prog["program_active"])
+        self.assertTrue(prog["joined"])
+
     def test_program_catalog_detail_then_join_creates_membership(self):
         site = self._site("catalog_detail_join_flow", config_json={"site_display_name": "Join Flow"})
 

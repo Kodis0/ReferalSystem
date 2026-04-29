@@ -88,7 +88,9 @@ frontend_env_sig() {
 
 read_state_trim() {
   local p="$1"
-  tr -d '[:space:]' < "${p}" 2>/dev/null || true
+  if [[ -f "${p}" ]]; then
+    tr -d '[:space:]' < "${p}"
+  fi
 }
 
 git_commit_exists() {

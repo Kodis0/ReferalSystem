@@ -14,6 +14,7 @@ import {
   sitePrimaryDomainLabel,
 } from "./siteDisplay";
 import {
+  isSiteCapturePaused,
   preserveResolvedReachabilityPhase,
   reachabilityDotPhase,
   reachabilityLabel,
@@ -212,6 +213,14 @@ function serviceStatusTone(status) {
 
 function serviceStatusPresentation(site, reachabilityPhase, isCurrent) {
   const currentSuffix = isCurrent ? " · текущий" : "";
+  if (isSiteCapturePaused(site)) {
+    const dotClassName = `owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase("paused")}`;
+    return {
+      label: `${reachabilityLabel("paused")}${currentSuffix}`,
+      cardDotClassName: dotClassName,
+      listDotClassName: dotClassName,
+    };
+  }
   if (reachabilityPhase === "checking" || reachabilityPhase === "online" || reachabilityPhase === "offline") {
     const dotClassName = `owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(reachabilityPhase)}`;
     return {
@@ -864,6 +873,7 @@ export default function ProjectOverviewPage() {
                       className={`owner-programs__service-card${menuOpen ? " owner-programs__service-card_menu-open" : ""}`}
                       data-testid={`project-child-site-${site.public_id}`}
                       role="link"
+                      aria-current={hasSiteId && isCurrent ? "page" : undefined}
                       tabIndex={0}
                       onClick={() => openSiteCard(site.public_id)}
                       onKeyDown={(event) => {
@@ -938,6 +948,7 @@ export default function ProjectOverviewPage() {
                       className={`owner-programs__services-list-row${menuOpen ? " owner-programs__services-list-row_menu-open" : ""}`}
                       data-testid={`project-child-site-${site.public_id}`}
                       role="link"
+                      aria-current={hasSiteId && isCurrent ? "page" : undefined}
                       tabIndex={0}
                       onClick={() => openSiteCard(site.public_id)}
                       onKeyDown={(event) => {

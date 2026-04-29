@@ -723,6 +723,25 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
 .lk-header__account-btn > .lk-header__chevron {
   color: var(--lk-sb-text);
   opacity: 1;
+  transition: color 0.2s ease;
+}
+
+.lk-header__support-btn:hover .lk-header__support-icon,
+.lk-header__support-btn:focus-visible .lk-header__support-icon,
+.lk-header__support-btn:hover > .lk-header__chevron,
+.lk-header__support-btn:focus-visible > .lk-header__chevron,
+.lk-header__account-btn:hover > .lk-header__chevron,
+.lk-header__account-btn:focus-visible > .lk-header__chevron {
+  color: #ffffff;
+}
+
+[data-theme="light"] .lk-header__support-btn:hover .lk-header__support-icon,
+[data-theme="light"] .lk-header__support-btn:focus-visible .lk-header__support-icon,
+[data-theme="light"] .lk-header__support-btn:hover > .lk-header__chevron,
+[data-theme="light"] .lk-header__support-btn:focus-visible > .lk-header__chevron,
+[data-theme="light"] .lk-header__account-btn:hover > .lk-header__chevron,
+[data-theme="light"] .lk-header__account-btn:focus-visible > .lk-header__chevron {
+  color: #26325c;
 }
 
 .lk-header__support-icon,
@@ -741,13 +760,15 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   display: block;
 }
 
-@keyframes lk-header-support-icon-idle {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
+@keyframes lk-header-support-icon-hover-play {
+  0% {
+    transform: translateY(0) scale(1) rotate(0deg);
   }
-  50% {
-    transform: translateY(-2px) rotate(1.5deg);
+  42% {
+    transform: translateY(-3px) scale(1.08) rotate(-5deg);
+  }
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
   }
 }
 
@@ -760,25 +781,18 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
 
 .lk-header__support-icon-svg {
   transform-origin: 50% 45%;
-  animation: lk-header-support-icon-idle 2.8s ease-in-out infinite;
-  transition: transform 0.35s cubic-bezier(0.34, 1.45, 0.64, 1);
+  transition: color 0.2s ease;
 }
 
 .lk-header__support-btn:hover .lk-header__support-icon-svg,
 .lk-header__support-btn:focus-visible .lk-header__support-icon-svg {
-  animation: none;
-  transform: scale(1.12) rotate(-5deg);
+  animation: lk-header-support-icon-hover-play 0.55s ease-in-out 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lk-header__support-icon-svg {
-    animation: none;
-    transition: none;
-  }
-
   .lk-header__support-btn:hover .lk-header__support-icon-svg,
   .lk-header__support-btn:focus-visible .lk-header__support-icon-svg {
-    transform: none;
+    animation: none;
   }
 }
 

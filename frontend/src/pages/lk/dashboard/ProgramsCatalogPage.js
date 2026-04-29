@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ListFilter, Search } from "lucide-react";
+import { ListFilter, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { LK_PROGRAM_LISTS_REFETCH_EVENT } from "../lkProgramListsSync";
@@ -7,93 +7,18 @@ import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "../lk.css";
 import "../owner-programs/owner-programs.css";
 import "./dashboard.css";
-
-const COMMISSION_FILTER_OPTIONS = [
-  { value: "", label: "Все" },
-  { value: "lt5", label: "до 5%" },
-  { value: "5-10", label: "5–10%" },
-  { value: "10-20", label: "10–20%" },
-  { value: "gte20", label: "20% и выше" },
-];
-
-const PARTICIPANTS_FILTER_OPTIONS = [
-  { value: "", label: "Все" },
-  { value: "lt10", label: "до 10" },
-  { value: "10-50", label: "10–50" },
-  { value: "50-200", label: "50–200" },
-  { value: "gte200", label: "200 и выше" },
-];
-
-function CatalogFilterListbox({
-  fieldKey,
-  labelText,
-  labelId,
-  triggerId,
-  listboxId,
-  value,
-  onChange,
-  options,
-  openField,
-  setOpenField,
-}) {
-  const isOpen = openField === fieldKey;
-  const currentLabel = options.find((o) => o.value === value)?.label ?? options[0].label;
-  return (
-    <div className="lk-dashboard__programs-filter" data-programs-catalog-filter-menu>
-      <span className="lk-dashboard__programs-filter-label" id={labelId}>
-        {labelText}
-      </span>
-      <div className="lk-dashboard__programs-filter-menu-wrap">
-        <button
-          type="button"
-          id={triggerId}
-          className="lk-dashboard__programs-filter-menu-trigger"
-          aria-labelledby={labelId}
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          aria-controls={listboxId}
-          data-testid={`programs-catalog-filter-${fieldKey}-trigger`}
-          onClick={() => setOpenField(isOpen ? null : fieldKey)}
-        >
-          <span className="lk-dashboard__programs-filter-menu-trigger-label">{currentLabel}</span>
-          <ChevronDown
-            size={18}
-            aria-hidden
-            className={
-              isOpen
-                ? "lk-dashboard__programs-filter-menu-chevron lk-dashboard__programs-filter-menu-chevron_open"
-                : "lk-dashboard__programs-filter-menu-chevron"
-            }
-          />
-        </button>
-        {isOpen ? (
-          <div
-            className="lk-header__menu lk-dashboard__programs-filter-lk-menu"
-            id={listboxId}
-            role="listbox"
-            aria-labelledby={labelId}
-          >
-            {options.map((opt) => (
-              <button
-                key={opt.value === "" ? "__all" : opt.value}
-                type="button"
-                role="option"
-                aria-selected={value === opt.value}
-                className="lk-header__menu-item"
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpenField(null);
-                }}
-              >
-                <span className="lk-header__menu-item-text">{opt.label}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
+import {
+  CatalogFilterListbox,
+  COMMISSION_FILTER_OPTIONS,
+  PARTICIPANTS_FILTER_OPTIONS,
+} from "./ProgramsCatalogFilters";
+import {
+  formatCatalogCommissionPercent,
+  getCatalogFilteredSortedPrograms,
+  programCatalogDisplayName,
+  programCatalogExternalSiteHref,
+  programCatalogSiteOriginLabel,
+} from "./programsCatalogModel";
 
 function ServiceActionsIcon() {
   return (
@@ -103,80 +28,10 @@ function ServiceActionsIcon() {
   );
 }
 
-function programSiteLabel(program) {
-  const originLabel = typeof program?.site_origin_label === "string" ? program.site_origin_label.trim() : "";
-  if (originLabel) return originLabel;
-  const displayLabel = typeof program?.site_display_label === "string" ? program.site_display_label.trim() : "";
-  if (displayLabel) return displayLabel;
-  return `Программа · ${program?.site_public_id || "—"}`;
-}
-
 function programAvatarLetter(label) {
   const value = typeof label === "string" ? label.trim() : "";
   return (value.slice(0, 1).toUpperCase() || "P");
 }
-
-function programSearchValue(program) {
-  return [
-    programSiteLabel(program),
-    program?.site_display_label,
-    program?.site_origin_label,
-    program?.site_public_id,
-    program?.site_status,
-  ]
-    .filter((value) => typeof value === "string" && value.trim())
-    .join(" ")
-    .toLowerCase();
-}
-
-function parseCommissionPercent(program) {
-  const raw = program?.commission_percent;
-  if (raw === null || raw === undefined) return null;
-  const n = typeof raw === "number" ? raw : parseFloat(String(raw).replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-}
-
-function parseParticipantsCount(program) {
-  const raw = program?.participants_count;
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (raw === null || raw === undefined) return null;
-  const n = parseInt(String(raw), 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-function matchesCommissionFilter(key, percent) {
-  if (!key) return true;
-  if (percent === null) return false;
-  if (key === "lt5") return percent < 5;
-  if (key === "5-10") return percent >= 5 && percent < 10;
-  if (key === "10-20") return percent >= 10 && percent < 20;
-  if (key === "gte20") return percent >= 20;
-  return true;
-}
-
-function matchesParticipantsFilter(key, count) {
-  if (!key) return true;
-  if (count === null) return false;
-  if (key === "lt10") return count < 10;
-  if (key === "10-50") return count >= 10 && count < 50;
-  if (key === "50-200") return count >= 50 && count < 200;
-  if (key === "gte200") return count >= 200;
-  return true;
-}
-
-function compareProgramsForSort(a, b, sortBy, sortDir) {
-  const av = sortBy === "commission" ? parseCommissionPercent(a) : parseParticipantsCount(a);
-  const bv = sortBy === "commission" ? parseCommissionPercent(b) : parseParticipantsCount(b);
-  if (av === null && bv === null) return 0;
-  if (av === null) return 1;
-  if (bv === null) return -1;
-  const cmp = av - bv;
-  return sortDir === "desc" ? -cmp : cmp;
-}
-
-/** Пока UI сортировки отключён — порядок списка фиксирован */
-const CATALOG_LIST_SORT_BY = "commission";
-const CATALOG_LIST_SORT_DIR = "desc";
 
 export default function ProgramsCatalogPage() {
   const navigate = useNavigate();
@@ -329,17 +184,11 @@ export default function ProgramsCatalogPage() {
   }, [refetchPrograms]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const filteredPrograms = Array.isArray(programs)
-    ? programs.filter((program) => {
-        if (normalizedSearchQuery && !programSearchValue(program).includes(normalizedSearchQuery)) return false;
-        if (!matchesCommissionFilter(commissionFilter, parseCommissionPercent(program))) return false;
-        if (!matchesParticipantsFilter(participantsFilter, parseParticipantsCount(program))) return false;
-        return true;
-      })
-    : [];
-
-  const sortedFilteredPrograms = [...filteredPrograms].sort((a, b) =>
-    compareProgramsForSort(a, b, CATALOG_LIST_SORT_BY, CATALOG_LIST_SORT_DIR),
+  const { filteredPrograms, sortedFilteredPrograms } = getCatalogFilteredSortedPrograms(
+    programs,
+    normalizedSearchQuery,
+    commissionFilter,
+    participantsFilter,
   );
 
   const openProgramCard = (sitePublicId) => {
@@ -508,7 +357,10 @@ export default function ProgramsCatalogPage() {
         {programs !== null && !error && filteredPrograms.length > 0 ? (
           <ul className="lk-dashboard__programs-list">
             {sortedFilteredPrograms.map((p) => {
-              const label = programSiteLabel(p);
+              const rowTitle = programCatalogDisplayName(p);
+              const commissionLabel = formatCatalogCommissionPercent(p);
+              const catalogOriginLabel = programCatalogSiteOriginLabel(p);
+              const catalogSiteHref = programCatalogExternalSiteHref(p);
               const menuOpen = activeMenuSiteId === p.site_public_id;
               const joined = Boolean(p.joined);
               const busyJoin = joiningSiteId === p.site_public_id;
@@ -535,7 +387,7 @@ export default function ProgramsCatalogPage() {
                           key={`cat-${p.site_public_id}-${String(p.avatar_data_url || "").slice(0, 48)}-${String(p.avatar_updated_at || "")}`}
                           manualUrl={typeof p.avatar_data_url === "string" ? p.avatar_data_url.trim() : ""}
                           siteLike={p}
-                          letter={programAvatarLetter(label)}
+                          letter={programAvatarLetter(rowTitle)}
                           imgClassName="lk-dashboard__programs-avatar-img"
                           useExternalFavicon={false}
                         />
@@ -543,7 +395,23 @@ export default function ProgramsCatalogPage() {
                     </div>
                     <div className="lk-dashboard__programs-catalog-row-middle">
                       <span className="lk-dashboard__programs-status-dot" aria-hidden="true" />
-                      <span className="lk-dashboard__programs-label">{label}</span>
+                      <div className="lk-dashboard__programs-catalog-row-text">
+                        <span className="lk-dashboard__programs-catalog-title">{rowTitle}</span>
+                        {catalogSiteHref ? (
+                          <a
+                            className="lk-dashboard__programs-catalog-domain"
+                            href={catalogSiteHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Открыть сайт ${catalogOriginLabel}`}
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            {catalogOriginLabel}
+                          </a>
+                        ) : null}
+                        <span className="lk-dashboard__programs-catalog-commission">{commissionLabel}</span>
+                      </div>
                     </div>
                     <div
                       className="lk-dashboard__programs-catalog-row-actions"

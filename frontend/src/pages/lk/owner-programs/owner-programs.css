@@ -933,6 +933,13 @@
   align-items: flex-start;
   gap: 16px;
   min-width: 0;
+  padding-top: 4px;
+}
+
+/* Иначе следующий flex-ребёнок (заголовок) рисуется поверх колонки аватара и перекрывает крестик. */
+.owner-programs__shell-header-main > .owner-programs__shell-header-copy {
+  position: relative;
+  z-index: 0;
 }
 
 .owner-programs__shell-header-copy {
@@ -1629,6 +1636,15 @@
   border-color: rgba(38, 50, 92, 0.14);
 }
 
+.owner-programs__shell-avatar-wrap {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  align-self: flex-start;
+}
+
 .owner-programs__shell-avatar {
   display: flex;
   align-items: center;
@@ -1643,14 +1659,15 @@
   line-height: 0;
 }
 
-/* Совпадает с заливкой карточки сайта (`service-card-avatar`): фон под фавиконкой / прозрачным PNG. */
+/* При загруженном фото круг заполняет картинка — отдельная заливка под ней не нужна (иначе «двойной» фон). */
 .owner-programs__shell-avatar_has-media {
-  background: #7177f8;
+  background: transparent;
   border: none;
 }
 
 .owner-programs__shell-avatar_action {
   position: relative;
+  z-index: 0;
   overflow: visible;
   cursor: pointer;
   transition:
@@ -1696,6 +1713,8 @@
 }
 
 .owner-programs__shell-avatar-image {
+  position: relative;
+  z-index: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -1706,35 +1725,47 @@
   pointer-events: none;
 }
 
+/* Как у Timeweb avatar close: 20×20, inset −2px/−2px, обводка под фон страницы */
 .owner-programs__shell-avatar-remove {
   position: absolute;
   top: -2px;
   right: -2px;
   z-index: 2;
   pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: none;
+  margin: 0;
+  border: 2px solid #17212b;
   border-radius: 50%;
   background: #ffffff;
-  color: #7f91a4;
+  color: #17212b;
   opacity: 0;
   visibility: hidden;
   transform: scale(0.9);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(5, 12, 38, 0.18);
+  box-shadow: none;
   transition:
     opacity 0.2s ease,
     visibility 0.2s ease,
     transform 0.2s ease,
     background 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    border-color 0.2s ease;
 }
 
+.owner-programs__shell-avatar-remove svg {
+  display: block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.owner-programs__shell-avatar-wrap:hover .owner-programs__shell-avatar-remove,
+.owner-programs__shell-avatar-wrap:focus-within .owner-programs__shell-avatar-remove,
 .owner-programs__shell-avatar_action:hover .owner-programs__shell-avatar-remove,
 .owner-programs__shell-avatar_action:focus-within .owner-programs__shell-avatar-remove,
 .owner-programs__shell-avatar-remove:focus-visible {
@@ -1746,6 +1777,7 @@
 .owner-programs__shell-avatar-remove:hover:not(:disabled),
 .owner-programs__shell-avatar-remove:focus-visible:not(:disabled) {
   background: #ea4335;
+  border-color: #ea4335;
   color: #ffffff;
   outline: none;
 }
@@ -1761,19 +1793,21 @@
 }
 
 [data-theme="light"] .owner-programs__shell-avatar_has-media {
-  background: #7177f8;
+  background: transparent;
   border: none;
 }
 
 [data-theme="light"] .owner-programs__shell-avatar-remove {
   background: #ffffff;
-  color: #7f91a4;
-  box-shadow: 0 2px 8px rgba(5, 12, 38, 0.14);
+  border-color: rgba(38, 50, 92, 0.14);
+  color: #26325c;
+  box-shadow: none;
 }
 
 [data-theme="light"] .owner-programs__shell-avatar-remove:hover:not(:disabled),
 [data-theme="light"] .owner-programs__shell-avatar-remove:focus-visible:not(:disabled) {
   background: #ea4335;
+  border-color: #ea4335;
   color: #ffffff;
 }
 
@@ -1825,6 +1859,11 @@
   box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.25);
 }
 
+.owner-programs__shell-reachability-dot_paused {
+  background: #eab308;
+  box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.35);
+}
+
 .owner-programs__shell-reachability-text {
   color: inherit;
 }
@@ -1836,6 +1875,11 @@
 [data-theme="light"] .owner-programs__shell-reachability-dot_pending {
   background: #83899f;
   box-shadow: 0 0 0 2px rgba(131, 137, 159, 0.2);
+}
+
+[data-theme="light"] .owner-programs__shell-reachability-dot_paused {
+  background: #ca8a04;
+  box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.28);
 }
 
 .owner-programs__shell-meta-row {
@@ -2196,20 +2240,43 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 24px;
 }
 
 .owner-programs__services-search {
+  --lk-srch-main-10: rgba(69, 76, 238, 0.1);
+  --lk-srch-border-subtle: rgba(255, 255, 255, 0.08);
   position: relative;
   display: block;
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid var(--lk-srch-border-subtle);
+  background: #242f3d;
+  box-sizing: border-box;
+  cursor: text;
+  transition:
+    background-color 0.2s ease-in-out,
+    border-color 0.2s ease-in-out,
+    box-shadow 0.2s ease-in-out;
+}
+
+.owner-programs__services-search:hover:not(:focus-within) {
+  border-color: #7177f8;
+  box-shadow: 0 0 0 3px var(--lk-srch-main-10);
+}
+
+.owner-programs__services-search:focus-within {
+  border-color: #7177f8;
+  box-shadow: 0 0 0 3px var(--lk-srch-main-10);
 }
 
 .owner-programs__services-search-icon {
   position: absolute;
   top: 50%;
   left: 14px;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2221,15 +2288,17 @@
 
 .owner-programs__services-search-input {
   box-sizing: border-box;
+  width: 100%;
   min-height: 44px;
   padding-left: 42px;
   font: 400 14px/20px "Stem", "Tahoma", "Arial", sans-serif;
   border: none;
-  border-radius: 8px;
-  background: #242f3d;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
   color: #ffffff;
-  transition: background-color 0.2s ease-in-out;
+  outline: none;
+  transition: color 0.2s ease-in-out;
 }
 
 .owner-programs__services-search-input::placeholder {
@@ -2237,20 +2306,12 @@
   opacity: 1;
 }
 
+[data-theme="light"] .owner-programs__services-search {
+  --lk-srch-border-subtle: rgba(15, 23, 42, 0.08);
+}
+
 [data-theme="light"] .owner-programs__services-search-input::placeholder {
   color: #83899f;
-}
-
-.owner-programs__services-search:hover:not(:focus-within) .owner-programs__services-search-input {
-  border: none;
-  box-shadow: none;
-  background: #242f3d;
-}
-
-.owner-programs__services-search:focus-within .owner-programs__services-search-input {
-  border: none;
-  box-shadow: none;
-  background: #242f3d;
 }
 
 .owner-programs__services-search-input:focus,
@@ -2258,32 +2319,40 @@
   outline: none;
   border: none;
   box-shadow: none;
-  background: #242f3d;
+}
+
+/* Рамка/ореол задаются на label; убираем стили фокуса с базового .owner-programs__input */
+.owner-programs__services-search .owner-programs__input:focus,
+.owner-programs__services-search .owner-programs__input:focus-visible {
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="light"] .owner-programs__services-search .owner-programs__input:focus,
+[data-theme="light"] .owner-programs__services-search .owner-programs__input:focus-visible {
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="light"] .owner-programs__services-search {
+  border-color: var(--lk-srch-border-subtle);
+  background: rgba(15, 23, 42, 0.03);
+}
+
+[data-theme="light"] .owner-programs__services-search:hover:not(:focus-within) {
+  border-color: #7177f8;
+  background: rgba(15, 23, 42, 0.04);
+  box-shadow: 0 0 0 3px var(--lk-srch-main-10);
+}
+
+[data-theme="light"] .owner-programs__services-search:focus-within {
+  border-color: #7177f8;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 0 0 3px var(--lk-srch-main-10);
 }
 
 [data-theme="light"] .owner-programs__services-search-input {
-  border: none;
-  background: rgba(15, 23, 42, 0.03);
   color: #26325c;
-}
-
-[data-theme="light"] .owner-programs__services-search:hover:not(:focus-within) .owner-programs__services-search-input {
-  border: none;
-  background: rgba(15, 23, 42, 0.04);
-  box-shadow: none;
-}
-
-[data-theme="light"] .owner-programs__services-search:focus-within .owner-programs__services-search-input {
-  border: none;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: none;
-}
-
-[data-theme="light"] .owner-programs__services-search-input:focus,
-[data-theme="light"] .owner-programs__services-search-input:focus-visible {
-  border: none;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: none;
 }
 
 .owner-programs__services-layout-switch {
@@ -2465,6 +2534,14 @@
 
 .owner-programs__service-card-headline .owner-programs__shell-reachability-dot_online {
   background: #70cf98;
+}
+
+.owner-programs__service-card-headline .owner-programs__shell-reachability-dot_paused {
+  background: #eab308;
+}
+
+[data-theme="light"] .owner-programs__service-card-headline .owner-programs__shell-reachability-dot_paused {
+  background: #ca8a04;
 }
 
 .owner-programs__service-card-headline .owner-programs__service-card-status-dot {

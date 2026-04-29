@@ -34,6 +34,7 @@ describe("Programs Catalog", () => {
                 joined_at: "2026-01-10T12:00:00+00:00",
                 site_status: "verified",
                 referral_lock_days: 45,
+                commission_percent: "12",
               },
               {
                 site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
@@ -42,6 +43,7 @@ describe("Programs Catalog", () => {
                 joined: false,
                 site_status: "active",
                 referral_lock_days: 30,
+                commission_percent: "8",
               },
             ],
           }),
@@ -59,8 +61,8 @@ describe("Programs Catalog", () => {
     expect(screen.getByRole("heading", { name: "Каталог реферальных программ" })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("demo.example")).toBeInTheDocument();
-      expect(screen.getByText("other.example")).toBeInTheDocument();
+      expect(screen.getByText("Demo Shop")).toBeInTheDocument();
+      expect(screen.getByText("Other Shop")).toBeInTheDocument();
     });
     expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
     expect(screen.queryByText(/Срок закрепления:/i)).not.toBeInTheDocument();
@@ -85,6 +87,7 @@ describe("Programs Catalog", () => {
                 avatar_updated_at: "2026-04-29T18:00:00+00:00",
                 joined: false,
                 site_status: "verified",
+                commission_percent: "8",
               },
               {
                 site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
@@ -93,6 +96,7 @@ describe("Programs Catalog", () => {
                 avatar_data_url: "",
                 joined: false,
                 site_status: "verified",
+                commission_percent: "12",
               },
             ],
           }),
@@ -107,7 +111,7 @@ describe("Programs Catalog", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("demo.example");
+    await screen.findByText("Demo Shop");
     const img = container.querySelector(".lk-dashboard__programs-avatar-img");
     expect(img).toHaveAttribute(
       "src",
@@ -132,6 +136,7 @@ describe("Programs Catalog", () => {
                 site_origin_label: "other.example",
                 joined: false,
                 site_status: "active",
+                commission_percent: "10",
               },
             ],
           }),
@@ -146,7 +151,7 @@ describe("Programs Catalog", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("other.example");
+    await screen.findByText("Other Shop");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toContain("/users/programs/");
     expect(String(fetchMock.mock.calls[0][0])).not.toMatch(
@@ -172,6 +177,7 @@ describe("Programs Catalog", () => {
                 site_origin_label: "other.example",
                 joined: false,
                 site_status: "active",
+                commission_percent: "10",
               },
             ],
           }),
@@ -196,6 +202,43 @@ describe("Programs Catalog", () => {
       expect.stringContaining("/users/site/join/"),
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("clicking the site domain link does not open the program card", async () => {
+    const siteId = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: siteId,
+                site_display_label: "Other Shop",
+                site_origin_label: "other.example",
+                joined: false,
+                site_status: "active",
+                commission_percent: "10",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/programs"]}>
+        <Routes>
+          <Route path="/lk/programs" element={<ProgramsCatalogPage />} />
+          <Route path="/lk/referral-program/:sitePublicId" element={<div>Program detail route</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Other Shop");
+    fireEvent.click(screen.getByLabelText("Открыть сайт other.example"));
+    expect(screen.queryByText("Program detail route")).not.toBeInTheDocument();
   });
 
   it("filters programs by domain and display name", async () => {
@@ -239,12 +282,12 @@ describe("Programs Catalog", () => {
 
     const search = await screen.findByRole("searchbox", { name: "Поиск программ" });
     fireEvent.change(search, { target: { value: "other.example" } });
-    expect(screen.queryByText("demo.example")).not.toBeInTheDocument();
-    expect(screen.getByText("other.example")).toBeInTheDocument();
+    expect(screen.queryByText("Demo Shop")).not.toBeInTheDocument();
+    expect(screen.getByText("Partner Store")).toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: "Demo Shop" } });
-    expect(screen.getByText("demo.example")).toBeInTheDocument();
-    expect(screen.queryByText("other.example")).not.toBeInTheDocument();
+    expect(screen.getByText("Demo Shop")).toBeInTheDocument();
+    expect(screen.queryByText("Partner Store")).not.toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: "missing" } });
     expect(screen.getByText("По вашему запросу программ не найдено.")).toBeInTheDocument();
@@ -288,21 +331,21 @@ describe("Programs Catalog", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("low.example");
-    expect(screen.getByText("high.example")).toBeInTheDocument();
+    await screen.findByText("Low");
+    expect(screen.getByText("High")).toBeInTheDocument();
 
     fireEvent.click(await screen.findByTestId("programs-catalog-filters-toggle"));
     fireEvent.click(await screen.findByTestId("programs-catalog-filter-commission-trigger"));
     fireEvent.click(screen.getByRole("option", { name: "20% и выше" }));
-    expect(screen.queryByText("low.example")).not.toBeInTheDocument();
-    expect(screen.getByText("high.example")).toBeInTheDocument();
+    expect(screen.queryByText("Low")).not.toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("programs-catalog-filter-commission-trigger"));
     fireEvent.click(screen.getByRole("option", { name: "Все" }));
     fireEvent.click(screen.getByTestId("programs-catalog-filter-participants-trigger"));
     fireEvent.click(screen.getByRole("option", { name: "до 10" }));
-    expect(screen.getByText("low.example")).toBeInTheDocument();
-    expect(screen.queryByText("high.example")).not.toBeInTheDocument();
+    expect(screen.getByText("Low")).toBeInTheDocument();
+    expect(screen.queryByText("High")).not.toBeInTheDocument();
   });
 
   it("renders empty state", async () => {

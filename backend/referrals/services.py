@@ -483,9 +483,12 @@ def site_allows_cta_signup_membership(site: Site) -> bool:
 
     Semantics: ``verified`` means embed readiness was satisfied and the owner ran verify
     (config/ops milestone), not a third-party browser or Tilda attestation.
+
+    For ``verified`` / ``active`` sites, lead capture can be paused via ``widget_enabled``
+    (same toggle as the owner shell «вкл/выкл сбор»); paused sites are not joinable.
     """
     if site.status in (Site.Status.VERIFIED, Site.Status.ACTIVE):
-        return True
+        return bool(site.widget_enabled)
     if site.status != Site.Status.DRAFT:
         return False
 

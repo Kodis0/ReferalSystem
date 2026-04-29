@@ -1086,7 +1086,8 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.getByTestId("project-child-sites-list")).toBeInTheDocument();
     });
-    expect(screen.getByTestId(`project-child-site-${siteA}`)).toHaveTextContent("текущий");
+    expect(screen.getByTestId(`project-child-site-${siteA}`)).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId(`project-child-site-${siteB}`)).not.toHaveAttribute("aria-current");
     expect(screen.getByTestId(`project-child-site-${siteB}`)).toHaveTextContent("beta.example");
 
     await userEvent.click(screen.getByTestId(`project-child-site-${siteB}`));

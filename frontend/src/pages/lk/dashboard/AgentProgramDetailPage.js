@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
+import "../owner-programs/owner-programs.css";
 import "./dashboard.css";
 
 function formatJoinedAt(iso) {
@@ -64,7 +65,7 @@ function formatParticipantsCount(value) {
 }
 
 function programStatusLabel(program) {
-  return program?.program_active ? "Активна" : "Недоступна";
+  return program?.program_active ? "Активна" : "Не активна";
 }
 
 function programAvatarLetter(label) {
@@ -135,6 +136,27 @@ export default function AgentProgramDetailPage() {
       isCancelled = true;
     };
   }, [loadProgram]);
+
+  /** Подтягиваем ``program_active`` после действий владельца (виджет вкл/выкл). */
+  useEffect(() => {
+    if (!program?.site_public_id || errorKind === "not_found") return undefined;
+    let isCancelled = false;
+    const tick = () => {
+      void loadProgram({ cancelled: () => isCancelled });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") tick();
+    }, 45000);
+    return () => {
+      isCancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [loadProgram, program?.site_public_id, errorKind]);
 
   const onCopyReferralLink = async () => {
     const link = program?.referral_link;
@@ -290,7 +312,7 @@ export default function AgentProgramDetailPage() {
               <div className="lk-dashboard__program-member" data-testid="agent-program-unjoined-state">
                 <button
                   type="button"
-                  className="lk-dashboard__programs-join-btn lk-dashboard__programs-join-btn_primary"
+                  className="owner-programs__projects-create-btn"
                   onClick={onJoinProgram}
                   disabled={joining}
                   data-testid="agent-program-join-btn"

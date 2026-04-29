@@ -12,6 +12,7 @@ import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
 import { sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
 import {
+  isSiteCapturePaused,
   preserveResolvedReachabilityPhase,
   reachabilityDotPhase,
   reachabilityLabel,
@@ -142,7 +143,7 @@ function RemoveProjectIcon() {
 
 function ProjectAvatarRemoveIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 8 8" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" fill="none" viewBox="0 0 8 8" aria-hidden="true">
       <path
         fill="currentColor"
         d="m5.41 4 1.3-1.29a1 1 0 0 0-1.42-1.42L4 2.59l-1.29-1.3a1 1 0 1 0-1.42 1.42L2.59 4l-1.3 1.29a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0L4 5.41l1.29 1.3a1 1 0 0 0 1.42 0 1 1 0 0 0 0-1.42L5.41 4Z"
@@ -914,15 +915,24 @@ export default function SiteProjectLayout() {
     return <Navigate to="/lk/partner" replace />;
   }
 
+  const siteCapturePaused = Boolean(siteRowForShell && isSiteCapturePaused(siteRowForShell));
+  const reachabilityDisplayPhase = siteCapturePaused ? "paused" : siteReachability.phase;
+
   const showSiteReachability =
     isSiteRouteShell &&
     !headLoading &&
     siteRowForShell &&
-    (siteReachability.phase === "checking" ||
+    (siteCapturePaused ||
+      siteReachability.phase === "checking" ||
       siteReachability.phase === "online" ||
       siteReachability.phase === "offline");
 
   const shellBusy = headLoading && !hideShellChrome;
+
+  const shellAvatarHasMedia = isSiteRouteShell ? Boolean(siteShellVisualSrc) : Boolean(avatarDataUrl);
+  const shellAvatarShowImage = isSiteRouteShell ? Boolean(siteShellVisualSrc) : Boolean(avatarDataUrl);
+  const shellAvatarImageSrc = isSiteRouteShell ? siteShellVisualSrc : avatarDataUrl;
+  const shellAvatarShowRemove = isSiteRouteShell ? Boolean(siteShellVisualSrc && avatarDataUrl) : Boolean(avatarDataUrl);
 
   return (
     <div
@@ -975,10 +985,10 @@ export default function SiteProjectLayout() {
             ) : (
               <>
                 <div className="owner-programs__shell-header-main">
-                  {isSiteRouteShell ? (
+                  <div className="owner-programs__shell-avatar-wrap">
                     <label
                       className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
-                        siteShellVisualSrc ? " owner-programs__shell-avatar_has-media" : ""
+                        shellAvatarHasMedia ? " owner-programs__shell-avatar_has-media" : ""
                       }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
                     >
                       <input
@@ -986,74 +996,38 @@ export default function SiteProjectLayout() {
                         accept="image/gif, image/jpeg, image/png, image/webp"
                         className="owner-programs__shell-avatar-input"
                         onChange={handleAvatarChange}
-                        disabled={avatarSaveState === "saving" || !hasProjectId || !routeSitePublicId}
+                        disabled={avatarSaveState === "saving" || !hasProjectId || (isSiteRouteShell && !routeSitePublicId)}
                       />
-                      {siteShellVisualSrc ? (
-                        <>
-                          <img
-                            className="owner-programs__shell-avatar-image"
-                            src={siteShellVisualSrc}
-                            alt={avatarDataUrl ? "Фото сайта" : "Фото профиля"}
-                          />
-                          {avatarDataUrl ? (
-                            <button
-                              type="button"
-                              className="owner-programs__shell-avatar-remove"
-                              onMouseDown={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                              }}
-                              onClick={handleAvatarRemove}
-                              disabled={avatarSaveState === "saving"}
-                              aria-label="Удалить фото сайта"
-                            >
-                              <ProjectAvatarRemoveIcon />
-                            </button>
-                          ) : null}
-                        </>
+                      {shellAvatarShowImage ? (
+                        <img
+                          className="owner-programs__shell-avatar-image"
+                          src={shellAvatarImageSrc}
+                          alt={
+                            isSiteRouteShell ? (avatarDataUrl ? "Фото сайта" : "Фото профиля") : "Фото проекта"
+                          }
+                        />
                       ) : (
                         <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
                           <ProjectShellAvatarIcon />
                         </span>
                       )}
                     </label>
-                  ) : (
-                    <label
-                      className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
-                        avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
-                      }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
-                    >
-                      <input
-                        type="file"
-                        accept="image/gif, image/jpeg, image/png, image/webp"
-                        className="owner-programs__shell-avatar-input"
-                        onChange={handleAvatarChange}
-                        disabled={avatarSaveState === "saving" || !hasProjectId}
-                      />
-                      {avatarDataUrl ? (
-                        <>
-                          <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото проекта" />
-                          <button
-                            type="button"
-                            className="owner-programs__shell-avatar-remove"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                            }}
-                            onClick={handleAvatarRemove}
-                            disabled={avatarSaveState === "saving"}
-                            aria-label="Удалить фото проекта"
-                          >
-                            <ProjectAvatarRemoveIcon />
-                          </button>
-                        </>
-                      ) : (
-                        <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
-                          <ProjectShellAvatarIcon />
-                        </span>
-                      )}
-                    </label>
-                  )}
+                    {shellAvatarShowRemove ? (
+                      <button
+                        type="button"
+                        className="owner-programs__shell-avatar-remove"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onClick={handleAvatarRemove}
+                        disabled={avatarSaveState === "saving"}
+                        aria-label={isSiteRouteShell ? "Удалить фото сайта" : "Удалить фото проекта"}
+                      >
+                        <ProjectAvatarRemoveIcon />
+                      </button>
+                    ) : null}
+                  </div>
                   {isSiteRouteShell ? (
                     <div className="owner-programs__shell-header-copy">
                       <div
@@ -1080,10 +1054,10 @@ export default function SiteProjectLayout() {
                         {showSiteReachability ? (
                           <p className="owner-programs__shell-reachability" role="status" aria-live="polite">
                             <span
-                              className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(siteReachability.phase)}`}
+                              className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(reachabilityDisplayPhase)}`}
                               aria-hidden="true"
                             />
-                            <span className="owner-programs__shell-reachability-text">{reachabilityLabel(siteReachability.phase)}</span>
+                            <span className="owner-programs__shell-reachability-text">{reachabilityLabel(reachabilityDisplayPhase)}</span>
                           </p>
                         ) : null}
                         <div
