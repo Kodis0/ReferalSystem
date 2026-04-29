@@ -66,7 +66,7 @@ Docker для прод-рантайма не требуется: venv + systemd 
 
 | Файл | Назначение |
 |------|------------|
-| `deploy/deploy.sh` | Идемпотентный деплой: `git fetch` + `git reset --hard origin/main` (локальные правки **в отслеживаемых файлах** на VPS сбрасываются; `backend/.env` не в git), pip, `npm ci` + build, `migrate`, `collectstatic`, при необходимости обновление nginx и рестарт Gunicorn |
+| `deploy/deploy.sh` | Инкрементальный деплой: `git fetch` + `git reset --hard origin/main`, затем по diff с последним успешным коммитом (`.deploy-state/last_successful_commit`) пропускаются лишние шаги (pip / Playwright / `npm ci` / сборка / migrate / collectstatic / рестарт). Полный цикл как раньше: `FORCE_FULL_DEPLOY=1` или первый деплой без state |
 | `deploy/nginx/lumoref.conf` | Прод nginx + TLS (после выдачи сертификатов) |
 | `deploy/nginx/lumoref.http-bootstrap.conf` | Только HTTP до появления сертификатов |
 | `deploy/systemd/lumoref-gunicorn.service` | Unit для Gunicorn |
@@ -153,10 +153,47 @@ sudo chown -R deploy_user:deploy_user /var/www/lumoref/app/frontend
 
 Дальше деплой снова под пользователем из GitHub Actions должен проходить.
 
-## 11. Ручные команды на сервере
+## 11. Инкрементальный деплой и флаги
+
+Состояние между деплоями хранится **только на сервере** в каталоге **`.deploy-state/`** (в git не коммитится). Там: последний успешно выкатанный коммит, хеши `package-lock` / `requirements.txt`, сигнатура SPA-env для сборки, при необходимости — метки Playwright.
+
+**Обычный деплой:** push в `main` — срабатывает GitHub Actions и на сервере `deploy/deploy.sh`.
+
+**Ручной деплой на сервере:**
 
 ```bash
-# Деплой вручную
+cd /var/www/lumoref/app
+export REACT_APP_API_URL=https://api.lumoref.ru   # при необходимости
+export REACT_APP_GOOGLE_CLIENT_ID='…'             # опционально
+bash deploy/deploy.sh
+```
+
+**Принудительно полный деплой** (как раньше — все шаги):
+
+```bash
+FORCE_FULL_DEPLOY=1 bash deploy/deploy.sh
+```
+
+**Только проверка (fetch без `reset`, без тяжёлых команд):**
+
+```bash
+DRY_RUN=1 bash deploy/deploy.sh
+```
+
+**Принудительная пересборка фронта** (например, сменили секреты `REACT_APP_*` в CI и нужна новая сборка при том же коммите):
+
+```bash
+FORCE_FRONTEND_BUILD=1 bash deploy/deploy.sh
+```
+
+Дополнительно: `FORCE_NPM_CI=1`, `FORCE_BACKEND_RESTART=1`.
+
+Если текущий `HEAD` уже совпадает с последним успешным коммитом в `.deploy-state`, скрипт завершится с сообщением «Already deployed…» без тяжёлых шагов (для повторного прогона используйте `FORCE_FULL_DEPLOY=1` или смените коммит).
+
+## 12. Ручные команды на сервере
+
+```bash
+# Деплой вручную (см. также раздел 11)
 cd /var/www/lumoref/app
 export REACT_APP_API_URL=https://api.lumoref.ru
 # опционально, тот же ID что в backend/.env → GOOGLE_OAUTH_CLIENT_ID
@@ -173,7 +210,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 12. Проверки после выдачи доступа (не из этого чата)
+## 13. Проверки после выдачи доступа (не из этого чата)
 
 - `https://lumoref.ru` открывается, нет mixed content.
 - `https://www.lumoref.ru` → редирект на основной домен.
@@ -181,7 +218,7 @@ sudo systemctl reload nginx
 - SSL (срок, цепочка).
 - После push в `main` — успешный workflow и обновлённая версия на сайте.
 
-## 13. Что осталось за рамками автоматической проверки здесь
+## 14. Что осталось за рамками автоматической проверки здесь
 
 - Состояние ОС, занятые порты, firewall, свободное место на **реальном** сервере.
 - Соответствие IP SSH и IP из DNS.
