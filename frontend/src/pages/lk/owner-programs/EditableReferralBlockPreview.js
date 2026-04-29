@@ -95,10 +95,12 @@ function buildTildaBlockStyle(config) {
   --lumo-referral-accent: ${escapeBuilderBlockCodeText(accent)};
   box-sizing: border-box;
   width: 100%;
-  padding: 56px 24px;
+  padding: clamp(40px, 5vw, 72px) clamp(20px, 5.6vw, 72px);
   font-family: Inter, Arial, sans-serif;
   color: #0f172a;
-  background: #ffffff;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(99, 102, 241, 0.14), transparent 30%),
+    #ffffff;
 }
 .lumo-referral-block *,
 .lumo-referral-block *::before,
@@ -114,16 +116,27 @@ function buildTildaBlockStyle(config) {
   flex-direction: column;
   gap: 18px;
   width: 100%;
-  padding: 40px;
+  min-height: clamp(220px, 28vw, 460px);
+  justify-content: center;
+  padding: clamp(32px, 4vw, 56px);
   border-radius: 28px;
-  background: #f8fafc;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96)),
+    #f8fafc;
+  box-shadow:
+    0 26px 70px rgba(15, 23, 42, 0.14),
+    0 10px 26px rgba(15, 23, 42, 0.08);
 }
 .lumo-referral-block--dark {
   color: #f8fafc;
-  background: #0f172a;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(129, 140, 248, 0.2), transparent 32%),
+    #0f172a;
 }
 .lumo-referral-block--dark .lumo-referral-block__surface {
-  background: #17212b;
+  background:
+    linear-gradient(145deg, rgba(23, 33, 43, 0.96), rgba(15, 23, 42, 0.98)),
+    #17212b;
 }
 .lumo-referral-block__badge {
   display: inline-flex;
@@ -174,6 +187,7 @@ function buildTildaBlockStyle(config) {
   font-weight: 800;
   line-height: 1;
   text-decoration: none !important;
+  box-shadow: 0 16px 34px rgba(99, 102, 241, 0.26);
 }
 .lumo-referral-block--banner .lumo-referral-block__surface {
   display: grid;
@@ -186,8 +200,7 @@ function buildTildaBlockStyle(config) {
   font-size: clamp(22px, 2.5vw, 34px);
 }
 .lumo-referral-block--card .lumo-referral-block__surface {
-  max-width: 560px;
-  margin: 0 auto;
+  max-width: none;
 }
 .lumo-referral-block--split .lumo-referral-block__surface {
   display: grid;

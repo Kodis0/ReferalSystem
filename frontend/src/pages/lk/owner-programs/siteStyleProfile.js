@@ -23,6 +23,9 @@ export const DEFAULT_SITE_STYLE_PROFILE = {
     button: "12px",
     card: "16px",
   },
+  layout: {
+    sidePadding: "clamp(20px, 5.6vw, 72px)",
+  },
 };
 
 function pick(obj, ...keys) {
@@ -116,6 +119,7 @@ function mergeProfile(partial) {
     colors: { ...DEFAULT_SITE_STYLE_PROFILE.colors },
     typography: { ...DEFAULT_SITE_STYLE_PROFILE.typography },
     radius: { ...DEFAULT_SITE_STYLE_PROFILE.radius },
+    layout: { ...DEFAULT_SITE_STYLE_PROFILE.layout },
   };
   if (!partial || typeof partial !== "object") {
     return base;
@@ -128,6 +132,9 @@ function mergeProfile(partial) {
   }
   if (partial.radius && typeof partial.radius === "object") {
     base.radius = { ...base.radius, ...partial.radius };
+  }
+  if (partial.layout && typeof partial.layout === "object") {
+    base.layout = { ...base.layout, ...partial.layout };
   }
   return base;
 }
@@ -146,10 +153,13 @@ function foregroundOverlaysFromBlock(block) {
  */
 export function buildSiteStyleProfileFromScreenshotBlock(block) {
   const overlays = foregroundOverlaysFromBlock(block);
+  const blockWidth = Number(block?.width);
   const parsed = overlays
     .map((o) => ({
       type: String(o?.type || "text").toLowerCase() === "button" ? "button" : "text",
       style: normalizeOverlayStyle(o?.style && typeof o.style === "object" ? o.style : {}),
+      x: Number(o?.x),
+      xPercent: Number(o?.x_percent ?? o?.xPercent),
     }))
     .filter((o) => o.type === "button" || (o.style.color && !isTransparentColor(o.style.color)));
 
@@ -225,6 +235,22 @@ export function buildSiteStyleProfileFromScreenshotBlock(block) {
     themeGuess === "dark" ? "rgba(15, 23, 42, 0.55)" : "rgba(248, 250, 252, 0.94)";
 
   const cardRadiusPx = Math.min(28, Math.max(10, (parsePx(buttonRadius) || 12) + 4));
+  const leftPercents = parsed
+    .map((row) => {
+      if (Number.isFinite(row.xPercent)) {
+        return row.xPercent;
+      }
+      if (Number.isFinite(row.x) && Number.isFinite(blockWidth) && blockWidth > 0) {
+        return (row.x / blockWidth) * 100;
+      }
+      return null;
+    })
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 40);
+  const minLeftPercent = leftPercents.length ? Math.min(...leftPercents) : null;
+  const sidePadding =
+    minLeftPercent != null
+      ? `clamp(20px, ${Math.max(3.5, Math.min(12, minLeftPercent)).toFixed(2)}%, 96px)`
+      : DEFAULT_SITE_STYLE_PROFILE.layout.sidePadding;
 
   return mergeProfile({
     colors: {
@@ -246,6 +272,9 @@ export function buildSiteStyleProfileFromScreenshotBlock(block) {
       button: buttonRadius,
       card: `${cardRadiusPx}px`,
     },
+    layout: {
+      sidePadding,
+    },
   });
 }
 
@@ -257,7 +286,7 @@ export function siteStyleProfileToCssVars(profile) {
   if (!profile || typeof profile !== "object") {
     return {};
   }
-  const { colors, typography, radius } = profile;
+  const { colors, typography, radius, layout } = profile;
   const out = {};
   if (colors && typeof colors === "object") {
     if (colors.background) out["--erb-site-bg"] = colors.background;
@@ -278,6 +307,10 @@ export function siteStyleProfileToCssVars(profile) {
   }
   if (radius && typeof radius === "object") {
     if (radius.button) out["--erb-site-radius-button"] = radius.button;
+    if (radius.card) out["--erb-site-radius-card"] = radius.card;
+  }
+  if (layout && typeof layout === "object") {
+    if (layout.sidePadding) out["--erb-site-side-padding"] = layout.sidePadding;
   }
   return out;
 }

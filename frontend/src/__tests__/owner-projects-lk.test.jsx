@@ -814,7 +814,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByTestId("project-services-empty")).toHaveTextContent("У проекта пока нет сайтов.");
     expect(screen.getByTestId("project-delete-empty-button")).toBeInTheDocument();
     expect(screen.queryByTestId("project-add-site-origin")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Пользователи" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Участники" })).toBeInTheDocument();
   });
 
   it("hides delete action for default empty project", async () => {
@@ -1265,7 +1265,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByText("new comment")).toBeInTheDocument();
   });
 
-  it("shows users tab for project and loads members from primary site", async () => {
+  it("shows participants tab for project and loads members from primary site", async () => {
     const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
@@ -1306,7 +1306,7 @@ describe("SiteProjectLayout child sites", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Пользователи" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Участники" })).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByTestId("members-list")).toBeInTheDocument();
@@ -1314,7 +1314,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByText(/ABC/)).toBeInTheDocument();
   });
 
-  it("shows empty users state for project without sites", async () => {
+  it("shows empty participants state for project without sites", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
       if (u.includes("/referrals/site/owner-sites/")) {
@@ -1347,9 +1347,8 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.getByTestId("members-empty")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Пользователи" })).toBeInTheDocument();
-    expect(screen.getByText(/У вас нет добавленных пользователей/i)).toBeInTheDocument();
-    expect(screen.getByTestId("members-add-button")).toHaveTextContent("Добавить");
+    expect(screen.getByRole("heading", { name: "Участники" })).toBeInTheDocument();
+    expect(screen.getByText(/Пока никто не присоединился к реферальной программе/i)).toBeInTheDocument();
   });
 
   it("hides shell chrome while create-site form is open", async () => {
@@ -1846,9 +1845,8 @@ describe("ProjectMembersPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("members-empty")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Пользователи" })).toBeInTheDocument();
-    expect(screen.getByText(/У вас нет добавленных пользователей/i)).toBeInTheDocument();
-    expect(screen.getByTestId("members-add-button")).toHaveTextContent("Добавить");
+    expect(screen.getByRole("heading", { name: "Участники" })).toBeInTheDocument();
+    expect(screen.getByText(/Пока никто не присоединился к реферальной программе/i)).toBeInTheDocument();
   });
 
   it("renders member rows from API", async () => {

@@ -99,7 +99,7 @@ export default function ProjectMembersPage() {
   return (
     <div className="owner-programs__page" data-testid="project-members-page">
       <header className="owner-programs__members-head">
-        <h2 className="owner-programs__overview-title">Пользователи</h2>
+        <h2 className="owner-programs__overview-title">Участники</h2>
       </header>
 
       {loading ? (
@@ -129,13 +129,8 @@ export default function ProjectMembersPage() {
           {count === 0 ? (
             <div className="owner-programs__members-empty" data-testid="members-empty">
               <p className="owner-programs__muted" style={{ margin: 0, color: "#ffffff", opacity: 1 }}>
-                У вас нет добавленных пользователей
+                Пока никто не присоединился к реферальной программе.
               </p>
-              <div className="owner-programs__actions" style={{ marginTop: 16 }}>
-                <button type="button" className="owner-programs__projects-create-btn" data-testid="members-add-button">
-                  Добавить
-                </button>
-              </div>
             </div>
           ) : (
             <ul className="owner-programs__members-list" data-testid="members-list">

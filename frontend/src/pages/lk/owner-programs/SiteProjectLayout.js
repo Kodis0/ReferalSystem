@@ -236,7 +236,7 @@ export default function SiteProjectLayout() {
     return buildScopedProjectPath("sites");
   }, [buildScopedProjectPath, buildScopedProjectSitePath, hasProjectId, shellScopedSitePublicIdForNav]);
 
-  /** Вкладка «Пользователи» на маршруте конкретного сайта. */
+  /** Вкладка «Участники» на маршруте конкретного сайта. */
   const membersSiteNavPath = useMemo(() => {
     if (!hasProjectId) return "/lk/partner";
     if (shellScopedSitePublicIdForNav) return `${buildScopedProjectSitePath(shellScopedSitePublicIdForNav)}/members`;
@@ -1172,8 +1172,8 @@ export default function SiteProjectLayout() {
               headLoading
                 ? "Загрузка"
                 : isSiteRouteShell
-                  ? "Дашборд, виджет, блок для сайта, настройки, пользователи и история сайта"
-                  : "Сервисы и пользователи проекта"
+                  ? "Дашборд, виджет, блок для сайта, настройки, участники и история сайта"
+                  : "Сервисы и участники проекта"
             }
           >
             {headLoading ? (
@@ -1225,7 +1225,7 @@ export default function SiteProjectLayout() {
                   Настройки
                 </NavLink>
                 <NavLink to={membersSiteNavPath} end className={tabClass} preventScrollReset state={siteTabNavigationState}>
-                  Пользователи
+                  Участники
                 </NavLink>
                 <NavLink to={historySiteNavPath} end className={tabClass} preventScrollReset state={siteTabNavigationState}>
                   История
@@ -1246,7 +1246,7 @@ export default function SiteProjectLayout() {
                   Сервисы
                 </NavLink>
                 <NavLink to={projectMembersNavPath} end className={tabClass} preventScrollReset>
-                  Пользователи
+                  Участники
                 </NavLink>
               </>
             )}
