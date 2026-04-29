@@ -51,15 +51,15 @@ from .serializers import (
 
 
 def _program_avatar_data_url(site: Site) -> str:
-    """Program avatar contract: project/program icon, then site shell icon, then owner account fallback."""
+    """Program avatar contract: site shell icon, then project/program icon, then owner account fallback."""
+    shell = site_shell_avatar_data_url(site)
+    if shell:
+        return shell
     project = getattr(site, "project", None)
     if project is not None:
         raw_project = getattr(project, "avatar_data_url", None)
         if isinstance(raw_project, str) and raw_project.strip():
             return raw_project.strip()
-    shell = site_shell_avatar_data_url(site)
-    if shell:
-        return shell
     owner = getattr(site, "owner", None)
     if owner is None:
         return ""
@@ -68,14 +68,14 @@ def _program_avatar_data_url(site: Site) -> str:
 
 
 def _program_avatar_updated_at(site: Site):
+    if site_shell_avatar_data_url(site):
+        return site.updated_at.isoformat() if site.updated_at else None
     project = getattr(site, "project", None)
     if project is not None:
         raw_project = getattr(project, "avatar_data_url", None)
         if isinstance(raw_project, str) and raw_project.strip():
             updated_at = getattr(project, "updated_at", None)
             return updated_at.isoformat() if updated_at else None
-    if site_shell_avatar_data_url(site):
-        return site.updated_at.isoformat() if site.updated_at else None
     owner = getattr(site, "owner", None)
     updated_at = getattr(owner, "updated_at", None) if owner is not None else None
     return updated_at.isoformat() if updated_at else None

@@ -132,9 +132,9 @@ class MyProgramsApiTests(TestCase):
         row = next(x for x in r.data["programs"] if x["site_public_id"] == str(site.public_id))
         self.assertEqual(row["avatar_data_url"], owner_photo)
 
-    def test_program_payload_prefers_project_avatar_over_site_avatar(self):
+    def test_program_payload_prefers_site_avatar_over_project_avatar(self):
         project_avatar = "data:image/png;base64,PROJECTICON"
-        site_avatar = "data:image/png;base64,OLDSITEICON"
+        site_avatar = "data:image/png;base64,SITEICON"
         project = Project.objects.create(
             owner=self.owner,
             name="Project Icon",
@@ -164,26 +164,24 @@ class MyProgramsApiTests(TestCase):
             x for x in mine.data["programs"] if x["site_public_id"] == str(site.public_id)
         )
 
-        self.assertEqual(catalog_row["avatar_data_url"], project_avatar)
-        self.assertEqual(mine_row["avatar_data_url"], project_avatar)
-        self.assertEqual(detail.data["program"]["avatar_data_url"], project_avatar)
-        self.assertEqual(catalog_row["avatar_updated_at"], project.updated_at.isoformat())
+        self.assertEqual(catalog_row["avatar_data_url"], site_avatar)
+        self.assertEqual(mine_row["avatar_data_url"], site_avatar)
+        self.assertEqual(detail.data["program"]["avatar_data_url"], site_avatar)
+        self.assertEqual(catalog_row["avatar_updated_at"], site.updated_at.isoformat())
 
-    def test_program_payload_uses_site_avatar_when_project_avatar_missing(self):
+    def test_program_payload_uses_project_avatar_when_site_avatar_missing(self):
+        project_avatar = "data:image/png;base64,PROJECTICON"
         project = Project.objects.create(
             owner=self.owner,
             name="Project Icon",
             description="",
-            avatar_data_url="",
+            avatar_data_url=project_avatar,
         )
         site = self._site(
             "site_avatar_updated",
             project=project,
             allowed_origins=["https://site-avatar.example"],
-            config_json={
-                "site_display_name": "Site Avatar",
-                "site_avatar_data_url": "data:image/png;base64,SITEICON",
-            },
+            config_json={"site_display_name": "Project Avatar"},
         )
         SiteMembership.objects.create(site=site, user=self.user_a)
 
@@ -198,8 +196,8 @@ class MyProgramsApiTests(TestCase):
             detail.data["program"],
         ]
         for payload in payloads:
-            self.assertEqual(payload["avatar_data_url"], "data:image/png;base64,SITEICON")
-            self.assertEqual(payload["avatar_updated_at"], site.updated_at.isoformat())
+            self.assertEqual(payload["avatar_data_url"], project_avatar)
+            self.assertEqual(payload["avatar_updated_at"], project.updated_at.isoformat())
 
     def test_program_payload_empty_avatar_when_no_avatar_sources(self):
         project = Project.objects.create(
