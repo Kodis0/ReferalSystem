@@ -33,6 +33,7 @@ from referrals.services import (
     owner_site_list_origin_display,
     partner_dashboard_payload,
     site_commission_percent,
+    site_shell_avatar_data_url,
     site_allows_cta_signup_membership,
     site_cta_display_label,
 )
@@ -63,6 +64,7 @@ def _member_program_payload(site, *, membership=None):
         "commission_percent": str(site_commission_percent(site)),
         "referral_lock_days": int(getattr(django_settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)),
         "participants_count": participants_count,
+        "avatar_data_url": site_shell_avatar_data_url(site),
     }
     if membership is not None:
         payload["joined_at"] = membership.created_at.isoformat() if membership.created_at else None

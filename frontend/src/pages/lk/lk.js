@@ -1,6 +1,16 @@
 import { Routes, Route, Link, useNavigate, Navigate, Outlet, useParams } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, LogOut, MessageCircle, Palette, Send, Settings as SettingsGearIcon, UserPlus, UserRound } from "lucide-react";
+import {
+  ChevronDown,
+  LogOut,
+  MessageCircle,
+  Palette,
+  Search,
+  Send,
+  Settings as SettingsGearIcon,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
 import { LkHeaderBrandMark } from "./LkHeaderBrandMark";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
 import ProgramsCatalogPage from "./dashboard/ProgramsCatalogPage";
@@ -423,6 +433,9 @@ function LK() {
                   }}
                   onClick={() => searchInputRef.current?.focus()}
                 >
+                  <span className="lk-header__search-icon" aria-hidden="true">
+                    <Search size={16} strokeWidth={2} />
+                  </span>
                   <input
                     ref={searchInputRef}
                     id="lk-header-search"
@@ -513,7 +526,12 @@ function LK() {
             >
               <span className="lk-header__account-id">{accountId}</span>
               <span className="lk-header__avatar" aria-hidden="true">
-                <UserRound size={18} />
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2Zm0 5c1.7 0 3 1.3 3 3s-1.3 3-3 3-3-1.3-3-3 1.3-3 3-3Zm0 13c-2.2 0-4.3-.9-5.8-2.5a6.94 6.94 0 0 1 11.5 0A7.56 7.56 0 0 1 12 20Z"
+                  />
+                </svg>
               </span>
               <span className={`lk-header__chevron ${menuOpen ? "lk-header__chevron_open" : ""}`} aria-hidden="true">
                 <ChevronDown size={18} />

@@ -2224,15 +2224,12 @@
   min-height: 44px;
   padding-left: 42px;
   font: 400 14px/20px "Stem", "Tahoma", "Arial", sans-serif;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: none;
   border-radius: 8px;
   background: #242f3d;
   box-shadow: none;
   color: #ffffff;
-  transition:
-    background-color 0.2s ease-in-out,
-    border-color 0.2s ease-in-out,
-    box-shadow 0.2s ease-in-out;
+  transition: background-color 0.2s ease-in-out;
 }
 
 .owner-programs__services-search-input::placeholder {
@@ -2245,48 +2242,48 @@
 }
 
 .owner-programs__services-search:hover:not(:focus-within) .owner-programs__services-search-input {
-  border-color: #7177f8;
-  box-shadow: 0 0 0 3px rgba(69, 76, 238, 0.1);
+  border: none;
+  box-shadow: none;
   background: #242f3d;
 }
 
 .owner-programs__services-search:focus-within .owner-programs__services-search-input {
-  border-color: #7177f8;
-  box-shadow: 0 0 0 3px rgba(69, 76, 238, 0.1);
+  border: none;
+  box-shadow: none;
   background: #242f3d;
 }
 
 .owner-programs__services-search-input:focus,
 .owner-programs__services-search-input:focus-visible {
   outline: none;
-  border-color: #7177f8;
-  box-shadow: 0 0 0 3px rgba(69, 76, 238, 0.1);
+  border: none;
+  box-shadow: none;
   background: #242f3d;
 }
 
 [data-theme="light"] .owner-programs__services-search-input {
-  border-color: rgba(15, 23, 42, 0.08);
+  border: none;
   background: rgba(15, 23, 42, 0.03);
   color: #26325c;
 }
 
 [data-theme="light"] .owner-programs__services-search:hover:not(:focus-within) .owner-programs__services-search-input {
-  border-color: #7177f8;
+  border: none;
   background: rgba(15, 23, 42, 0.04);
-  box-shadow: 0 0 0 3px rgba(69, 76, 238, 0.1);
+  box-shadow: none;
 }
 
 [data-theme="light"] .owner-programs__services-search:focus-within .owner-programs__services-search-input {
-  border-color: #7177f8;
+  border: none;
   background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 0 0 3px rgba(69, 76, 238, 0.1);
+  box-shadow: none;
 }
 
 [data-theme="light"] .owner-programs__services-search-input:focus,
 [data-theme="light"] .owner-programs__services-search-input:focus-visible {
-  border-color: #7177f8;
+  border: none;
   background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 0 0 3px rgba(69, 76, 238, 0.1);
+  box-shadow: none;
 }
 
 .owner-programs__services-layout-switch {
@@ -2457,27 +2454,24 @@
   color: #26325c;
 }
 
+/* Match lk-dashboard__programs-status-dot: plain filled circle, no outer ring */
 .owner-programs__service-card-headline .owner-programs__shell-reachability-dot {
   width: 10px;
   height: 10px;
-  box-shadow: 0 0 0 2px rgba(127, 145, 164, 0.3);
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-shadow: none;
 }
 
 .owner-programs__service-card-headline .owner-programs__shell-reachability-dot_online {
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
-}
-
-.owner-programs__service-card-headline .owner-programs__shell-reachability-dot_offline {
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.32);
-}
-
-.owner-programs__service-card-headline .owner-programs__shell-reachability-dot_pending {
-  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.3);
+  background: #70cf98;
 }
 
 .owner-programs__service-card-headline .owner-programs__service-card-status-dot {
   width: 10px;
   height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .owner-programs__service-card-specs {

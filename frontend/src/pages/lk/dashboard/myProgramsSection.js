@@ -228,7 +228,11 @@ export function MyProgramsSection() {
                 <div className="owner-programs__service-card-top-row">
                   <div className="owner-programs__service-card-hero">
                     <div className="owner-programs__service-card-avatar">
-                      <SiteFaviconAvatar siteLike={p} letter={title.slice(0, 1).toUpperCase() || "P"} />
+                      <SiteFaviconAvatar
+                        manualUrl={typeof p.avatar_data_url === "string" ? p.avatar_data_url.trim() : ""}
+                        siteLike={p}
+                        letter={title.slice(0, 1).toUpperCase() || "P"}
+                      />
                     </div>
                   </div>
                   <div className="owner-programs__service-card-top-right">

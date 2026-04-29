@@ -440,13 +440,26 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   z-index: 50;
 }
 
+.lk-header__search-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  pointer-events: none;
+}
+
+.lk-header__search-icon svg {
+  display: block;
+}
+
 .lk-header__search-inputWrapper {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px 0 10px;
+  padding: 0 8px 0 8px;
   box-sizing: border-box;
   border-radius: 8px;
   border: 1px solid var(--lk-h-light-08);

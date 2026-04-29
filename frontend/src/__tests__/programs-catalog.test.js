@@ -63,8 +63,8 @@ describe("Programs Catalog", () => {
     expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
 
     const links = screen.getAllByTestId("programs-catalog-list-link");
-    expect(links[0]).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-    expect(links[1]).toHaveAttribute("href", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
+    expect(links[0]).toHaveAttribute("data-nav-target", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    expect(links[1]).toHaveAttribute("data-nav-target", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
   });
 
   it("mount loads catalog via GET /users/programs/ only and never POST /users/site/join/", async () => {
@@ -161,6 +161,8 @@ describe("Programs Catalog", () => {
                 joined: true,
                 joined_at: "2026-01-10T12:00:00+00:00",
                 site_status: "verified",
+                commission_percent: "8",
+                participants_count: 3,
               },
               {
                 site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
@@ -168,6 +170,8 @@ describe("Programs Catalog", () => {
                 site_origin_label: "other.example",
                 joined: false,
                 site_status: "active",
+                commission_percent: "15",
+                participants_count: 40,
               },
             ],
           }),
@@ -193,6 +197,61 @@ describe("Programs Catalog", () => {
 
     fireEvent.change(search, { target: { value: "missing" } });
     expect(screen.getByText("По вашему запросу программ не найдено.")).toBeInTheDocument();
+  });
+
+  it("filters programs by commission percent and participants count", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Low",
+                site_origin_label: "low.example",
+                joined: false,
+                site_status: "active",
+                commission_percent: "3",
+                participants_count: 5,
+              },
+              {
+                site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+                site_display_label: "High",
+                site_origin_label: "high.example",
+                joined: false,
+                site_status: "active",
+                commission_percent: "25",
+                participants_count: 150,
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("low.example");
+    expect(screen.getByText("high.example")).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByTestId("programs-catalog-filters-toggle"));
+    fireEvent.click(await screen.findByTestId("programs-catalog-filter-commission-trigger"));
+    fireEvent.click(screen.getByRole("option", { name: "20% и выше" }));
+    expect(screen.queryByText("low.example")).not.toBeInTheDocument();
+    expect(screen.getByText("high.example")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("programs-catalog-filter-commission-trigger"));
+    fireEvent.click(screen.getByRole("option", { name: "Все" }));
+    fireEvent.click(screen.getByTestId("programs-catalog-filter-participants-trigger"));
+    fireEvent.click(screen.getByRole("option", { name: "до 10" }));
+    expect(screen.getByText("low.example")).toBeInTheDocument();
+    expect(screen.queryByText("high.example")).not.toBeInTheDocument();
   });
 
   it("renders empty state", async () => {

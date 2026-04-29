@@ -98,6 +98,24 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(joined["site_origin_label"], "joined.example")
         self.assertFalse(available["joined"])
         self.assertNotIn("joined_at", available)
+        self.assertEqual(joined.get("avatar_data_url"), "")
+        self.assertEqual(available.get("avatar_data_url"), "")
+
+    def test_programs_catalog_includes_site_shell_avatar_data_url(self):
+        avatar = "data:image/png;base64,AAA"
+        site = self._site(
+            "catalog_avatar",
+            allowed_origins=["https://avatar-shell.example"],
+            config_json={
+                "site_display_name": "Shell Avatar",
+                "site_avatar_data_url": avatar,
+            },
+        )
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/programs/")
+        self.assertEqual(r.status_code, 200)
+        row = next(x for x in r.data["programs"] if x["site_public_id"] == str(site.public_id))
+        self.assertEqual(row["avatar_data_url"], avatar)
 
     def test_programs_catalog_get_does_not_create_membership(self):
         available_site = self._site(
