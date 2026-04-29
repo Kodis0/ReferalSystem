@@ -84,39 +84,7 @@ function formatIdeaNavBadgeLabel(count) {
 function ProgramsNavIcon() {
   return (
     <svg
-      className="lk-sidebar__nav-icon-svg"
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 32 32"
-      fill="none"
-      aria-hidden="true"
-    >
-      <g id="AiAgents_0">
-        <path
-          id="Vector_1"
-          d="M4 13a3 3 0 0 1 3-3h18a3 3 0 0 1 3 3v7.92a3 3 0 0 1-2.35 2.93l-9 1.98a3 3 0 0 1-1.3 0l-9-1.98A3 3 0 0 1 4 20.92V13Z"
-          stroke="currentColor"
-          strokeWidth="2"
-        />
-        <circle id="Vector_2" cx="11.73" cy="17.22" r="2.44" fill="currentColor" />
-        <circle id="Vector_3" cx="20.27" cy="17.22" r="2.44" fill="currentColor" />
-        <path
-          id="Vector_4"
-          d="m15.8 9.9-3.46-3.45m4.88 3.26 3.46-3.46"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </g>
-    </svg>
-  );
-}
-
-function ProgramsCatalogNavIcon() {
-  return (
-    <svg
-      className="lk-sidebar__nav-icon-svg"
+      className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_my-programs"
       xmlns="http://www.w3.org/2000/svg"
       width="24"
       height="24"
@@ -124,18 +92,68 @@ function ProgramsCatalogNavIcon() {
       fill="none"
       aria-hidden="true"
     >
-      <path
-        d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5C17.22 3 18 3.78 18 4.75v14.5c0 .56-.62.9-1.1.6L12 16.82l-4.9 3.03A.72.72 0 0 1 6 19.25V4.75Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9.5 7.5h5M9.5 10.5h4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <g className="lk-sidebar__my-programs-card lk-sidebar__my-programs-card--back">
+        <rect
+          x="5"
+          y="10"
+          width="14"
+          height="11"
+          rx="2"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      </g>
+      <g className="lk-sidebar__my-programs-card lk-sidebar__my-programs-card--front">
+        <rect
+          x="5"
+          y="5"
+          width="14"
+          height="11"
+          rx="2"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      </g>
+    </svg>
+  );
+}
+
+function ProgramsCatalogNavIcon() {
+  const catalogClipId = useId().replace(/:/g, "");
+  return (
+    <svg
+      className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_programs-catalog"
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <clipPath id={catalogClipId}>
+          <rect x="4" y="3" width="16" height="18" rx="1.5" />
+        </clipPath>
+      </defs>
+      <g className="lk-sidebar__catalog-frame">
+        <rect
+          x="3"
+          y="3"
+          width="18"
+          height="18"
+          rx="2"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      </g>
+      <g clipPath={`url(#${catalogClipId})`}>
+        <g className="lk-sidebar__catalog-col">
+          <path d="M9 3v18" stroke="currentColor" strokeWidth="2" />
+        </g>
+        <g className="lk-sidebar__catalog-row">
+          <path d="M9 10h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </g>
+      </g>
     </svg>
   );
 }
@@ -241,11 +259,17 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
       loadOwnerProjects();
     }
 
+    function handleOwnerProjectsUpdated() {
+      loadOwnerProjects();
+    }
+
     window.addEventListener("lk-project-avatar-updated", handleProjectAvatarUpdated);
     window.addEventListener("lk-site-avatar-updated", handleProjectAvatarUpdated);
+    window.addEventListener("lk-owner-projects-updated", handleOwnerProjectsUpdated);
     return () => {
       window.removeEventListener("lk-project-avatar-updated", handleProjectAvatarUpdated);
       window.removeEventListener("lk-site-avatar-updated", handleProjectAvatarUpdated);
+      window.removeEventListener("lk-owner-projects-updated", handleOwnerProjectsUpdated);
     };
   }, [loadOwnerProjects]);
 
@@ -427,12 +451,31 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
                   fill="none"
                   aria-hidden="true"
                 >
-                  <g id="Apps_0">
-                    <path
-                      id="Vector_1"
-                      fill="currentColor"
-                      d="M10 14H3C2.73478 14 2.48043 14.1054 2.29289 14.2929C2.10536 14.4804 2 14.7348 2 15V21C2 21.2652 2.10536 21.5196 2.29289 21.7071C2.48043 21.8946 2.73478 22 3 22H10C10.2652 22 10.5196 21.8946 10.7071 21.7071C10.8946 21.5196 11 21.2652 11 21V15C11 14.7348 10.8946 14.4804 10.7071 14.2929C10.5196 14.1054 10.2652 14 10 14ZM9 20H4V16H9V20ZM21 2H14C13.7348 2 13.4804 2.10536 13.2929 2.29289C13.1054 2.48043 13 2.73478 13 3V9C13 9.26522 13.1054 9.51957 13.2929 9.70711C13.4804 9.89464 13.7348 10 14 10H21C21.2652 10 21.5196 9.89464 21.7071 9.70711C21.8946 9.51957 22 9.26522 22 9V3C22 2.73478 21.8946 2.48043 21.7071 2.29289C21.5196 2.10536 21.2652 2 21 2ZM20 8H15V4H20V8ZM21 12H14C13.7348 12 13.4804 12.1054 13.2929 12.2929C13.1054 12.4804 13 12.7348 13 13V21C13 21.2652 13.1054 21.5196 13.2929 21.7071C13.4804 21.8946 13.7348 22 14 22H21C21.2652 22 21.5196 21.8946 21.7071 21.7071C21.8946 21.5196 22 21.2652 22 21V13C22 12.7348 21.8946 12.4804 21.7071 12.2929C21.5196 12.1054 21.2652 12 21 12ZM20 20H15V14H20V20ZM10 2H3C2.73478 2 2.48043 2.10536 2.29289 2.29289C2.10536 2.48043 2 2.73478 2 3V11C2 11.2652 2.10536 11.5196 2.29289 11.7071C2.48043 11.8946 2.73478 12 3 12H10C10.2652 12 10.5196 11.8946 10.7071 11.7071C10.8946 11.5196 11 11.2652 11 11V3C11 2.73478 10.8946 2.48043 10.7071 2.29289C10.5196 2.10536 10.2652 2 10 2ZM9 10H4V4H9V10Z"
-                    />
+                  <g className="lk-sidebar__projects-tiles">
+                    <g className="lk-sidebar__projects-tile lk-sidebar__projects-tile--tl">
+                      <path
+                        fill="currentColor"
+                        d="M10 2H3C2.73478 2 2.48043 2.10536 2.29289 2.29289C2.10536 2.48043 2 2.73478 2 3V11C2 11.2652 2.10536 11.5196 2.29289 11.7071C2.48043 11.8946 2.73478 12 3 12H10C10.2652 12 10.5196 11.8946 10.7071 11.7071C10.8946 11.5196 11 11.2652 11 11V3C11 2.73478 10.8946 2.48043 10.7071 2.29289C10.5196 2.10536 10.2652 2 10 2ZM9 10H4V4H9V10Z"
+                      />
+                    </g>
+                    <g className="lk-sidebar__projects-tile lk-sidebar__projects-tile--tr">
+                      <path
+                        fill="currentColor"
+                        d="M21 2H14C13.7348 2 13.4804 2.10536 13.2929 2.29289C13.1054 2.48043 13 2.73478 13 3V9C13 9.26522 13.1054 9.51957 13.2929 9.70711C13.4804 9.89464 13.7348 10 14 10H21C21.2652 10 21.5196 9.89464 21.7071 9.70711C21.8946 9.51957 22 9.26522 22 9V3C22 2.73478 21.8946 2.48043 21.7071 2.29289C21.5196 2.10536 21.2652 2 21 2ZM20 8H15V4H20V8Z"
+                      />
+                    </g>
+                    <g className="lk-sidebar__projects-tile lk-sidebar__projects-tile--bl">
+                      <path
+                        fill="currentColor"
+                        d="M10 14H3C2.73478 14 2.48043 14.1054 2.29289 14.2929C2.10536 14.4804 2 14.7348 2 15V21C2 21.2652 2.10536 21.5196 2.29289 21.7071C2.48043 21.8946 2.73478 22 3 22H10C10.2652 22 10.5196 21.8946 10.7071 21.7071C10.8946 21.5196 11 21.2652 11 21V15C11 14.7348 10.8946 14.4804 10.7071 14.2929C10.5196 14.1054 10.2652 14 10 14ZM9 20H4V16H9V20Z"
+                      />
+                    </g>
+                    <g className="lk-sidebar__projects-tile lk-sidebar__projects-tile--br">
+                      <path
+                        fill="currentColor"
+                        d="M21 12H14C13.7348 12 13.4804 12.1054 13.2929 12.2929C13.1054 12.4804 13 12.7348 13 13V21C13 21.2652 13.1054 21.5196 13.2929 21.7071C13.4804 21.8946 13.7348 22 14 22H21C21.2652 22 21.5196 21.8946 21.7071 21.7071C21.8946 21.5196 22 21.2652 22 21V13C22 12.7348 21.8946 12.4804 21.7071 12.2929C21.5196 12.1054 21.2652 12 21 12ZM20 20H15V14H20V20Z"
+                      />
+                    </g>
                   </g>
                 </svg>
                 <span className="lk-sidebar__label lk-sidebar__icon-label lk-sidebar__text_sidebar">
@@ -655,7 +698,7 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             }}
           >
             <svg
-              className="lk-sidebar__nav-icon-svg"
+              className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_news"
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
@@ -664,38 +707,48 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
               aria-hidden="true"
             >
               <g id="News_0">
-                <path
-                  id="news-Vector_1"
-                  d="M2 18C2 18.7957 2.31607 19.5587 2.87868 20.1213C3.44129 20.6839 4.20435 21 5 21H18C19.0609 21 20.0783 20.5786 20.8284 19.8284C21.5786 19.0783 22 18.0609 22 17V6.18201H20V17C20 17.5304 19.7893 18.0392 19.4142 18.4142C19.0391 18.7893 18.5304 19 18 19H7.82C7.93642 18.6793 7.9973 18.3412 8 18V6.18201H6V7.00001V9.00001V18C6 18.2652 5.89464 18.5196 5.70711 18.7071C5.51957 18.8947 5.26522 19 5 19C4.73478 19 4.48043 18.8947 4.29289 18.7071C4.10536 18.5196 4 18.2652 4 18V13.0088H2V18Z"
-                  fill="currentColor"
-                />
-                <path
-                  id="news-Vector_2"
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M17 9H11C10.7348 9 10.4804 8.89464 10.2929 8.70711C10.1054 8.51957 10 8.26522 10 8C10 7.73478 10.1054 7.48043 10.2929 7.29289C10.4804 7.10536 10.7348 7 11 7H17C17.2652 7 17.5196 7.10536 17.7071 7.29289C17.8946 7.48043 18 7.73478 18 8C18 8.26522 17.8946 8.51957 17.7071 8.70711C17.5196 8.89464 17.2652 9 17 9Z"
-                  fill="currentColor"
-                />
-                <path
-                  id="news-Vector_3"
-                  d="M17 13H11C10.7348 13 10.4804 12.8946 10.2929 12.7071C10.1054 12.5196 10 12.2652 10 12C10 11.7348 10.1054 11.4804 10.2929 11.2929C10.4804 11.1054 10.7348 11 11 11H17C17.2652 11 17.5196 11.1054 17.7071 11.2929C17.8946 11.4804 18 11.7348 18 12C18 12.2652 17.8946 12.5196 17.7071 12.7071C17.5196 12.8946 17.2652 13 17 13Z"
-                  fill="currentColor"
-                />
-                <path
-                  id="news-Vector_4"
-                  d="M17 17H11C10.7348 17 10.4804 16.8946 10.2929 16.7071C10.1054 16.5196 10 16.2652 10 16C10 15.7348 10.1054 15.4804 10.2929 15.2929C10.4804 15.1054 10.7348 15 11 15H17C17.2652 15 17.5196 15.1054 17.7071 15.2929C17.8946 15.4804 18 15.7348 18 16C18 16.2652 17.8946 16.5196 17.7071 16.7071C17.5196 16.8946 17.2652 17 17 17Z"
-                  fill="currentColor"
-                />
-                <path
-                  id="news-Vector_5"
-                  d="M7 3H21C21.2652 3 21.5196 3.10536 21.7071 3.29289C21.8946 3.48043 22 3.73478 22 4V13.8622H20V5H8V13.5H6V9V7V4C6 3.73478 6.10536 3.48043 6.29289 3.29289C6.48043 3.10536 6.73478 3 7 3Z"
-                  fill="currentColor"
-                />
-                <path
-                  id="news-Vector_6"
-                  d="M3 7H6V9H4V13.5H2V8C2 7.73478 2.10536 7.48043 2.29289 7.29289C2.48043 7.10536 2.73478 7 3 7Z"
-                  fill="currentColor"
-                />
+                <g className="lk-sidebar__news-paper">
+                  <path
+                    id="news-Vector_1"
+                    d="M2 18C2 18.7957 2.31607 19.5587 2.87868 20.1213C3.44129 20.6839 4.20435 21 5 21H18C19.0609 21 20.0783 20.5786 20.8284 19.8284C21.5786 19.0783 22 18.0609 22 17V6.18201H20V17C20 17.5304 19.7893 18.0392 19.4142 18.4142C19.0391 18.7893 18.5304 19 18 19H7.82C7.93642 18.6793 7.9973 18.3412 8 18V6.18201H6V7.00001V9.00001V18C6 18.2652 5.89464 18.5196 5.70711 18.7071C5.51957 18.8947 5.26522 19 5 19C4.73478 19 4.48043 18.8947 4.29289 18.7071C4.10536 18.5196 4 18.2652 4 18V13.0088H2V18Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    id="news-Vector_5"
+                    d="M7 3H21C21.2652 3 21.5196 3.10536 21.7071 3.29289C21.8946 3.48043 22 3.73478 22 4V13.8622H20V5H8V13.5H6V9V7V4C6 3.73478 6.10536 3.48043 6.29289 3.29289C6.48043 3.10536 6.73478 3 7 3Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    id="news-Vector_6"
+                    d="M3 7H6V9H4V13.5H2V8C2 7.73478 2.10536 7.48043 2.29289 7.29289C2.48043 7.10536 2.73478 7 3 7Z"
+                    fill="currentColor"
+                  />
+                </g>
+                <g className="lk-sidebar__news-lines">
+                  <g className="lk-sidebar__news-line lk-sidebar__news-line--1">
+                    <path
+                      id="news-Vector_2"
+                      fillRule="evenodd"
+                      clipRule="evenodd"
+                      d="M17 9H11C10.7348 9 10.4804 8.89464 10.2929 8.70711C10.1054 8.51957 10 8.26522 10 8C10 7.73478 10.1054 7.48043 10.2929 7.29289C10.4804 7.10536 10.7348 7 11 7H17C17.2652 7 17.5196 7.10536 17.7071 7.29289C17.8946 7.48043 18 7.73478 18 8C18 8.26522 17.8946 8.51957 17.7071 8.70711C17.5196 8.89464 17.2652 9 17 9Z"
+                      fill="currentColor"
+                    />
+                  </g>
+                  <g className="lk-sidebar__news-line lk-sidebar__news-line--2">
+                    <path
+                      id="news-Vector_3"
+                      d="M17 13H11C10.7348 13 10.4804 12.8946 10.2929 12.7071C10.1054 12.5196 10 12.2652 10 12C10 11.7348 10.1054 11.4804 10.2929 11.2929C10.4804 11.1054 10.7348 11 11 11H17C17.2652 11 17.5196 11.1054 17.7071 11.2929C17.8946 11.4804 18 11.7348 18 12C18 12.2652 17.8946 12.5196 17.7071 12.7071C17.5196 12.8946 17.2652 13 17 13Z"
+                      fill="currentColor"
+                    />
+                  </g>
+                  <g className="lk-sidebar__news-line lk-sidebar__news-line--3">
+                    <path
+                      id="news-Vector_4"
+                      d="M17 17H11C10.7348 17 10.4804 16.8946 10.2929 16.7071C10.1054 16.5196 10 16.2652 10 16C10 15.7348 10.1054 15.4804 10.2929 15.2929C10.4804 15.1054 10.7348 15 11 15H17C17.2652 15 17.5196 15.1054 17.7071 15.2929C17.8946 15.4804 18 15.7348 18 16C18 16.2652 17.8946 16.5196 17.7071 16.7071C17.5196 16.8946 17.2652 17 17 17Z"
+                      fill="currentColor"
+                    />
+                  </g>
+                </g>
               </g>
             </svg>
             <span className="lk-sidebar__nav-text">Новости и обновления</span>
@@ -711,7 +764,7 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             }}
           >
             <svg
-              className="lk-sidebar__nav-icon-svg"
+              className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_bug"
               xmlns="http://www.w3.org/2000/svg"
               width="24"
               height="24"
@@ -720,24 +773,30 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
               aria-hidden="true"
             >
               <g id="Apps_0">
-                <path
-                  id="Vector_1"
-                  d="M12.0101 7.58936H12.0001C9.31603 7.58936 7.14014 9.76525 7.14014 12.4494V14.8894C7.14014 17.5735 9.31603 19.7494 12.0001 19.7494H12.0101C14.6942 19.7494 16.8701 17.5735 16.8701 14.8894V12.4494C16.8701 9.76525 14.6942 7.58936 12.0101 7.58936Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  id="Vector_2"
-                  d="M3.49023 7.58936C3.49023 8.39561 3.81052 9.16885 4.38063 9.73896C4.95074 10.3091 5.72398 10.6294 6.53023 10.6294H17.4702C18.2765 10.6294 19.0497 10.3091 19.6198 9.73896C20.1899 9.16885 20.5102 8.39561 20.5102 7.58936"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  id="Vector_3"
-                  d="M9.47023 4.54932V5.05932C9.44852 5.40427 9.49771 5.75001 9.61478 6.07522C9.73184 6.40043 9.91431 6.69819 10.1509 6.95016C10.3875 7.20212 10.6732 7.40293 10.9904 7.54021C11.3076 7.67748 11.6496 7.7483 11.9952 7.7483C12.3409 7.7483 12.6828 7.67748 13 7.54021C13.3173 7.40293 13.603 7.20212 13.8396 6.95016C14.0762 6.69819 14.2586 6.40043 14.3757 6.07522C14.4928 5.75001 14.542 5.40427 14.5202 5.05932V4.54932M3.49023 20.3493C3.49023 19.5431 3.81052 18.7698 4.38063 18.1997C4.95074 17.6296 5.72398 17.3093 6.53023 17.3093H7.74023M20.5102 20.3493C20.5102 19.5431 20.1899 18.7698 19.6198 18.1997C19.0497 17.6296 18.2765 17.3093 17.4702 17.3093H16.2502M7.14023 14.0093H4.10023M19.9002 14.0093H16.8602"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
+                <g className="lk-sidebar__bug-body">
+                  <path
+                    id="Vector_1"
+                    d="M12.0101 7.58936H12.0001C9.31603 7.58936 7.14014 9.76525 7.14014 12.4494V14.8894C7.14014 17.5735 9.31603 19.7494 12.0001 19.7494H12.0101C14.6942 19.7494 16.8701 17.5735 16.8701 14.8894V12.4494C16.8701 9.76525 14.6942 7.58936 12.0101 7.58936Z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                </g>
+                <g className="lk-sidebar__bug-belt">
+                  <path
+                    id="Vector_2"
+                    d="M3.49023 7.58936C3.49023 8.39561 3.81052 9.16885 4.38063 9.73896C4.95074 10.3091 5.72398 10.6294 6.53023 10.6294H17.4702C18.2765 10.6294 19.0497 10.3091 19.6198 9.73896C20.1899 9.16885 20.5102 8.39561 20.5102 7.58936"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                </g>
+                <g className="lk-sidebar__bug-limbs">
+                  <path
+                    id="Vector_3"
+                    d="M9.47023 4.54932V5.05932C9.44852 5.40427 9.49771 5.75001 9.61478 6.07522C9.73184 6.40043 9.91431 6.69819 10.1509 6.95016C10.3875 7.20212 10.6732 7.40293 10.9904 7.54021C11.3076 7.67748 11.6496 7.7483 11.9952 7.7483C12.3409 7.7483 12.6828 7.67748 13 7.54021C13.3173 7.40293 13.603 7.20212 13.8396 6.95016C14.0762 6.69819 14.2586 6.40043 14.3757 6.07522C14.4928 5.75001 14.542 5.40427 14.5202 5.05932V4.54932M3.49023 20.3493C3.49023 19.5431 3.81052 18.7698 4.38063 18.1997C4.95074 17.6296 5.72398 17.3093 6.53023 17.3093H7.74023M20.5102 20.3493C20.5102 19.5431 20.1899 18.7698 19.6198 18.1997C19.0497 17.6296 18.2765 17.3093 17.4702 17.3093H16.2502M7.14023 14.0093H4.10023M19.9002 14.0093H16.8602"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                </g>
               </g>
             </svg>
             <span className="lk-sidebar__nav-text">Сообщить о баге</span>
@@ -762,11 +821,18 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
                 fill="none"
                 aria-hidden="true"
               >
-                <path
-                  id="ideas-Vector_1"
-                  d="M10.0546 17.3371H11.0419V12.5444H12.959V17.3371H13.9463C14.0709 16.1869 14.6556 15.2283 15.6142 14.1931C15.7196 14.0781 16.4098 13.3687 16.4864 13.2633C17.1633 12.4174 17.5874 11.3975 17.71 10.321C17.8326 9.24462 17.6486 8.15546 17.1794 7.179C16.7101 6.20253 15.9745 5.37847 15.0575 4.80171C14.1404 4.22495 13.079 3.91895 11.9956 3.91895C10.9123 3.91895 9.85091 4.22495 8.93381 4.80171C8.01672 5.37847 7.28118 6.20253 6.8119 7.179C6.34262 8.15546 6.15869 9.24462 6.28128 10.321C6.40387 11.3975 6.828 12.4174 7.50483 13.2633L8.3867 14.1931C9.34525 15.2379 9.92996 16.1869 10.0546 17.3371ZM10.0833 19.2542V20.2128H13.9175V19.2542H10.0833ZM6.0095 14.4615C5.10808 13.3333 4.54354 11.9735 4.38085 10.5387C4.21817 9.10378 4.46394 7.65212 5.0899 6.35077C5.71585 5.04942 6.69653 3.95125 7.91908 3.18268C9.14163 2.4141 10.5564 2.00635 12.0004 2.00635C13.4445 2.00635 14.8592 2.4141 16.0818 3.18268C17.3043 3.95125 18.285 5.04942 18.911 6.35077C19.5369 7.65212 19.7827 9.10378 19.62 10.5387C19.4573 11.9735 18.8928 13.3333 17.9914 14.4615C17.3875 15.1996 15.8346 16.3786 15.8346 17.8164V20.2128C15.8346 20.7212 15.6326 21.2089 15.2731 21.5684C14.9136 21.9279 14.426 22.1299 13.9175 22.1299H10.0833C9.57488 22.1299 9.08726 21.9279 8.72774 21.5684C8.36821 21.2089 8.16623 20.7212 8.16623 20.2128V17.8164C8.16623 16.3786 6.6038 15.1996 6.0095 14.4615Z"
-                  fill="currentColor"
-                />
+                <g
+                  className="lk-sidebar__ideas-bulb"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                </g>
               </svg>
               {ideaNavBadgeCount > 0 ? (
                 <span className="lk-header__nav-badge" aria-hidden="true">

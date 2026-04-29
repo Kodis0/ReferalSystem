@@ -7,7 +7,12 @@ import "../dashboard/dashboard.css";
 import "../partner/partner.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
-import { formatDomainLine, siteLifecycleLabelRu, sitePrimaryDomainLabel } from "./siteDisplay";
+import {
+  domainHostFromValue,
+  formatDomainLine,
+  siteLifecycleLabelRu,
+  sitePrimaryDomainLabel,
+} from "./siteDisplay";
 import {
   preserveResolvedReachabilityPhase,
   reachabilityDotPhase,
@@ -18,6 +23,7 @@ import {
 import SiteShellWidgetActionsBar from "../widget-install/SiteShellWidgetActionsBar";
 import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "./domainCountryFlagSvg";
 import { useSiteShellIntegrationActions } from "./useSiteShellIntegrationActions";
+import { SiteFaviconAvatar } from "./SiteFaviconAvatar";
 function ServicesGridIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20" aria-hidden="true">
@@ -70,19 +76,6 @@ function serviceTitle(site) {
   }
   const compact = publicId.replace(/-/g, "");
   return `Сайт · ${compact.slice(0, 8)}…`;
-}
-
-function domainHostFromValue(value) {
-  if (typeof value !== "string" || !value.trim()) return "";
-  const raw = value.trim();
-  try {
-    if (raw.includes("://")) {
-      return new URL(raw).hostname.toLowerCase();
-    }
-  } catch {
-    /* ignore */
-  }
-  return raw.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
 }
 
 /** Вторая строка списка сайтов: только хост (без схемы/пути), плейсхолдер без изменений. */
@@ -687,7 +680,6 @@ export default function ProjectOverviewPage() {
               position: "fixed",
               top: menuAnchorRect.bottom + 8,
               right: window.innerWidth - menuAnchorRect.right,
-              minWidth: 220,
               zIndex: 6000,
             }}
             role="menu"
@@ -819,13 +811,17 @@ export default function ProjectOverviewPage() {
                 <ServicesListIcon />
               </button>
             </div>
-            <div className="owner-programs__services-count">
+          </div>
+
+          <div className="owner-programs__services-section-title" data-testid="project-services-section-title">
+            <h2 className="owner-programs__services-section-heading">
+              Сайты{" "}
               {projectEntryLoading ? (
-                <span className="owner-programs__skel owner-programs__services-toolbar-skel-count" aria-hidden />
+                <span className="owner-programs__skel owner-programs__services-section-count-skel" aria-hidden="true" />
               ) : (
-                `Сайтов: ${visibleProjectSites.length}`
+                <span className="owner-programs__services-section-count">{visibleProjectSites.length}</span>
               )}
-            </div>
+            </h2>
           </div>
 
           {projectEntryLoading ? (
@@ -857,6 +853,7 @@ export default function ProjectOverviewPage() {
                   const siteCardAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   const menuOpen = activeMenuSiteId === site.public_id;
+                  const cardLetter = title.slice(0, 1).toUpperCase() || "S";
                   return (
                     <div
                       key={site.public_id}
@@ -875,15 +872,7 @@ export default function ProjectOverviewPage() {
                       <div className="owner-programs__service-card-top-row">
                         <div className="owner-programs__service-card-hero">
                           <div className="owner-programs__service-card-avatar">
-                            {siteCardAvatarUrl ? (
-                              <img
-                                src={siteCardAvatarUrl}
-                                alt=""
-                                className="owner-programs__service-card-avatar-img"
-                              />
-                            ) : (
-                              <span>{title.slice(0, 1).toUpperCase() || "S"}</span>
-                            )}
+                            <SiteFaviconAvatar manualUrl={siteCardAvatarUrl} siteLike={site} letter={cardLetter} />
                           </div>
                         </div>
                         <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
@@ -917,8 +906,8 @@ export default function ProjectOverviewPage() {
                         <span className={status.cardDotClassName} aria-hidden="true" />
                         <span className="owner-programs__service-card-headline-title">{title}</span>
                       </div>
-                      <div className="owner-programs__service-card-specs" title={[domain, status.label, site.platform_preset || "—"].join(" · ")}>
-                        {[domain, status.label, site.platform_preset || "—"].join(" · ")}
+                      <div className="owner-programs__service-card-specs" title={domain || "—"}>
+                        {domain || "—"}
                       </div>
                     </div>
                   );
@@ -933,6 +922,7 @@ export default function ProjectOverviewPage() {
                   const siteListAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   const menuOpen = activeMenuSiteId === site.public_id;
+                  const listLetter = (servicesListDomainOnly(domain) || "S").slice(0, 1).toUpperCase() || "S";
                   return (
                     <div
                       key={site.public_id}
@@ -950,15 +940,7 @@ export default function ProjectOverviewPage() {
                     >
                       <div className="owner-programs__services-list-top">
                         <div className="owner-programs__service-card-avatar owner-programs__services-list-avatar">
-                          {siteListAvatarUrl ? (
-                            <img
-                              src={siteListAvatarUrl}
-                              alt=""
-                              className="owner-programs__service-card-avatar-img"
-                            />
-                          ) : (
-                            <span>{(servicesListDomainOnly(domain) || "S").slice(0, 1).toUpperCase() || "S"}</span>
-                          )}
+                          <SiteFaviconAvatar manualUrl={siteListAvatarUrl} siteLike={site} letter={listLetter} />
                         </div>
                       </div>
                       <div className="owner-programs__services-list-middle">

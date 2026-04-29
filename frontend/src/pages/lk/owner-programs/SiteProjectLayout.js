@@ -8,7 +8,12 @@ import "../lk.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
-import { sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
+import {
+  siteExternalFaviconUrl,
+  siteFaviconHostname,
+  sitePrimaryBrowseHref,
+  sitePrimaryDomainLabel,
+} from "./siteDisplay";
 import {
   preserveResolvedReachabilityPhase,
   reachabilityDotPhase,
@@ -183,12 +188,13 @@ export default function SiteProjectLayout() {
   const setSiteShellToolbar = useCallback((node) => {
     setSiteShellToolbarSlot(node);
   }, []);
+  const [siteShellFaviconBroken, setSiteShellFaviconBroken] = useState(false);
   /** idle — не показываем; no_url — нет origin; checking | online | offline — бейдж */
   const [siteReachability, setSiteReachability] = useState({ phase: "idle" });
   const createMenuRef = useRef(null);
   const locationViewMode = location.state?.projectViewMode;
-  // Project's primary site is a project-level concept: only used by project-level
-  // pages (members, settings) that need *some* site without being site-level routes.
+  // Project's primary site: for project-level pages that resolve a default site where
+  // the URL does not carry :sitePublicId (e.g. legacy settings). Not used for /members.
   // It must NOT be used as a substitute for canonical :sitePublicId when rendering
   // a site-level screen.
   const primarySitePublicId = useMemo(() => {
@@ -681,6 +687,7 @@ export default function SiteProjectLayout() {
         throw new Error(detailMsg || `Не удалось удалить проект (${res.status})`);
       }
       setDeleteProjectDialogOpen(false);
+      window.dispatchEvent(new Event("lk-owner-projects-updated"));
       navigate("/lk/partner", { replace: true });
     } catch (err) {
       console.error(err);
@@ -750,6 +757,22 @@ export default function SiteProjectLayout() {
     if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
     return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
   }, [projectEntry, routeSitePublicId]);
+  const siteShellFaviconUrl = useMemo(
+    () => (isSiteRouteShell ? siteExternalFaviconUrl(siteFaviconHostname(siteRowForShell)) : ""),
+    [isSiteRouteShell, siteRowForShell],
+  );
+  const siteShellShowsFavicon = Boolean(siteShellFaviconUrl && !siteShellFaviconBroken);
+
+  useEffect(() => {
+    setSiteShellFaviconBroken(false);
+  }, [siteShellFaviconUrl]);
+
+  useEffect(() => {
+    if (!avatarDataUrl) {
+      setSiteShellFaviconBroken(false);
+    }
+  }, [avatarDataUrl]);
+
   const shellTitleText = isSiteRouteShell
     ? headLoading && !siteRowForShell
       ? "Сайт…"
@@ -952,7 +975,7 @@ export default function SiteProjectLayout() {
                   {isSiteRouteShell ? (
                     <label
                       className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
-                        avatarDataUrl ? " owner-programs__shell-avatar_has-media" : ""
+                        avatarDataUrl || siteShellShowsFavicon ? " owner-programs__shell-avatar_has-media" : ""
                       }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
                     >
                       <input
@@ -979,6 +1002,13 @@ export default function SiteProjectLayout() {
                             <ProjectAvatarRemoveIcon />
                           </button>
                         </>
+                      ) : siteShellShowsFavicon ? (
+                        <img
+                          className="owner-programs__shell-avatar-image"
+                          src={siteShellFaviconUrl}
+                          alt=""
+                          onError={() => setSiteShellFaviconBroken(true)}
+                        />
                       ) : (
                         <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
                           <ProjectShellAvatarIcon />
@@ -1246,7 +1276,7 @@ export default function SiteProjectLayout() {
                   Сервисы
                 </NavLink>
                 <NavLink to={projectMembersNavPath} end className={tabClass} preventScrollReset>
-                  Участники
+                  Участники проекта
                 </NavLink>
               </>
             )}

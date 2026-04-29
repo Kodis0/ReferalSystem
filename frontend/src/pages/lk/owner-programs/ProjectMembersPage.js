@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -34,27 +34,23 @@ function formatJoinedAt(iso) {
 }
 
 export default function ProjectMembersPage() {
-  const outletContext = useOutletContext() || {};
-  const { primarySitePublicId = "", headLoading = false } = outletContext;
   const { sitePublicId: routeMembersSiteParam } = useParams();
   const routeMembersSiteId =
     typeof routeMembersSiteParam === "string" && isUuidString(routeMembersSiteParam.trim())
       ? routeMembersSiteParam.trim()
       : "";
-  const [loading, setLoading] = useState(true);
+  /** Только `/project/:id/sites/:sitePublicId/members` — участники реферальной программы сайта. */
+  const isSiteReferralMembersView = Boolean(routeMembersSiteId);
+
+  const [loading, setLoading] = useState(() => isSiteReferralMembersView);
   const [error, setError] = useState("");
   const [count, setCount] = useState(null);
   const [members, setMembers] = useState([]);
-  // Сайт из пути `/sites/:sitePublicId/members` имеет приоритет; иначе — основной сайт проекта (маршрут `/members`).
-  const resolvedSitePublicId =
-    routeMembersSiteId || (typeof primarySitePublicId === "string" ? primarySitePublicId.trim() : "");
+
+  const pageTitle = useMemo(() => (isSiteReferralMembersView ? "Участники" : "Участники проекта"), [isSiteReferralMembersView]);
 
   const load = useCallback(async () => {
-    if (!resolvedSitePublicId) {
-      if (headLoading) {
-        setLoading(true);
-        return;
-      }
+    if (!isSiteReferralMembersView) {
       setCount(0);
       setMembers([]);
       setError("");
@@ -65,7 +61,7 @@ export default function ProjectMembersPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationMembers, resolvedSitePublicId), {
+      const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationMembers, routeMembersSiteId), {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
@@ -90,7 +86,7 @@ export default function ProjectMembersPage() {
     } finally {
       setLoading(false);
     }
-  }, [headLoading, resolvedSitePublicId]);
+  }, [isSiteReferralMembersView, routeMembersSiteId]);
 
   useEffect(() => {
     load();
@@ -99,10 +95,30 @@ export default function ProjectMembersPage() {
   return (
     <div className="owner-programs__page" data-testid="project-members-page">
       <header className="owner-programs__members-head">
-        <h2 className="owner-programs__overview-title">Участники</h2>
+        <h2 className="owner-programs__overview-title">{pageTitle}</h2>
       </header>
 
-      {loading ? (
+      {!isSiteReferralMembersView ? (
+        <div
+          className="owner-programs__members-empty owner-programs__project-access-members-empty"
+          data-testid="project-access-members-empty"
+        >
+          <p className="owner-programs__project-access-lead">
+            Здесь будут пользователи с доступом к просмотру и управлению проектом.
+          </p>
+          <div className="owner-programs__actions">
+            <button
+              type="button"
+              className="baseButton button button_size_medium baseButton__size_medium baseButton__color_primary"
+              data-testid="project-access-add-member"
+            >
+              Добавить
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {isSiteReferralMembersView && loading ? (
         <div className="owner-programs__tab-page-skel owner-programs__tab-page-skel_wide" role="status" aria-label="Загрузка">
           <span className="owner-programs__skel owner-programs__tab-page-skel_line-md" aria-hidden />
           {[0, 1, 2].map((i) => (
@@ -110,9 +126,9 @@ export default function ProjectMembersPage() {
           ))}
         </div>
       ) : null}
-      {!loading && error && <div className="owner-programs__error">{error}</div>}
+      {isSiteReferralMembersView && !loading && error ? <div className="owner-programs__error">{error}</div> : null}
 
-      {!loading && !error && (
+      {isSiteReferralMembersView && !loading && !error ? (
         <>
           {count > 0 ? (
             <p className="owner-programs__members-count" aria-live="polite">
@@ -154,7 +170,7 @@ export default function ProjectMembersPage() {
             </ul>
           )}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

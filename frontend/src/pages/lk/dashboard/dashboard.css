@@ -197,17 +197,6 @@
   gap: 10px;
 }
 
-.lk-dashboard__programs-item-bottom {
-  grid-area: bottom;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
-  text-align: right;
-}
-
 .lk-dashboard__programs-avatar {
   display: flex;
   align-items: center;
@@ -222,6 +211,15 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.08),
     0 8px 18px rgba(5, 12, 38, 0.32);
+  overflow: hidden;
+}
+
+.lk-dashboard__programs-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .lk-dashboard__programs-label {
@@ -235,14 +233,6 @@
   text-overflow: ellipsis;
 }
 
-.lk-dashboard__programs-status {
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: lowercase;
-  color: rgba(20, 184, 166, 0.95);
-  letter-spacing: 0.02em;
-}
-
 .lk-dashboard__programs-status-dot {
   width: 10px;
   height: 10px;
@@ -251,17 +241,11 @@
   background: #70cf98;
 }
 
-.lk-dashboard__programs-joined {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
-  white-space: nowrap;
-}
-
 .lk-dashboard__programs-item-link {
   position: relative;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  grid-template-areas: "avatar middle bottom";
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-areas: "avatar middle";
   column-gap: 14px;
   align-items: center;
   width: 100%;
@@ -383,10 +367,6 @@
   border-color: #4a5cf0;
 }
 
-[data-theme="light"] .lk-dashboard__programs-joined {
-  color: #83899f;
-}
-
 [data-theme="light"] .lk-dashboard__programs-item-link {
   border-bottom-color: rgba(15, 23, 42, 0.08);
 }
@@ -414,22 +394,11 @@
 @media (max-width: 900px) {
   .lk-dashboard__programs-item-link {
     grid-template-columns: 40px minmax(0, 1fr);
-    grid-template-areas:
-      "avatar middle"
-      "avatar bottom";
+    grid-template-areas: "avatar middle";
   }
 
   .lk-dashboard__programs-item-main {
     justify-content: flex-start;
-  }
-
-  .lk-dashboard__programs-item-bottom {
-    align-items: flex-start;
-    text-align: left;
-  }
-
-  .lk-dashboard__programs-joined {
-    white-space: normal;
   }
 }
 

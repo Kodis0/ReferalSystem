@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useOutletContext, useParams, useLocation } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "./CreateOwnerProjectPage.css";
@@ -43,6 +43,7 @@ function formatApiFieldErrors(payload) {
 export default function ProjectInfoPage() {
   const { sitePublicId, projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const outletContext = useOutletContext() || {};
   const { reloadProjectHead } = outletContext;
   const siteId = (sitePublicId || "").trim();
@@ -54,7 +55,21 @@ export default function ProjectInfoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const overviewPath = hasProjectId ? `/lk/partner/project/${numericProjectId}/sites` : `/lk/partner/${siteId}/overview`;
+  const overviewPath = useMemo(() => {
+    if (hasProjectId) {
+      const base = `/lk/partner/project/${numericProjectId}/sites`;
+      const params = new URLSearchParams(location.search);
+      const sid = params.get("site_public_id");
+      if (sid && isUuidString(sid.trim())) {
+        return `${base}?site_public_id=${encodeURIComponent(sid.trim())}`;
+      }
+      return base;
+    }
+    if (hasSiteId) {
+      return `/lk/partner/${siteId}/overview`;
+    }
+    return "/lk/partner";
+  }, [hasProjectId, hasSiteId, numericProjectId, siteId, location.search]);
 
   const load = useCallback(async () => {
     if (!hasSiteId && !hasProjectId) return;
@@ -157,7 +172,7 @@ export default function ProjectInfoPage() {
         <div className="page__returnButton">
           <Link
             className="tw-link link_primary link_s"
-            to={hasProjectId ? "/lk/partner" : `/lk/partner/${siteId}/overview`}
+            to={overviewPath}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="7" height="13" fill="none" viewBox="0 0 7 13" aria-hidden>
               <path

@@ -74,3 +74,43 @@ export function sitePrimaryBrowseHref(siteLike) {
     return "";
   }
 }
+
+export function domainHostFromValue(value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const raw = value.trim();
+  try {
+    if (raw.includes("://")) {
+      return new URL(raw).hostname.toLowerCase();
+    }
+  } catch {
+    /* ignore */
+  }
+  return raw.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
+}
+
+/** Host for external favicon lookup (matches site card / shell). */
+export function siteFaviconHostname(siteLike) {
+  const o = typeof siteLike?.primary_origin === "string" ? siteLike.primary_origin.trim() : "";
+  if (o) {
+    const h = domainHostFromValue(o);
+    if (h) return h;
+  }
+  const l = typeof siteLike?.primary_origin_label === "string" ? siteLike.primary_origin_label.trim() : "";
+  if (l) {
+    const asUrl = l.includes("://") ? l : `https://${l}`;
+    const h = domainHostFromValue(asUrl);
+    if (h) return h;
+  }
+  const catalogOrigin = typeof siteLike?.site_origin_label === "string" ? siteLike.site_origin_label.trim() : "";
+  if (catalogOrigin) {
+    const asUrl = catalogOrigin.includes("://") ? catalogOrigin : `https://${catalogOrigin}`;
+    const h = domainHostFromValue(asUrl);
+    if (h) return h;
+  }
+  return "";
+}
+
+export function siteExternalFaviconUrl(hostname) {
+  if (!hostname) return "";
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
+}

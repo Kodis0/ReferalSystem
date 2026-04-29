@@ -107,25 +107,26 @@ describe("Dashboard My Programs", () => {
 
   it("removes program after leaving membership", async () => {
     const siteId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    let programsPayload = [
+      {
+        site_public_id: siteId,
+        site_display_label: "Demo Shop",
+        site_origin_label: "demo.example",
+        site_status: "verified",
+        platform_preset: "tilda",
+      },
+    ];
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
-      if (String(url).includes("/users/site/join/") && options?.method === "POST") {
-        return Promise.resolve({ ok: true, json: async () => ({ status: "left" }) });
-      }
-      if (String(url).includes("/users/me/programs/")) {
+      const u = String(url);
+      if (u.includes("/users/me/programs/") && (!options?.method || options.method === "GET")) {
         return Promise.resolve({
           ok: true,
-          json: async () => ({
-            programs: [
-              {
-                site_public_id: siteId,
-                site_display_label: "Demo Shop",
-                site_origin_label: "demo.example",
-                site_status: "verified",
-                platform_preset: "tilda",
-              },
-            ],
-          }),
+          json: async () => ({ programs: programsPayload }),
         });
+      }
+      if (u.includes("/users/site/leave/") && options?.method === "POST") {
+        programsPayload = [];
+        return Promise.resolve({ ok: true, json: async () => ({ status: "left", site_public_id: siteId }) });
       }
       return Promise.reject(new Error(`unexpected fetch: ${url}`));
     });
@@ -144,10 +145,10 @@ describe("Dashboard My Programs", () => {
     });
     expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/users/site/join/"),
+      expect.stringContaining("/users/site/leave/"),
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ site_public_id: siteId, action: "leave" }),
+        body: JSON.stringify({ site_public_id: siteId }),
       })
     );
   });

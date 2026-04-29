@@ -265,7 +265,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         project.refresh_from_db()
         self.assertEqual(project.avatar_data_url, url)
 
-    def test_owner_sites_list_returns_all_ordered_newest_first(self):
+    def test_owner_sites_list_projects_ordered_oldest_first_newest_last(self):
         older_project = Project.objects.create(
             owner=self.owner,
             name="Older project",
@@ -294,12 +294,12 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r = self.api.get("/referrals/site/owner-sites/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(r.data["projects"]), 3)
-        self.assertEqual(r.data["projects"][0]["primary_site_public_id"], str(newer.public_id))
+        self.assertTrue(r.data["projects"][0]["is_default"])
+        self.assertEqual(r.data["projects"][0]["sites_count"], 0)
         self.assertEqual(r.data["projects"][1]["primary_site_public_id"], str(older.public_id))
-        self.assertEqual(r.data["projects"][0]["project"]["name"], "Newer project")
+        self.assertEqual(r.data["projects"][2]["primary_site_public_id"], str(newer.public_id))
         self.assertEqual(r.data["projects"][1]["project"]["name"], "Older project")
-        self.assertTrue(r.data["projects"][2]["is_default"])
-        self.assertEqual(r.data["projects"][2]["sites_count"], 0)
+        self.assertEqual(r.data["projects"][2]["project"]["name"], "Newer project")
         ids = [row["public_id"] for row in r.data["sites"]]
         self.assertEqual(len(ids), 2)
         self.assertEqual(ids[0], str(newer.public_id))
@@ -313,6 +313,34 @@ class SiteOwnerIntegrationApiTests(TestCase):
         for row in r.data["sites"]:
             self.assertIn("description", row)
             self.assertIn("project", row)
+
+    def test_owner_sites_list_default_project_first_even_if_newer_than_others(self):
+        """Default owner project stays first in /owner-sites/ even if created_at is newest."""
+        legacy = Project.objects.create(
+            owner=self.owner,
+            name="Legacy non-default",
+            description="",
+            is_default=False,
+        )
+        Site.objects.create(
+            owner=self.owner,
+            project=legacy,
+            publishable_key="pk_legacy_order_" + uuid.uuid4().hex,
+            allowed_origins=["https://legacy-order.example"],
+            config_json={"display_name": "Legacy non-default"},
+        )
+        default = Project.objects.get(owner=self.owner, is_default=True)
+        future = timezone.now() + datetime.timedelta(days=30)
+        past = timezone.now() - datetime.timedelta(days=30)
+        Project.objects.filter(pk=default.pk).update(created_at=future)
+        Project.objects.filter(pk=legacy.pk).update(created_at=past)
+
+        self.api.force_authenticate(self.owner)
+        r = self.api.get("/referrals/site/owner-sites/")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["projects"][0]["is_default"])
+        self.assertEqual(r.data["projects"][0]["id"], default.id)
+        self.assertEqual(r.data["projects"][1]["id"], legacy.id)
 
     def test_owner_sites_list_primary_origin_prefers_longest_hostname(self):
         project = Project.objects.create(owner=self.owner, name="Mixed origins", description="")

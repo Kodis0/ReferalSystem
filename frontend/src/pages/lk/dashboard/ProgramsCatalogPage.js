@@ -2,17 +2,8 @@ import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "./dashboard.css";
-
-function formatJoinedAt(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("ru-RU", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
 
 function programSiteLabel(program) {
   const originLabel = typeof program?.site_origin_label === "string" ? program.site_origin_label.trim() : "";
@@ -38,33 +29,6 @@ function programSearchValue(program) {
     .filter((value) => typeof value === "string" && value.trim())
     .join(" ")
     .toLowerCase();
-}
-
-function programStatusLabel(program) {
-  if (program?.program_active || program?.site_status === "active" || program?.site_status === "verified") {
-    return "Активна";
-  }
-  if (program?.site_status === "draft") return "На проверке";
-  return "Недоступна";
-}
-
-function formatCommissionPercent(value) {
-  if (value === null || value === undefined || value === "") return "";
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) return String(value);
-  return `${numberValue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%`;
-}
-
-function formatReferralLockDays(value) {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue <= 0) return "";
-  return `${numberValue.toLocaleString("ru-RU")} дн.`;
-}
-
-function formatParticipantsCount(value) {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 0) return "";
-  return numberValue.toLocaleString("ru-RU");
 }
 
 export default function ProgramsCatalogPage() {
@@ -157,11 +121,7 @@ export default function ProgramsCatalogPage() {
         {programs !== null && !error && filteredPrograms.length > 0 ? (
           <ul className="lk-dashboard__programs-list">
             {filteredPrograms.map((p) => {
-              const joinedAt = formatJoinedAt(p.joined_at);
               const label = programSiteLabel(p);
-              const commission = formatCommissionPercent(p.commission_percent);
-              const lockDays = formatReferralLockDays(p.referral_lock_days);
-              const participants = formatParticipantsCount(p.participants_count);
               return (
                 <li key={p.site_public_id} className="lk-dashboard__programs-item">
                   <div className="lk-dashboard__programs-item-link">
@@ -173,7 +133,11 @@ export default function ProgramsCatalogPage() {
                     >
                       <div className="lk-dashboard__programs-item-top">
                         <div className="lk-dashboard__programs-avatar" aria-hidden="true">
-                          <span>{programAvatarLetter(label)}</span>
+                          <SiteFaviconAvatar
+                            siteLike={p}
+                            letter={programAvatarLetter(label)}
+                            imgClassName="lk-dashboard__programs-avatar-img"
+                          />
                         </div>
                       </div>
                       <div className="lk-dashboard__programs-item-main">
@@ -181,36 +145,6 @@ export default function ProgramsCatalogPage() {
                         <span className="lk-dashboard__programs-label">{label}</span>
                       </div>
                     </Link>
-                    <div className="lk-dashboard__programs-item-bottom">
-                      <span className="lk-dashboard__programs-status">
-                        Статус программы: {programStatusLabel(p)}
-                      </span>
-                      <span className="lk-dashboard__programs-status">
-                        Ваш статус: {p.joined ? "Вы участвуете" : "Вы не участвуете"}
-                      </span>
-                      {commission ? (
-                        <span className="lk-dashboard__programs-status">Вознаграждение: {commission}</span>
-                      ) : null}
-                      {lockDays ? (
-                        <span className="lk-dashboard__programs-status">Срок закрепления: {lockDays}</span>
-                      ) : null}
-                      {participants ? (
-                        <span className="lk-dashboard__programs-status">Участников: {participants}</span>
-                      ) : null}
-                      {p.joined ? (
-                        <span className="lk-dashboard__programs-joined">
-                          {joinedAt ? `Дата вступления: ${joinedAt}` : "Вы участвуете"}
-                        </span>
-                      ) : null}
-                      <Link
-                        to={`/lk/referral-program/${p.site_public_id}`}
-                        state={{ from: "/lk/programs" }}
-                        className="lk-dashboard__programs-join-btn"
-                        data-testid={`programs-catalog-open-${p.site_public_id}`}
-                      >
-                        Открыть программу
-                      </Link>
-                    </div>
                   </div>
                 </li>
               );

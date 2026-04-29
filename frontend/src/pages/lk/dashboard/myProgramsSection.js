@@ -3,6 +3,7 @@ import { Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "../owner-programs/domainCountryFlagSvg";
+import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "../owner-programs/owner-programs.css";
 
 function programSiteLabel(program) {
@@ -142,25 +143,29 @@ export function MyProgramsSection() {
     setLeavingSiteId(sitePublicId);
     setLeaveError("");
     try {
-      let res = await fetch(API_ENDPOINTS.siteCtaJoin, {
+      const leaveRes = await fetch(API_ENDPOINTS.siteCtaLeave, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ site_public_id: sitePublicId, action: "leave" }),
+        body: JSON.stringify({ site_public_id: sitePublicId }),
       });
-      if (!res.ok) {
+      if (!leaveRes.ok) {
         const fallbackRes = await fetch(API_ENDPOINTS.myProgramDetail(sitePublicId), {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
-        res = fallbackRes.status === 404 ? { ok: true } : fallbackRes;
+        if (!fallbackRes.ok && fallbackRes.status !== 404) {
+          throw new Error(`program_leave_failed_${fallbackRes.status || "network"}`);
+        }
       }
-      if (!res.ok) throw new Error(`program_leave_failed_${res.status || "network"}`);
-      setPrograms((current) =>
-        Array.isArray(current) ? current.filter((item) => item.site_public_id !== sitePublicId) : current
-      );
+      const listRes = await fetch(API_ENDPOINTS.myPrograms, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!listRes.ok) throw new Error("program_leave_list_failed");
+      const listData = await listRes.json();
+      setPrograms(Array.isArray(listData.programs) ? listData.programs : []);
     } catch (error) {
       const raw = error instanceof Error ? error.message.replace("program_leave_failed_", "") : "";
       const suffix = raw && raw !== "program_leave_failed" ? ` (${raw})` : "";
@@ -223,7 +228,7 @@ export function MyProgramsSection() {
                 <div className="owner-programs__service-card-top-row">
                   <div className="owner-programs__service-card-hero">
                     <div className="owner-programs__service-card-avatar">
-                      <span>{title.slice(0, 1).toUpperCase() || "P"}</span>
+                      <SiteFaviconAvatar siteLike={p} letter={title.slice(0, 1).toUpperCase() || "P"} />
                     </div>
                   </div>
                   <div className="owner-programs__service-card-top-right">

@@ -215,9 +215,11 @@ export default function CreateOwnerProjectPage() {
         return;
       }
       if (typeof payload?.id === "number") {
+        window.dispatchEvent(new Event("lk-owner-projects-updated"));
         navigate(`/lk/partner/project/${payload.id}/sites`, { replace: true });
         return;
       }
+      window.dispatchEvent(new Event("lk-owner-projects-updated"));
       navigate("/lk/partner", { replace: true });
       return;
     } catch (err) {

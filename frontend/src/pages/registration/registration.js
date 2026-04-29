@@ -3,7 +3,7 @@ import "intl-tel-input/styles";
 import "./registrationIntlTel.css";
 import intlTelInput from "intl-tel-input/intlTelInputWithUtils";
 import ruI18n from "intl-tel-input/i18n/ru";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
 import { LoginBrandLogo } from "../login/LoginBrandLogo";
@@ -84,57 +84,56 @@ function Registration() {
   const phoneItiRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  /** Logged-in user + CTA site: automatic join instead of signup form. */
+  /** Logged-in user + CTA site: join only after explicit confirmation (no silent POST on mount). */
   const [ctaJoinPhase, setCtaJoinPhase] = useState("idle");
 
-  useEffect(() => {
-    const body = buildSiteCtaJoinRequestBody(ctaContext);
-    if (!body) return;
+  const joinBody = useMemo(
+    () => buildSiteCtaJoinRequestBody(ctaContext),
+    [ctaContext.site_public_id, ctaContext.ref]
+  );
+
+  const tokenTrim = (localStorage.getItem("access_token") || "").trim();
+  const hasLoggedInCta = Boolean(tokenTrim && joinBody);
+  const ctaBusy = ctaJoinPhase === "loading" || ctaJoinPhase === "done";
+
+  const performCtaJoin = useCallback(async () => {
+    if (!joinBody) return;
     const token = (localStorage.getItem("access_token") || "").trim();
     if (!token) return;
 
-    let cancelled = false;
-    (async () => {
-      setCtaJoinPhase("loading");
-      try {
-        const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
-          body: JSON.stringify(body),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (res.status === 401) {
-          setCtaJoinPhase("idle");
-          return;
-        }
-        if (res.ok) {
-          setCtaJoinPhase("done");
-          const siteId = data.site_public_id;
-          const outcome =
-            data.status === "already_joined" ? "already_joined" : "joined";
-          const path = buildPostJoinDashboardPath(siteId, outcome, data.site_display_label);
-          window.location.href = `${window.location.origin}${path}`;
-          return;
-        }
-        setCtaJoinPhase("error");
-        setMessage(formatRegistrationErrors(data));
-      } catch (err) {
-        if (!cancelled) {
-          console.error("Site CTA join error:", err);
-          setCtaJoinPhase("error");
-          setMessage("Ошибка сети или сервера. Попробуйте позже.");
-        }
+    setCtaJoinPhase("loading");
+    setMessage("");
+    try {
+      const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify(joinBody),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setCtaJoinPhase("idle");
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ctaContext.site_public_id, ctaContext.ref]);
+      if (res.ok) {
+        setCtaJoinPhase("done");
+        const siteId = data.site_public_id;
+        const outcome = data.status === "already_joined" ? "already_joined" : "joined";
+        const path = buildPostJoinDashboardPath(siteId, outcome, data.site_display_label);
+        window.location.href = `${window.location.origin}${path}`;
+        return;
+      }
+      setCtaJoinPhase("error");
+      setMessage(formatRegistrationErrors(data));
+    } catch (err) {
+      console.error("Site CTA join error:", err);
+      setCtaJoinPhase("error");
+      setMessage("Ошибка сети или сервера. Попробуйте позже.");
+    }
+  }, [joinBody]);
 
   useEffect(() => {
     const el = phoneInputRef.current;
@@ -261,8 +260,7 @@ function Registration() {
   };
 
   const messageIsSuccess = message.startsWith("✅");
-  const ctaBusy = ctaJoinPhase === "loading" || ctaJoinPhase === "done";
-  const showForm = !ctaBusy;
+  const showSignupForm = !hasLoggedInCta;
 
   return (
     <div className="login-page registration-page">
@@ -273,11 +271,35 @@ function Registration() {
         <div className="login-page__wrapper">
           <div className="login-page__container">
             <div className="login-page__welcome login-page__welcome--no-avatar">
-              <h1 className="login-page__title">Регистрация в LUMO</h1>
-              {ctaJoinPhase === "loading" ? (
-                <p className="login-page__subtitle login-page__subtitle--cta-hint">
-                  Проверяем вход и подключаем к площадке…
-                </p>
+              <h1 className="login-page__title">
+                {hasLoggedInCta ? "Приглашение в программу" : "Регистрация в LUMO"}
+              </h1>
+              {hasLoggedInCta ? (
+                <>
+                  {!ctaBusy ? (
+                    <p className="login-page__subtitle">
+                      Вы уже вошли в аккаунт. Чтобы участвовать в программе по этой ссылке, нажмите кнопку ниже.
+                    </p>
+                  ) : (
+                    <p className="login-page__subtitle login-page__subtitle--cta-hint">
+                      Подключаем к площадке…
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__login-btn"
+                    style={{ marginTop: 12 }}
+                    onClick={performCtaJoin}
+                    disabled={ctaBusy}
+                  >
+                    {ctaBusy ? "Подключаем…" : "Вступить в программу"}
+                  </button>
+                  <p className="login-page__footer" style={{ marginTop: 20 }}>
+                    <Link to="/lk/dashboard" className="login-page__footer-link">
+                      Перейти в личный кабинет без вступления
+                    </Link>
+                  </p>
+                </>
               ) : null}
             </div>
 
@@ -294,7 +316,7 @@ function Registration() {
               className="login-page__form"
               onSubmit={handleSubmit}
               noValidate
-              style={{ display: showForm ? undefined : "none" }}
+              style={{ display: showSignupForm ? undefined : "none" }}
             >
               <div className="login-page__form-block">
                 <p className="login-page__form-block-title">ФИО</p>
@@ -462,12 +484,14 @@ function Registration() {
               </div>
             </form>
 
-            <p className="login-page__footer">
-              Уже есть аккаунт?{" "}
-              <Link to="/login" className="login-page__footer-link">
-                Войти
-              </Link>
-            </p>
+            {showSignupForm ? (
+              <p className="login-page__footer">
+                Уже есть аккаунт?{" "}
+                <Link to="/login" className="login-page__footer-link">
+                  Войти
+                </Link>
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

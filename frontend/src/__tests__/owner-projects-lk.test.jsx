@@ -712,7 +712,7 @@ describe("ProjectOverviewPage", () => {
     expect(screen.getByTestId(`project-child-site-${siteId}`)).toBeInTheDocument();
     expect(screen.getByLabelText("Флаг страны RU")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByTestId(`project-child-site-${siteId}`)).toHaveTextContent("В сети · текущий");
+      expect(screen.getByTestId(`project-child-site-${siteId}`)).toHaveTextContent("shop.ru");
     });
   });
 });
@@ -816,7 +816,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByTestId("project-services-empty")).toHaveTextContent("У проекта пока нет сайтов.");
     expect(screen.getByTestId("project-delete-empty-button")).toBeInTheDocument();
     expect(screen.queryByTestId("project-add-site-origin")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Участники" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Участники проекта" })).toBeInTheDocument();
   });
 
   it("hides delete action for default empty project", async () => {
@@ -1267,7 +1267,48 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByText("new comment")).toBeInTheDocument();
   });
 
-  it("shows participants tab for project and loads members from primary site", async () => {
+  it("project-level members tab shows project access placeholder and does not load referral members", async () => {
+    const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeOwnerProjectsPayload([
+              makeProject({
+                id: 501,
+                name: "Shared project",
+                sites: [makeSite({ public_id: siteA, project_id: 501, primary_origin: "https://alpha.example", project: { name: "Shared project" } })],
+              }),
+            ]),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: "missing" }) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/partner/project/501/members"]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Участники проекта" })).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("project-access-members-empty")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("project-access-add-member")).toBeInTheDocument();
+    const memberCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes("/referrals/site/integration/members/"));
+    expect(memberCalls).toHaveLength(0);
+  });
+
+  it("site-scoped members tab loads referral members from integration API", async () => {
     const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
@@ -1297,11 +1338,10 @@ describe("SiteProjectLayout child sites", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/lk/partner/project/501/members"]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/501/sites/${siteA}/members`]}>
         <Routes>
           <Route path="/lk/partner/project/:projectId" element={<SiteProjectLayout />}>
-            <Route path="overview" element={<ProjectOverviewPage />} />
-            <Route path="members" element={<ProjectMembersPage />} />
+            <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1316,7 +1356,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByText(/ABC/)).toBeInTheDocument();
   });
 
-  it("shows empty participants state for project without sites", async () => {
+  it("project members tab without sites shows project access placeholder", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       const u = String(url);
       if (u.includes("/referrals/site/owner-sites/")) {
@@ -1347,10 +1387,13 @@ describe("SiteProjectLayout child sites", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("members-empty")).toBeInTheDocument();
+      expect(screen.getByTestId("project-access-members-empty")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Участники" })).toBeInTheDocument();
-    expect(screen.getByText(/Пока никто не присоединился к реферальной программе/i)).toBeInTheDocument();
+    expect(screen.getByTestId("project-access-add-member")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Участники проекта" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Здесь будут пользователи с доступом к просмотру и управлению проектом/i),
+    ).toBeInTheDocument();
   });
 
   it("hides shell chrome while create-site form is open", async () => {
@@ -1716,7 +1759,7 @@ describe("SiteProjectLayout child sites", () => {
     await waitFor(() => {
       expect(screen.queryByTestId(`project-child-site-${siteB}`)).not.toBeInTheDocument();
     });
-    expect(screen.getByText("Сайтов: 1")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Сайты 1" })).toBeInTheDocument();
 
     resolveDeleteRequest({
       ok: true,
@@ -1828,8 +1871,8 @@ describe("ProjectMembersPage", () => {
 
   const siteId = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 
-  it("renders empty state when there are no members", async () => {
-    jest.spyOn(global, "fetch").mockResolvedValue({
+  it("project-level route shows project access placeholder without integration request", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ count: 0, members: [] }),
     });
@@ -1837,8 +1880,33 @@ describe("ProjectMembersPage", () => {
     render(
       <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
         <Routes>
-          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+          <Route path="/lk/partner/project/:projectId" element={<Outlet />}>
             <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-access-members-empty")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("project-access-add-member")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Участники проекта" })).toBeInTheDocument();
+    const memberCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes("/referrals/site/integration/members/"));
+    expect(memberCalls).toHaveLength(0);
+  });
+
+  it("site-scoped route renders empty state when there are no referral members", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ count: 0, members: [] }),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/sites/${siteId}/members`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<Outlet />}>
+            <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1851,7 +1919,7 @@ describe("ProjectMembersPage", () => {
     expect(screen.getByText(/Пока никто не присоединился к реферальной программе/i)).toBeInTheDocument();
   });
 
-  it("renders member rows from API", async () => {
+  it("site-scoped route renders member rows from API", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -1864,10 +1932,10 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/sites/${siteId}/members`]}>
         <Routes>
-          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
-            <Route path="members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<Outlet />}>
+            <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1882,7 +1950,7 @@ describe("ProjectMembersPage", () => {
     expect(screen.getByText(/ABC/)).toBeInTheDocument();
   });
 
-  it("shows error when members request fails", async () => {
+  it("site-scoped route shows error when members request fails", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 404,
@@ -1890,10 +1958,10 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/sites/${siteId}/members`]}>
         <Routes>
-          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
-            <Route path="members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<Outlet />}>
+            <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1904,7 +1972,7 @@ describe("ProjectMembersPage", () => {
     });
   });
 
-  it("shows error when members request fails with machine code only", async () => {
+  it("site-scoped route shows error when members request fails with machine code only", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 404,
@@ -1912,10 +1980,10 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/sites/${siteId}/members`]}>
         <Routes>
-          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
-            <Route path="members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<Outlet />}>
+            <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -1926,7 +1994,7 @@ describe("ProjectMembersPage", () => {
     });
   });
 
-  it("prefers machine code over detail when both are present", async () => {
+  it("site-scoped route prefers machine code over detail when both are present", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 404,
@@ -1934,10 +2002,10 @@ describe("ProjectMembersPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={[`/lk/partner/project/1/members`]}>
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/sites/${siteId}/members`]}>
         <Routes>
-          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
-            <Route path="members" element={<ProjectMembersPage />} />
+          <Route path="/lk/partner/project/:projectId" element={<Outlet />}>
+            <Route path="sites/:sitePublicId/members" element={<ProjectMembersPage />} />
           </Route>
         </Routes>
       </MemoryRouter>

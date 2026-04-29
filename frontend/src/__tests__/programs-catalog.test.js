@@ -60,15 +60,11 @@ describe("Programs Catalog", () => {
       expect(screen.getByText("demo.example")).toBeInTheDocument();
       expect(screen.getByText("other.example")).toBeInTheDocument();
     });
-    expect(screen.getByText("Ваш статус: Вы участвуете")).toBeInTheDocument();
-    expect(screen.getByText("Ваш статус: Вы не участвуете")).toBeInTheDocument();
-    expect(screen.getAllByText("Статус программы: Активна")).toHaveLength(2);
     expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
 
     const links = screen.getAllByTestId("programs-catalog-list-link");
     expect(links[0]).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     expect(links[1]).toHaveAttribute("href", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
-    expect(screen.getAllByRole("link", { name: "Открыть программу" })).toHaveLength(2);
   });
 
   it("mount loads catalog via GET /users/programs/ only and never POST /users/site/join/", async () => {

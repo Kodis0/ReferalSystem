@@ -49,8 +49,10 @@ export function normalizeOwnerProjectListRow(row) {
       : typeof rawProject.id === "number"
         ? rawProject.id
         : null;
+  const isDefault = Boolean(row.is_default ?? rawProject.is_default);
   return {
     id: projectId,
+    is_default: isDefault,
     primary_site_public_id: isUuidString(primarySitePublicId) ? primarySitePublicId : sites[0]?.public_id || "",
     sites_count: typeof row.sites_count === "number" ? row.sites_count : sites.length,
     project: {
@@ -58,9 +60,22 @@ export function normalizeOwnerProjectListRow(row) {
       name: typeof rawProject.name === "string" ? rawProject.name.trim() : "",
       description: typeof rawProject.description === "string" ? rawProject.description.trim() : "",
       avatar_data_url: typeof rawProject.avatar_data_url === "string" ? rawProject.avatar_data_url.trim() : "",
+      is_default: isDefault,
     },
     sites,
   };
+}
+
+/** Default project first, then others by numeric id (creation order). */
+export function sortOwnerProjectsStable(projects) {
+  return [...projects].sort((a, b) => {
+    const defA = a?.is_default ? 1 : 0;
+    const defB = b?.is_default ? 1 : 0;
+    if (defA !== defB) return defB - defA;
+    const idA = typeof a?.id === "number" ? a.id : Number.MAX_SAFE_INTEGER;
+    const idB = typeof b?.id === "number" ? b.id : Number.MAX_SAFE_INTEGER;
+    return idA - idB;
+  });
 }
 
 export async function fetchOwnerSitesList() {
@@ -78,7 +93,7 @@ export async function fetchOwnerSitesList() {
   }
   const rawProjects = Array.isArray(payload.projects) ? payload.projects : [];
   const rawSites = Array.isArray(payload.sites) ? payload.sites : [];
-  const projects = rawProjects.map(normalizeOwnerProjectListRow).filter(Boolean);
+  const projects = sortOwnerProjectsStable(rawProjects.map(normalizeOwnerProjectListRow).filter(Boolean));
   const sites = rawSites.map(normalizeOwnerSiteListRow).filter(Boolean);
   return { ok: true, projects, sites, error: "" };
 }

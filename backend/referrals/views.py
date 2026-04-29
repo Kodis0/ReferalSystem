@@ -203,7 +203,7 @@ def _owner_project_payload(*, project: Project | None, sites: list[Site]) -> dic
 def _owner_project_groups(user) -> list[dict]:
     grouped: dict[object, dict] = {}
     ordered_keys: list[object] = []
-    for project in Project.objects.filter(owner=user).order_by("-created_at", "-id"):
+    for project in Project.objects.filter(owner=user).order_by("-is_default", "created_at", "id"):
         ordered_keys.append(project.id)
         grouped[project.id] = {"project": project, "sites": []}
     for site in _owner_site_options(user):
