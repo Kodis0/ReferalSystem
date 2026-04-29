@@ -55,6 +55,10 @@ if _cors_raw:
     ]
 else:
     CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
+    if DEBUG:
+        for _local_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+            if _local_origin not in CORS_ALLOWED_ORIGINS:
+                CORS_ALLOWED_ORIGINS.append(_local_origin)
 
 # Third-party landing pages that POST /referrals/capture/ with credentials (also checked in
 # referrals.services.referral_capture_origin_allowed via CORS_ALLOWED_ORIGINS).

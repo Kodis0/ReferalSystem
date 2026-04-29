@@ -58,6 +58,7 @@ def _member_program_payload(site, *, membership=None):
         "site_origin_label": site_origin_label,
         "site_description": site_owner_shell_description(site),
         "site_status": site.status,
+        "platform_preset": site.platform_preset,
         "program_active": site_allows_cta_signup_membership(site),
         "commission_percent": str(site_commission_percent(site)),
         "referral_lock_days": int(getattr(django_settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)),
@@ -182,6 +183,19 @@ class SiteCtaJoinView(APIView):
         if not ser.is_valid():
             return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
         site_pid = ser.validated_data["site_public_id"]
+        action = str(request.data.get("action") or "").strip().lower()
+        if action == "leave":
+            site = get_site_by_public_id(site_pid)
+            if site is None:
+                return Response({"detail": "site_not_found"}, status=status.HTTP_404_NOT_FOUND)
+            deleted, _ = SiteMembership.objects.filter(site=site, user=request.user).delete()
+            return Response(
+                {
+                    "status": "left" if deleted else "already_left",
+                    "site_public_id": str(site.public_id),
+                },
+                status=status.HTTP_200_OK,
+            )
         requested_ref = (
             (ser.validated_data.get("ref_code") or ser.validated_data.get("ref") or "")
             or ""
@@ -408,6 +422,29 @@ class ProgramsCatalogView(APIView):
         return Response({"programs": programs}, status=status.HTTP_200_OK)
 
 
+class SiteCtaLeaveView(APIView):
+    """
+    Authenticated member action: leave a referral Site program.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = SiteCtaJoinSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        site = get_site_by_public_id(serializer.validated_data["site_public_id"])
+        if site is None:
+            return Response({"detail": "site_not_found"}, status=status.HTTP_404_NOT_FOUND)
+        deleted, _ = SiteMembership.objects.filter(site=site, user=request.user).delete()
+        return Response(
+            {
+                "status": "left" if deleted else "already_left",
+                "site_public_id": str(site.public_id),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class ProgramCatalogDetailView(APIView):
     """
     Member-facing detail for a catalog Site program, including unjoined programs.
@@ -451,6 +488,15 @@ class MyProgramDetailView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         payload = _member_program_payload(membership.site, membership=membership)
         return Response({"program": payload}, status=status.HTTP_200_OK)
+
+    def delete(self, request, site_public_id):
+        site = get_site_by_public_id(site_public_id)
+        if site is None:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        deleted, _ = SiteMembership.objects.filter(site=site, user=request.user).delete()
+        if deleted == 0:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):

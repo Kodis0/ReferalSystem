@@ -40,10 +40,39 @@ function programSearchValue(program) {
     .toLowerCase();
 }
 
+function programStatusLabel(program) {
+  if (program?.program_active || program?.site_status === "active" || program?.site_status === "verified") {
+    return "Активна";
+  }
+  if (program?.site_status === "draft") return "На проверке";
+  return "Недоступна";
+}
+
+function formatCommissionPercent(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return String(value);
+  return `${numberValue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%`;
+}
+
+function formatReferralLockDays(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return "";
+  return `${numberValue.toLocaleString("ru-RU")} дн.`;
+}
+
+function formatParticipantsCount(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue < 0) return "";
+  return numberValue.toLocaleString("ru-RU");
+}
+
 export default function ProgramsCatalogPage() {
   const [programs, setPrograms] = useState(null);
   const [error, setError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [joiningSiteId, setJoiningSiteId] = useState("");
+  const [joinError, setJoinError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +114,38 @@ export default function ProgramsCatalogPage() {
     ? programs.filter((program) => !normalizedSearchQuery || programSearchValue(program).includes(normalizedSearchQuery))
     : [];
 
+  const onJoinProgram = async (program) => {
+    const token = localStorage.getItem("access_token");
+    if (!token || !program?.site_public_id || joiningSiteId) return;
+    setJoiningSiteId(program.site_public_id);
+    setJoinError("");
+    try {
+      const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ site_public_id: program.site_public_id }),
+      });
+      if (!res.ok) throw new Error("program_join_failed");
+      const joinedAt = new Date().toISOString();
+      setPrograms((current) =>
+        Array.isArray(current)
+          ? current.map((item) =>
+              item.site_public_id === program.site_public_id
+                ? { ...item, joined: true, joined_at: item.joined_at || joinedAt }
+                : item
+            )
+          : current
+      );
+    } catch {
+      setJoinError("Не удалось присоединиться к программе. Попробуйте позже.");
+    } finally {
+      setJoiningSiteId("");
+    }
+  };
+
   return (
     <div className="lk-dashboard">
       <section className="lk-dashboard__programs lk-dashboard__programs_catalog" aria-labelledby="programs-catalog-heading">
@@ -118,7 +179,10 @@ export default function ProgramsCatalogPage() {
           </p>
         ) : null}
         {programs !== null && !error && programs.length === 0 ? (
-          <p className="lk-dashboard__programs-muted">Пока нет подключенных программ.</p>
+          <div className="lk-dashboard__programs-muted">
+            <p>Пока нет доступных программ.</p>
+            <p>Когда владельцы сайтов опубликуют реферальные программы, они появятся здесь.</p>
+          </div>
         ) : null}
         {programs !== null && !error && programs.length > 0 && filteredPrograms.length === 0 ? (
           <p className="lk-dashboard__programs-muted">По вашему запросу программ не найдено.</p>
@@ -129,41 +193,68 @@ export default function ProgramsCatalogPage() {
             {filteredPrograms.map((p) => {
               const joinedAt = formatJoinedAt(p.joined_at);
               const label = programSiteLabel(p);
-              const itemContent = (
-                <>
-                  <div className="lk-dashboard__programs-item-top">
-                    <div className="lk-dashboard__programs-avatar" aria-hidden="true">
-                      <span>{programAvatarLetter(label)}</span>
-                    </div>
-                  </div>
-                  <div className="lk-dashboard__programs-item-main">
-                    <span className="lk-dashboard__programs-status-dot" aria-hidden="true" />
-                    <span className="lk-dashboard__programs-label">{label}</span>
-                  </div>
-                  <div className="lk-dashboard__programs-item-bottom">
-                    <span className="lk-dashboard__programs-status">
-                      {p.joined ? "Подключена" : p.site_status}
-                    </span>
-                    <span className="lk-dashboard__programs-joined">
-                      {joinedAt ? `Дата подключения: ${joinedAt}` : "Доступна для подключения"}
-                    </span>
-                  </div>
-                </>
-              );
+              const joiningThisProgram = joiningSiteId === p.site_public_id;
+              const commission = formatCommissionPercent(p.commission_percent);
+              const lockDays = formatReferralLockDays(p.referral_lock_days);
+              const participants = formatParticipantsCount(p.participants_count);
               return (
                 <li key={p.site_public_id} className="lk-dashboard__programs-item">
-                  <Link
-                    to={`/lk/referral-program/${p.site_public_id}`}
-                    className="lk-dashboard__programs-item-link"
-                    data-testid="programs-catalog-list-link"
-                  >
-                    {itemContent}
-                  </Link>
+                  <div className="lk-dashboard__programs-item-link">
+                    <Link
+                      to={`/lk/referral-program/${p.site_public_id}`}
+                      state={{ from: "/lk/programs" }}
+                      className="lk-dashboard__programs-item-content"
+                      data-testid="programs-catalog-list-link"
+                    >
+                      <div className="lk-dashboard__programs-item-top">
+                        <div className="lk-dashboard__programs-avatar" aria-hidden="true">
+                          <span>{programAvatarLetter(label)}</span>
+                        </div>
+                      </div>
+                      <div className="lk-dashboard__programs-item-main">
+                        <span className="lk-dashboard__programs-status-dot" aria-hidden="true" />
+                        <span className="lk-dashboard__programs-label">{label}</span>
+                      </div>
+                    </Link>
+                    <div className="lk-dashboard__programs-item-bottom">
+                      <span className="lk-dashboard__programs-status">
+                        Статус программы: {programStatusLabel(p)}
+                      </span>
+                      <span className="lk-dashboard__programs-status">
+                        Ваш статус: {p.joined ? "Вы участвуете" : "Вы не участвуете"}
+                      </span>
+                      {commission ? (
+                        <span className="lk-dashboard__programs-status">Вознаграждение: {commission}</span>
+                      ) : null}
+                      {lockDays ? (
+                        <span className="lk-dashboard__programs-status">Закрепление клиента: {lockDays}</span>
+                      ) : null}
+                      {participants ? (
+                        <span className="lk-dashboard__programs-status">Участников: {participants}</span>
+                      ) : null}
+                      {p.joined ? (
+                        <span className="lk-dashboard__programs-joined">
+                          {joinedAt ? `Дата вступления: ${joinedAt}` : "Вы участвуете"}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="lk-dashboard__programs-join-btn"
+                          onClick={() => onJoinProgram(p)}
+                          disabled={joiningThisProgram || Boolean(joiningSiteId)}
+                          data-testid={`programs-catalog-join-${p.site_public_id}`}
+                        >
+                          {joiningThisProgram ? "Присоединяем…" : "Присоединиться"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </li>
               );
             })}
           </ul>
         ) : null}
+        {joinError ? <p className="lk-dashboard__programs-muted">{joinError}</p> : null}
       </section>
     </div>
   );

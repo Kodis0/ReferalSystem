@@ -99,6 +99,96 @@ class MyProgramsApiTests(TestCase):
         self.assertFalse(available["joined"])
         self.assertNotIn("joined_at", available)
 
+    def test_programs_catalog_get_does_not_create_membership(self):
+        available_site = self._site(
+            "catalog_no_side_effect",
+            allowed_origins=["https://available-no-side-effect.example"],
+            config_json={"site_display_name": "Available No Side Effect"},
+        )
+
+        self.api.force_authenticate(user=self.user_a)
+        before = SiteMembership.objects.filter(site=available_site, user=self.user_a).count()
+        r = self.api.get("/users/programs/")
+        after = SiteMembership.objects.filter(site=available_site, user=self.user_a).count()
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(before, 0)
+        self.assertEqual(after, 0)
+        program = next(
+            x for x in r.data["programs"] if x["site_public_id"] == str(available_site.public_id)
+        )
+        self.assertFalse(program["joined"])
+        self.assertNotIn("joined_at", program)
+
+    def test_catalog_detail_and_my_programs_get_do_not_create_memberships(self):
+        sites = [
+            self._site(
+                f"read_only_flow_{idx}",
+                allowed_origins=[f"https://read-only-flow-{idx}.example"],
+                config_json={"site_display_name": f"Read Only Flow {idx}"},
+            )
+            for idx in range(3)
+        ]
+
+        self.api.force_authenticate(user=self.user_a)
+        self.assertEqual(SiteMembership.objects.filter(user=self.user_a).count(), 0)
+
+        catalog = self.api.get("/users/programs/")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertEqual(SiteMembership.objects.filter(user=self.user_a).count(), 0)
+
+        detail = self.api.get(f"/users/programs/{sites[0].public_id}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertFalse(detail.data["program"]["joined"])
+        self.assertEqual(SiteMembership.objects.filter(user=self.user_a).count(), 0)
+
+        my_programs = self.api.get("/users/me/programs/")
+        self.assertEqual(my_programs.status_code, 200)
+        self.assertEqual(my_programs.data["programs"], [])
+        self.assertEqual(SiteMembership.objects.filter(user=self.user_a).count(), 0)
+
+    def test_join_one_program_exposes_only_one_my_program(self):
+        sites = [
+            self._site(
+                f"join_one_flow_{idx}",
+                allowed_origins=[f"https://join-one-flow-{idx}.example"],
+                config_json={"site_display_name": f"Join One Flow {idx}"},
+            )
+            for idx in range(3)
+        ]
+
+        self.api.force_authenticate(user=self.user_a)
+        joined = self.api.post(
+            "/users/site/join/",
+            data={"site_public_id": str(sites[0].public_id)},
+            format="json",
+        )
+        self.assertEqual(joined.status_code, 200)
+        self.assertEqual(SiteMembership.objects.filter(user=self.user_a).count(), 1)
+        self.assertTrue(SiteMembership.objects.filter(site=sites[0], user=self.user_a).exists())
+        self.assertFalse(SiteMembership.objects.filter(site=sites[1], user=self.user_a).exists())
+        self.assertFalse(SiteMembership.objects.filter(site=sites[2], user=self.user_a).exists())
+
+        my_programs = self.api.get("/users/me/programs/")
+        self.assertEqual(my_programs.status_code, 200)
+        self.assertEqual(len(my_programs.data["programs"]), 1)
+        self.assertEqual(my_programs.data["programs"][0]["site_public_id"], str(sites[0].public_id))
+
+        catalog = self.api.get("/users/programs/")
+        flags = {
+            row["site_public_id"]: row["joined"]
+            for row in catalog.data["programs"]
+            if row["site_public_id"] in {str(site.public_id) for site in sites}
+        }
+        self.assertEqual(
+            flags,
+            {
+                str(sites[0].public_id): True,
+                str(sites[1].public_id): False,
+                str(sites[2].public_id): False,
+            },
+        )
+
     def test_returns_only_current_user_memberships_newest_first(self):
         site_a = self._site("a", config_json={"site_display_name": "Shop Alpha"})
         site_b = self._site("b", config_json={"site_display_name": "Shop Beta"})
@@ -123,6 +213,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(programs[0]["site_display_label"], "Shop Beta")
         self.assertEqual(programs[0]["site_origin_label"], "")
         self.assertEqual(programs[0]["site_status"], Site.Status.VERIFIED)
+        self.assertEqual(programs[0]["platform_preset"], Site.PlatformPreset.TILDA)
         self.assertEqual(programs[1]["site_public_id"], str(site_a.public_id))
         self.assertEqual(programs[1]["site_display_label"], "Shop Alpha")
         self.assertNotIn(str(other_site.public_id), [x["site_public_id"] for x in programs])
@@ -181,6 +272,9 @@ class MyProgramsApiTests(TestCase):
         self.assertFalse(prog["joined"])
         self.assertNotIn("joined_at", prog)
         self.assertNotIn("ref_code", prog)
+        self.assertFalse(
+            SiteMembership.objects.filter(site=site, user=self.user_a).exists()
+        )
 
     def test_program_catalog_detail_uses_site_commission_percent(self):
         site = self._site(
@@ -261,6 +355,34 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(joined.status_code, 200)
         self.assertTrue(SiteMembership.objects.filter(site=site, user=self.user_a).exists())
 
+    def test_logged_in_leave_removes_membership(self):
+        site = self._site("leave_flow", config_json={"site_display_name": "Leave Flow"})
+        SiteMembership.objects.create(site=site, user=self.user_a)
+        SiteMembership.objects.create(site=site, user=self.user_b)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.post(
+            "/users/site/leave/",
+            data={"site_public_id": str(site.public_id)},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "left")
+        self.assertFalse(SiteMembership.objects.filter(site=site, user=self.user_a).exists())
+        self.assertTrue(SiteMembership.objects.filter(site=site, user=self.user_b).exists())
+
+    def test_logged_in_leave_is_idempotent(self):
+        site = self._site("leave_flow_missing", config_json={"site_display_name": "Leave Missing"})
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.post(
+            "/users/site/leave/",
+            data={"site_public_id": str(site.public_id)},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "already_left")
+
     def test_program_detail_own_membership(self):
         site = self._site(
             "detail_own",
@@ -293,6 +415,24 @@ class MyProgramsApiTests(TestCase):
 
         self.api.force_authenticate(user=self.user_a)
         r = self.api.get(f"/users/me/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_program_detail_delete_removes_own_membership(self):
+        site = self._site("detail_leave", config_json={"site_display_name": "Leave Program"})
+        SiteMembership.objects.create(site=site, user=self.user_a)
+        SiteMembership.objects.create(site=site, user=self.user_b)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.delete(f"/users/me/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 204)
+        self.assertFalse(SiteMembership.objects.filter(site=site, user=self.user_a).exists())
+        self.assertTrue(SiteMembership.objects.filter(site=site, user=self.user_b).exists())
+
+    def test_program_detail_delete_unknown_membership_returns_404(self):
+        site = self._site("detail_leave_missing", config_json={"site_display_name": "Leave Missing"})
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.delete(f"/users/me/programs/{site.public_id}/")
         self.assertEqual(r.status_code, 404)
 
     def test_program_detail_unknown_site(self):

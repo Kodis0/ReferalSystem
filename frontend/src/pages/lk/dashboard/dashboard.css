@@ -276,6 +276,12 @@
   transition: background-color var(--transition-duration) var(--transition-function);
 }
 
+.lk-dashboard__programs-item-content {
+  display: contents;
+  color: inherit;
+  text-decoration: none;
+}
+
 .lk-dashboard__programs-item-link:hover,
 .lk-dashboard__programs-item-link:focus,
 .lk-dashboard__programs-item-link:focus-visible {
@@ -285,6 +291,58 @@
 
 .lk-dashboard__programs-item-link_disabled {
   cursor: default;
+}
+
+.lk-dashboard__programs-card-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.lk-dashboard__programs-leave-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 98, 112, 0.14);
+  color: #ff9aa4;
+  font: 600 12px/1 "Stem", "Tahoma", "Arial", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.lk-dashboard__programs-leave-btn:hover:not(:disabled) {
+  background: rgba(255, 98, 112, 0.24);
+  color: #ffffff;
+}
+
+.lk-dashboard__programs-leave-btn:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.lk-dashboard__programs-join-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(91, 108, 255, 0.2);
+  color: #ffffff;
+  font: 600 13px/1 "Stem", "Tahoma", "Arial", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.lk-dashboard__programs-join-btn:hover:not(:disabled) {
+  background: #4a5cf0;
+}
+
+.lk-dashboard__programs-join-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 [data-theme="light"] .lk-dashboard__programs-item:first-child .lk-dashboard__programs-item-link {
@@ -323,6 +381,26 @@
 
 [data-theme="light"] .lk-dashboard__programs-item-link {
   border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .lk-dashboard__programs-join-btn {
+  color: #26325c;
+  background: rgba(79, 95, 255, 0.12);
+}
+
+[data-theme="light"] .lk-dashboard__programs-join-btn:hover:not(:disabled) {
+  color: #ffffff;
+  background: #4a5cf0;
+}
+
+[data-theme="light"] .lk-dashboard__programs-leave-btn {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
+}
+
+[data-theme="light"] .lk-dashboard__programs-leave-btn:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(185, 28, 28, 0.72);
 }
 
 @media (max-width: 900px) {

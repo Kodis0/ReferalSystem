@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "./dashboard.css";
 
@@ -74,12 +74,13 @@ async function fetchCatalogProgram(sitePublicId, token) {
  */
 export default function AgentProgramDetailPage() {
   const { sitePublicId } = useParams();
+  const location = useLocation();
   const [program, setProgram] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorKind, setErrorKind] = useState(null);
+  const [copyHint, setCopyHint] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
-  const [copyHint, setCopyHint] = useState("");
 
   const loadProgram = useCallback(
     async ({ cancelled } = {}) => {
@@ -93,8 +94,8 @@ export default function AgentProgramDetailPage() {
       setLoading(true);
       setErrorKind(null);
       setProgram(null);
-      setJoinError("");
       setCopyHint("");
+      setJoinError("");
 
       try {
         const res = await fetch(API_ENDPOINTS.programDetail(sitePublicId), {
@@ -141,29 +142,6 @@ export default function AgentProgramDetailPage() {
     };
   }, [loadProgram]);
 
-  const onJoin = async () => {
-    const token = localStorage.getItem("access_token");
-    if (!token || !program?.site_public_id) return;
-    setJoining(true);
-    setJoinError("");
-    try {
-      const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ site_public_id: program.site_public_id }),
-      });
-      if (!res.ok) throw new Error("join_failed");
-      await loadProgram();
-    } catch {
-      setJoinError("Не удалось вступить в программу. Попробуйте позже.");
-    } finally {
-      setJoining(false);
-    }
-  };
-
   const onCopyReferralLink = async () => {
     const link = program?.referral_link;
     if (!link) return;
@@ -176,10 +154,35 @@ export default function AgentProgramDetailPage() {
     }
   };
 
+  const onJoinProgram = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token || !sitePublicId || joining) return;
+    setJoining(true);
+    setJoinError("");
+    try {
+      const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ site_public_id: sitePublicId }),
+      });
+      if (!res.ok) throw new Error("program_join_failed");
+      await loadProgram();
+    } catch {
+      setJoinError("Не удалось присоединиться к программе. Попробуйте позже.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const backTo = location.state?.from === "/lk/my-programs" ? "/lk/my-programs" : "/lk/programs";
+
   return (
     <div className="lk-dashboard lk-dashboard__program-detail" data-testid="agent-program-detail">
       <div className="page__returnButton lk-dashboard__program-detail-back">
-        <Link to="/lk/programs" className="tw-link link_primary link_s">
+        <Link to={backTo} className="tw-link link_primary link_s">
           <svg xmlns="http://www.w3.org/2000/svg" width="7" height="13" fill="none" viewBox="0 0 7 13" aria-hidden="true">
             <path
               fill="currentColor"
@@ -277,18 +280,20 @@ export default function AgentProgramDetailPage() {
                 {copyHint ? <p className="lk-dashboard__program-card-joined">{copyHint}</p> : null}
               </div>
             ) : (
-              <>
+              <div className="lk-dashboard__program-member" data-testid="agent-program-unjoined-state">
+                <p className="lk-dashboard__program-card-joined">
+                  Вы ещё не участвуете в программе.
+                </p>
                 <button
                   type="button"
-                  className="lk-dashboard__program-join-btn"
-                  onClick={onJoin}
+                  className="lk-dashboard__programs-join-btn"
+                  onClick={onJoinProgram}
                   disabled={joining}
-                  data-testid="agent-program-join-button"
                 >
-                  {joining ? "Вступаем…" : "Стать участником"}
+                  {joining ? "Присоединяем…" : "Стать участником"}
                 </button>
                 {joinError ? <p className="lk-dashboard__program-card-joined">{joinError}</p> : null}
-              </>
+              </div>
             )}
           </section>
         </>

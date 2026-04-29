@@ -5,9 +5,22 @@
  */
 
 import "@testing-library/jest-dom";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import LkSidebar from "../pages/lk/LkSidebar";
 import { MyProgramsSection } from "../pages/lk/dashboard/myProgramsSection";
+import MyProgramsPage from "../pages/lk/dashboard/MyProgramsPage";
+import ProgramsCatalogPage from "../pages/lk/dashboard/ProgramsCatalogPage";
+
+if (typeof window.ResizeObserver === "undefined") {
+  class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  window.ResizeObserver = ResizeObserver;
+  global.ResizeObserver = ResizeObserver;
+}
 
 describe("Dashboard My Programs", () => {
   beforeEach(() => {
@@ -20,7 +33,7 @@ describe("Dashboard My Programs", () => {
   });
 
   it("renders empty state when no memberships", async () => {
-    jest.spyOn(global, "fetch").mockImplementation((url) => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes("/users/me/programs/")) {
         return Promise.resolve({
           ok: true,
@@ -39,13 +52,22 @@ describe("Dashboard My Programs", () => {
     expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
 
     await waitFor(() => {
+      expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
       expect(
-        screen.getByText(/Пока нет подключённых программ/i)
+        screen.getByText("Откройте каталог, выберите программу и получите персональную ссылку.")
       ).toBeInTheDocument();
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/users/me/programs/"),
+      expect.any(Object)
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/users/programs/"),
+      expect.any(Object)
+    );
   });
 
-  it("renders program label and joined line", async () => {
+  it("renders connected programs as owner-style cards", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes("/users/me/programs/")) {
         return Promise.resolve({
@@ -58,6 +80,7 @@ describe("Dashboard My Programs", () => {
                 site_origin_label: "demo.example",
                 joined_at: "2026-01-10T12:00:00+00:00",
                 site_status: "verified",
+                platform_preset: "tilda",
               },
             ],
           }),
@@ -73,12 +96,225 @@ describe("Dashboard My Programs", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("demo.example")).toBeInTheDocument();
+      expect(screen.getByTestId("my-programs-list")).toBeInTheDocument();
     });
-    expect(screen.queryByText("Demo Shop")).not.toBeInTheDocument();
-    expect(screen.getByText(/Дата подключения:/)).toBeInTheDocument();
-    expect(screen.getByText("verified")).toBeInTheDocument();
-    const link = screen.getByTestId("agent-program-list-link");
-    expect(link).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    expect(screen.getByText("Demo Shop")).toBeInTheDocument();
+    expect(screen.getByText("demo.example · В сети · tilda")).toBeInTheDocument();
+    const card = screen.getByTestId("agent-program-list-link");
+    expect(card).toHaveClass("owner-programs__service-card");
+    expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
+  });
+
+  it("removes program after leaving membership", async () => {
+    const siteId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
+      if (String(url).includes("/users/site/join/") && options?.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "left" }) });
+      }
+      if (String(url).includes("/users/me/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: siteId,
+                site_display_label: "Demo Shop",
+                site_origin_label: "demo.example",
+                site_status: "verified",
+                platform_preset: "tilda",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
+
+    const leaveButton = await screen.findByRole("button", { name: "Выйти" });
+    fireEvent.click(leaveButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Demo Shop")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/users/site/join/"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ site_public_id: siteId, action: "leave" }),
+      })
+    );
+  });
+
+  it("opens program card by click", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/me/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Demo Shop",
+                site_origin_label: "demo.example",
+                site_status: "verified",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/my-programs"]}>
+        <Routes>
+          <Route path="/lk/my-programs" element={<MyProgramsSection />} />
+          <Route path="/lk/referral-program/:sitePublicId" element={<div>Program detail</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId("agent-program-list-link"));
+    expect(screen.getByText("Program detail")).toBeInTheDocument();
+  });
+
+  /**
+   * Регрессия: каталог и «Мои программы» должны быть РАЗНЫМИ маршрутами
+   * с РАЗНЫМИ компонентами и РАЗНЫМИ endpoint'ами.
+   *
+   * Симптом, который ловим: после открытия карточки в каталоге переход в
+   * «Мои программы» показывал весь каталог (см. репорт). Корень — обе
+   * sidebar-ссылки исторически вели на `/lk/programs`, и/или маршрут
+   * `/lk/my-programs` отсутствовал и падал на каталог.
+   */
+  it("route /lk/my-programs renders MyProgramsPage and hits /users/me/programs/, not catalog", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.endsWith("/users/me/programs/")) {
+        return Promise.resolve({ ok: true, json: async () => ({ programs: [] }) });
+      }
+      if (u.endsWith("/users/programs/")) {
+        // Catalog endpoint must NOT be called from the My Programs route.
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              { site_public_id: "leak-1", site_display_label: "Leaked Catalog A", site_status: "verified" },
+              { site_public_id: "leak-2", site_display_label: "Leaked Catalog B", site_status: "verified" },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${u}`));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/my-programs"]}>
+        <Routes>
+          <Route path="/lk/programs" element={<ProgramsCatalogPage />} />
+          <Route path="/lk/my-programs" element={<MyProgramsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Каталог реферальных программ" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Leaked Catalog A")).not.toBeInTheDocument();
+    expect(screen.queryByText("Leaked Catalog B")).not.toBeInTheDocument();
+
+    const calledUrls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(calledUrls.some((u) => u.endsWith("/users/me/programs/"))).toBe(true);
+    expect(calledUrls.some((u) => u.endsWith("/users/programs/"))).toBe(false);
+  });
+
+  /**
+   * Регрессия: реальный sidebar + реальный маршрут.
+   *
+   * Симптом: и «Каталог программ», и «Мои программы» в сайдбаре исторически
+   * вели на `/lk/programs`, и/или маршрут `/lk/my-programs` отсутствовал в
+   * `lk.js`, поэтому клик по «Мои программы» отрисовывал ProgramsCatalogPage.
+   * Этот тест собирает реальный `<LkSidebar>` + `<Routes>` как в `lk.js` и
+   * после клика на ссылку «Мои программы» требует, чтобы отрисовалась именно
+   * `MyProgramsPage` (заголовок «Агентские программы»), а не каталог.
+   *
+   * Должен падать при любой из ошибок: неверный href в сайдбаре, отсутствующий
+   * маршрут в `lk.js`, неверный компонент за маршрутом.
+   */
+  it("sidebar 'Мои программы' click renders MyProgramsPage, not the catalog", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      const u = String(url);
+      if (u.endsWith("/users/me/programs/")) {
+        return Promise.resolve({ ok: true, json: async () => ({ programs: [] }) });
+      }
+      if (u.endsWith("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Catalog Only",
+                site_origin_label: "catalog.example",
+                site_status: "verified",
+                joined: false,
+              },
+            ],
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({ ok: true, json: async () => ({ projects: [], sites: [] }) });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${u}`));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/programs"]}>
+        <LkSidebar />
+        <Routes>
+          <Route path="/lk/programs" element={<ProgramsCatalogPage />} />
+          <Route path="/lk/my-programs" element={<MyProgramsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Каталог реферальных программ" })
+      ).toBeInTheDocument();
+    });
+
+    const myProgramsLink = screen.getByRole("link", { name: /Мои программы/i });
+    expect(myProgramsLink).toHaveAttribute("href", "/lk/my-programs");
+    fireEvent.click(myProgramsLink);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Каталог реферальных программ" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Catalog Only")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
+    });
+
+    const joinPosts = fetchMock.mock.calls.filter(
+      ([url, opts]) => String(url).includes("/users/site/join/") && opts?.method === "POST"
+    );
+    expect(joinPosts).toHaveLength(0);
+
+    const calledUrls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(calledUrls.some((u) => u.endsWith("/users/me/programs/"))).toBe(true);
   });
 });

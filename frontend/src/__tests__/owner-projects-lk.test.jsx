@@ -132,6 +132,8 @@ describe("LkSidebar owner IA", () => {
     expect(screen.queryByText("Партнёрские программы")).not.toBeInTheDocument();
     expect(screen.queryByText("Реферальная программа")).not.toBeInTheDocument();
     expect(screen.getByText("Мои программы")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Каталог программ/i })).toHaveAttribute("href", "/lk/programs");
+    expect(screen.getByRole("link", { name: /Мои программы/i })).toHaveAttribute("href", "/lk/my-programs");
     expect(screen.queryByText("Виджет")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(

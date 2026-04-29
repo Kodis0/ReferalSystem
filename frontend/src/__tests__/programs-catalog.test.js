@@ -6,7 +6,7 @@
 
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ProgramsCatalogPage from "../pages/lk/dashboard/ProgramsCatalogPage";
 
 describe("Programs Catalog", () => {
@@ -60,13 +60,108 @@ describe("Programs Catalog", () => {
       expect(screen.getByText("demo.example")).toBeInTheDocument();
       expect(screen.getByText("other.example")).toBeInTheDocument();
     });
-    expect(screen.getByText("Подключена")).toBeInTheDocument();
-    expect(screen.getByText("active")).toBeInTheDocument();
+    expect(screen.getByText("Ваш статус: Вы участвуете")).toBeInTheDocument();
+    expect(screen.getByText("Ваш статус: Вы не участвуете")).toBeInTheDocument();
+    expect(screen.getAllByText("Статус программы: Активна")).toHaveLength(2);
+    expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
 
     const links = screen.getAllByTestId("programs-catalog-list-link");
     expect(links[0]).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     expect(links[1]).toHaveAttribute("href", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
-    expect(screen.getByText("Доступна для подключения")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Присоединиться" })).toBeInTheDocument();
+  });
+
+  it("joins a program only after clicking join", async () => {
+    const siteId = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
+      if (String(url).includes("/users/site/join/") && options?.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "joined" }) });
+      }
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: siteId,
+                site_display_label: "Other Shop",
+                site_origin_label: "other.example",
+                joined: false,
+                site_status: "active",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    const button = await screen.findByRole("button", { name: "Присоединиться" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/users/site/join/"),
+      expect.objectContaining({ method: "POST" })
+    );
+
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ваш статус: Вы участвуете")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/users/site/join/"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ site_public_id: siteId }),
+      })
+    );
+  });
+
+  it("opens a program card without joining", async () => {
+    const siteId = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: siteId,
+                site_display_label: "Other Shop",
+                site_origin_label: "other.example",
+                joined: false,
+                site_status: "active",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lk/programs"]}>
+        <Routes>
+          <Route path="/lk/programs" element={<ProgramsCatalogPage />} />
+          <Route path="/lk/referral-program/:sitePublicId" element={<div>Program detail route</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId("programs-catalog-list-link"));
+
+    expect(screen.getByText("Program detail route")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/users/site/join/"),
+      expect.objectContaining({ method: "POST" })
+    );
   });
 
   it("filters programs by domain and display name", async () => {
@@ -135,7 +230,10 @@ describe("Programs Catalog", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Пока нет подключенных программ.")).toBeInTheDocument();
+      expect(screen.getByText("Пока нет доступных программ.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Когда владельцы сайтов опубликуют реферальные программы, они появятся здесь.")
+      ).toBeInTheDocument();
     });
   });
 });

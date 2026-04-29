@@ -21,9 +21,9 @@ describe("Agent program detail page", () => {
     jest.restoreAllMocks();
   });
 
-  function renderDetail() {
+  function renderDetail(routeState) {
     return render(
-      <MemoryRouter initialEntries={[`/lk/referral-program/${SITE_ID}`]}>
+      <MemoryRouter initialEntries={[{ pathname: `/lk/referral-program/${SITE_ID}`, state: routeState }]}>
         <Routes>
           <Route path="/lk/referral-program/:sitePublicId" element={<AgentProgramDetailPage />} />
         </Routes>
@@ -77,13 +77,37 @@ describe("Agent program detail page", () => {
     expect(screen.getByRole("button", { name: "Скопировать ссылку" })).toBeInTheDocument();
   });
 
-  it("shows join button for unjoined program and reloads after successful join", async () => {
+  it("returns to my programs when opened from my programs", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "Demo Shop",
+              site_origin_label: "demo.example",
+              site_status: "verified",
+              program_active: true,
+              joined: true,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    renderDetail({ from: "/lk/my-programs" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
+    });
+    expect(screen.getByRole("link", { name: "Назад" })).toHaveAttribute("href", "/lk/my-programs");
+  });
+
+  it("does not join when opening an unjoined program detail", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
       if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
-        const joined = fetchMock.mock.calls.some(
-          ([calledUrl, calledOptions]) =>
-            String(calledUrl).includes("/users/site/join/") && calledOptions?.method === "POST"
-        );
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -92,30 +116,61 @@ describe("Agent program detail page", () => {
               site_display_label: "Demo Shop",
               site_origin_label: "demo.example",
               site_description: "Partner program description",
-              joined_at: joined ? "2026-01-10T12:00:00+00:00" : undefined,
               site_status: "verified",
               program_active: true,
               commission_percent: "12.50",
               referral_lock_days: 30,
-              participants_count: joined ? 8 : 7,
-              joined,
-              ref_code: joined ? "ABC123" : undefined,
+              participants_count: 7,
+              joined: false,
             },
           }),
         });
-      }
-      if (String(url).includes("/users/site/join/") && options?.method === "POST") {
-        return Promise.resolve({ ok: true, json: async () => ({ status: "joined" }) });
       }
       return Promise.reject(new Error(`unexpected fetch: ${url}`));
     });
 
     renderDetail();
 
-    const button = await screen.findByTestId("agent-program-join-button");
-    expect(button).toHaveTextContent("Стать участником");
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-program-unjoined-state")).toHaveTextContent("Вы ещё не участвуете в программе");
+    });
+    expect(screen.getByRole("button", { name: "Стать участником" })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/users/site/join/"),
+      expect.objectContaining({ method: "POST" })
+    );
+  });
 
-    fireEvent.click(button);
+  it("joins only the current program after explicit click", async () => {
+    let detailCalls = 0;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
+      if (String(url).includes("/users/site/join/") && options?.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "joined", site_public_id: SITE_ID }) });
+      }
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        detailCalls += 1;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "Demo Shop",
+              site_origin_label: "demo.example",
+              site_status: "verified",
+              program_active: true,
+              joined: detailCalls > 1,
+              joined_at: detailCalls > 1 ? "2026-01-10T12:00:00+00:00" : undefined,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    renderDetail();
+
+    const joinButton = await screen.findByRole("button", { name: "Стать участником" });
+    fireEvent.click(joinButton);
 
     await waitFor(() => {
       expect(screen.getByTestId("agent-program-joined-state")).toHaveTextContent("Вы участвуете в программе");
@@ -127,6 +182,9 @@ describe("Agent program detail page", () => {
         body: JSON.stringify({ site_public_id: SITE_ID }),
       })
     );
+    expect(
+      fetchMock.mock.calls.filter(([url, options]) => String(url).includes("/users/site/join/") && options?.method === "POST")
+    ).toHaveLength(1);
   });
 
   it("opens unjoined catalog program when detail endpoint returns 404", async () => {
@@ -164,7 +222,7 @@ describe("Agent program detail page", () => {
       expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
     });
     expect(screen.getByText("Catalog description")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-program-join-button")).toHaveTextContent("Стать участником");
+    expect(screen.getByTestId("agent-program-unjoined-state")).toHaveTextContent("Вы ещё не участвуете в программе");
   });
 
   it("shows not found on 404", async () => {

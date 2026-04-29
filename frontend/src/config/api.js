@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   platformServiceStatus: `${API_BASE}/referrals/platform-service-status/`,
   register: `${API_BASE}/users/register/`,
   siteCtaJoin: `${API_BASE}/users/site/join/`,
+  siteCtaLeave: `${API_BASE}/users/site/leave/`,
   token: `${API_BASE}/users/token/`,
   tokenGoogle: `${API_BASE}/users/token/google/`,
   tokenVkStart: `${API_BASE}/users/token/vk/start/`,

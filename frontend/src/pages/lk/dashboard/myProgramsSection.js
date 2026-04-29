@@ -1,16 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Globe } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
-
-function formatJoinedAt(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("ru-RU", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
+import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "../owner-programs/domainCountryFlagSvg";
+import "../owner-programs/owner-programs.css";
 
 function programSiteLabel(program) {
   const originLabel = typeof program?.site_origin_label === "string" ? program.site_origin_label.trim() : "";
@@ -20,12 +13,85 @@ function programSiteLabel(program) {
   return `Программа · ${program?.site_public_id || "—"}`;
 }
 
+function programTitle(program) {
+  const displayLabel = typeof program?.site_display_label === "string" ? program.site_display_label.trim() : "";
+  if (displayLabel) return displayLabel;
+  return programSiteLabel(program);
+}
+
+function programStatusLabel(status) {
+  if (status === "active" || status === "verified") return "В сети";
+  if (status === "draft") return "Черновик";
+  return status || "—";
+}
+
+function domainHostFromValue(value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const raw = value.trim();
+  try {
+    if (raw.includes("://")) {
+      return new URL(raw).hostname.toLowerCase();
+    }
+  } catch {
+    /* ignore */
+  }
+  return raw.replace(/^https?:\/\//i, "").split("/")[0].toLowerCase();
+}
+
+function countryCodeFromDomain(value) {
+  const host = domainHostFromValue(value);
+  if (!host) return "";
+  const labels = host.split(".").filter(Boolean);
+  if (labels.length === 0) return "";
+  const tld = labels[labels.length - 1];
+  if (/^[a-z]{2}$/i.test(tld)) {
+    const upper = tld.toUpperCase();
+    if (upper === "UK") return "GB";
+    return upper;
+  }
+  if (tld === "xn--p1ai" || tld === "su") return "RU";
+  return "";
+}
+
+function emojiFlagFromCountryCode(countryCode) {
+  if (!/^[A-Z]{2}$/.test(countryCode)) return "";
+  const base = 127397;
+  return String.fromCodePoint(...countryCode.split("").map((letter) => base + letter.charCodeAt(0)));
+}
+
+function ProgramCountryFlag({ domain }) {
+  const countryCode = countryCodeFromDomain(domain);
+  if (!countryCode) {
+    return (
+      <span className="owner-programs__service-card-flag owner-programs__service-card-flag_globe" aria-hidden>
+        <Globe size={16} strokeWidth={1.75} />
+      </span>
+    );
+  }
+  const upper = countryCode.toUpperCase();
+  const useSvg = SUPPORTED_DOMAIN_FLAG_SVG_CODES.has(upper);
+  const emoji = emojiFlagFromCountryCode(upper);
+  if (!useSvg && !emoji) return null;
+  return (
+    <span
+      className={`owner-programs__service-card-flag${useSvg ? " owner-programs__service-card-flag_svg" : ""}`}
+      role="img"
+      aria-label={`Флаг страны ${upper}`}
+    >
+      {useSvg ? <DomainCountryFlagSvg countryCode={upper} /> : emoji}
+    </span>
+  );
+}
+
 /**
  * Member-facing list of referral programs (SiteMembership) for the logged-in user.
  */
 export function MyProgramsSection() {
+  const navigate = useNavigate();
   const [programs, setPrograms] = useState(null);
   const [programsError, setProgramsError] = useState(null);
+  const [leavingSiteId, setLeavingSiteId] = useState("");
+  const [leaveError, setLeaveError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +129,47 @@ export function MyProgramsSection() {
     };
   }, []);
 
+  const openProgram = (sitePublicId) => {
+    if (!sitePublicId) return;
+    navigate(`/lk/referral-program/${sitePublicId}`, { state: { from: "/lk/my-programs" } });
+  };
+
+  const leaveProgram = async (event, program) => {
+    event.stopPropagation();
+    const token = localStorage.getItem("access_token");
+    const sitePublicId = program?.site_public_id;
+    if (!token || !sitePublicId || leavingSiteId) return;
+    setLeavingSiteId(sitePublicId);
+    setLeaveError("");
+    try {
+      let res = await fetch(API_ENDPOINTS.siteCtaJoin, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ site_public_id: sitePublicId, action: "leave" }),
+      });
+      if (!res.ok) {
+        const fallbackRes = await fetch(API_ENDPOINTS.myProgramDetail(sitePublicId), {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        res = fallbackRes.status === 404 ? { ok: true } : fallbackRes;
+      }
+      if (!res.ok) throw new Error(`program_leave_failed_${res.status || "network"}`);
+      setPrograms((current) =>
+        Array.isArray(current) ? current.filter((item) => item.site_public_id !== sitePublicId) : current
+      );
+    } catch (error) {
+      const raw = error instanceof Error ? error.message.replace("program_leave_failed_", "") : "";
+      const suffix = raw && raw !== "program_leave_failed" ? ` (${raw})` : "";
+      setLeaveError(`Не удалось выйти из программы. Попробуйте позже.${suffix}`);
+    } finally {
+      setLeavingSiteId("");
+    }
+  };
+
   return (
     <section
       id="my-programs"
@@ -83,36 +190,67 @@ export function MyProgramsSection() {
           Не удалось загрузить список программ. Обновите страницу или попробуйте позже.
         </p>
       )}
+      {leaveError ? <p className="lk-dashboard__programs-muted">{leaveError}</p> : null}
       {programs !== null && !programsError && programs.length === 0 && (
-        <p className="lk-dashboard__programs-muted">
-          Пока нет подключённых программ. Когда вы примете приглашение, программа появится в этом
-          списке.
-        </p>
+        <div className="lk-dashboard__programs-muted">
+          <p>Вы пока не участвуете ни в одной программе.</p>
+          <p>Откройте каталог, выберите программу и получите персональную ссылку.</p>
+        </div>
       )}
       {programs !== null && !programsError && programs.length > 0 && (
-        <ul className="lk-dashboard__programs-list">
-          {programs.map((p) => (
-            <li key={p.site_public_id} className="lk-dashboard__programs-item">
-              <Link
-                to={`/lk/referral-program/${p.site_public_id}`}
-                className="lk-dashboard__programs-item-link"
+        <div className="owner-programs__services-grid" data-testid="my-programs-list">
+          {programs.map((p) => {
+            const title = programTitle(p);
+            const domain = programSiteLabel(p);
+            const status = programStatusLabel(p.site_status);
+            const platform = p.platform_preset || "—";
+            const leavingThisProgram = leavingSiteId === p.site_public_id;
+            return (
+              <div
+                key={p.site_public_id}
+                className="owner-programs__service-card lk-dashboard__programs-card-link"
                 data-testid="agent-program-list-link"
+                role="link"
+                tabIndex={0}
+                onClick={() => openProgram(p.site_public_id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openProgram(p.site_public_id);
+                  }
+                }}
               >
-                <div className="lk-dashboard__programs-item-main">
-                  <span className="lk-dashboard__programs-label">
-                    {programSiteLabel(p)}
-                  </span>
-                  {p.site_status ? (
-                    <span className="lk-dashboard__programs-status">{p.site_status}</span>
-                  ) : null}
+                <div className="owner-programs__service-card-top-row">
+                  <div className="owner-programs__service-card-hero">
+                    <div className="owner-programs__service-card-avatar">
+                      <span>{title.slice(0, 1).toUpperCase() || "P"}</span>
+                    </div>
+                  </div>
+                  <div className="owner-programs__service-card-top-right">
+                    <ProgramCountryFlag domain={domain} />
+                    <button
+                      type="button"
+                      className="lk-dashboard__programs-leave-btn"
+                      onClick={(event) => leaveProgram(event, p)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      disabled={leavingThisProgram || Boolean(leavingSiteId)}
+                      data-testid={`agent-program-leave-${p.site_public_id}`}
+                    >
+                      {leavingThisProgram ? "Выходим…" : "Выйти"}
+                    </button>
+                  </div>
                 </div>
-                <div className="lk-dashboard__programs-joined">
-                  Дата подключения: {formatJoinedAt(p.joined_at)}
+                <div className="owner-programs__service-card-headline">
+                  <span className="owner-programs__service-card-status-dot owner-programs__service-card-status-dot_success" aria-hidden="true" />
+                  <span className="owner-programs__service-card-headline-title">{title}</span>
                 </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+                <div className="owner-programs__service-card-specs" title={[domain, status, platform].join(" · ")}>
+                  {[domain, status, platform].join(" · ")}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </section>
   );

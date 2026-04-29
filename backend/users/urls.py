@@ -19,6 +19,7 @@ from .views import (
     ProgramCatalogDetailView,
     ProgramsCatalogView,
     SiteCtaJoinView,
+    SiteCtaLeaveView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views_orders import OrderReceiveView
@@ -31,6 +32,7 @@ from .support_views import (
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
     path('site/join/', SiteCtaJoinView.as_view(), name='site_cta_join'),
+    path('site/leave/', SiteCtaLeaveView.as_view(), name='site_cta_leave'),
     path('login/', LoginView.as_view(), name='login'),
     path('login-page/', LoginPageView.as_view(), name='login-page'),
     path('token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),

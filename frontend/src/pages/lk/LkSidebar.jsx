@@ -159,7 +159,7 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   const previousProjectPositionsRef = useRef(new Map());
 
   const programsListActive = currentPath === "/lk/programs";
-  const connectedProgramsActive = currentPath.startsWith("/lk/referral-program/");
+  const connectedProgramsActive = currentPath === "/lk/my-programs" || currentPath.startsWith("/lk/referral-program/");
 
   const onPartnerList = pathname === "/lk/partner";
   const onCreateProject = pathname === "/lk/partner/new";
@@ -177,8 +177,12 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
       })();
 
   const loadOwnerProjects = useCallback(async () => {
-    const { ok, projects = [] } = await fetchOwnerSitesList();
-    if (ok) setOwnerProjects(projects);
+    try {
+      const { ok, projects = [] } = await fetchOwnerSitesList();
+      if (ok) setOwnerProjects(projects);
+    } catch {
+      setOwnerProjects([]);
+    }
   }, []);
 
   /** Последний ключ маршрута под `/lk/partner` — при переходе в поддержку/настройки и т.д. не меняем,
@@ -200,10 +204,15 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { ok, projects = [] } = await fetchOwnerSitesList();
-      if (cancelled) return;
-      if (ok) setOwnerProjects(projects);
-      setOwnerProjectsLoading(false);
+      try {
+        const { ok, projects = [] } = await fetchOwnerSitesList();
+        if (cancelled) return;
+        if (ok) setOwnerProjects(projects);
+      } catch {
+        if (!cancelled) setOwnerProjects([]);
+      } finally {
+        if (!cancelled) setOwnerProjectsLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -611,7 +620,7 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
           </Link>
 
           <Link
-            to="/lk/programs"
+            to="/lk/my-programs"
             className={itemClass(connectedProgramsActive)}
             aria-current={connectedProgramsActive ? "page" : undefined}
           >

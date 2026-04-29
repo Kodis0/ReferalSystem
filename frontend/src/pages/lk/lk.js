@@ -4,6 +4,7 @@ import { ChevronDown, LogOut, MessageCircle, Palette, Send, Settings as Settings
 import { LkHeaderBrandMark } from "./LkHeaderBrandMark";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
 import ProgramsCatalogPage from "./dashboard/ProgramsCatalogPage";
+import MyProgramsPage from "./dashboard/MyProgramsPage";
 import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
 import Settings from "./settings/settings"; // импорт компонента Settings
 import AccountPersonalDataPage from "./settings/AccountPersonalDataPage";
@@ -768,6 +769,7 @@ function LK() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="programs" element={<ProgramsCatalogPage />} />
+            <Route path="my-programs" element={<MyProgramsPage />} />
             <Route path="settings/users/create" element={<AccountAdditionalUsersCreatePage />} />
             <Route
               path="settings/personal"
