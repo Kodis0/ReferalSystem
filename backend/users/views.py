@@ -26,13 +26,16 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from referrals.models import Site, SiteMembership
 from referrals.services import (
     create_site_membership_from_signup,
+    ensure_partner_profile,
     get_site_by_public_id,
     join_site_membership_cta_logged_in,
     link_session_attributions_to_user,
     owner_site_list_origin_display,
+    partner_dashboard_payload,
     site_allows_cta_signup_membership,
     site_cta_display_label,
 )
+from referrals.services_owner_site_shell import site_owner_shell_description
 
 from .models import CustomUser
 from .serializers import (
@@ -47,15 +50,31 @@ from .serializers import (
 
 def _member_program_payload(site, *, membership=None):
     _, site_origin_label = owner_site_list_origin_display(site)
+    participants_count = SiteMembership.objects.filter(site=site).count()
+    partner = getattr(membership, "partner", None) if membership is not None else None
+    commission_percent = getattr(partner, "commission_percent", None)
     payload = {
         "site_public_id": str(site.public_id),
         "site_display_label": site_cta_display_label(site),
         "site_origin_label": site_origin_label,
+        "site_description": site_owner_shell_description(site),
         "site_status": site.status,
+        "program_active": site_allows_cta_signup_membership(site),
+        "commission_percent": str(commission_percent) if commission_percent is not None else "",
+        "referral_lock_days": int(getattr(django_settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)),
+        "participants_count": participants_count,
     }
     if membership is not None:
         payload["joined_at"] = membership.created_at.isoformat() if membership.created_at else None
     return payload
+
+
+def _add_personal_referral_fields(payload, user):
+    partner, _ = ensure_partner_profile(user)
+    base = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
+    partner_payload = partner_dashboard_payload(partner, app_public_base_url=base)
+    payload["ref_code"] = partner_payload["ref_code"]
+    payload["referral_link"] = partner_payload["referral_link"]
 from .telegram_auth import (
     TELEGRAM_OAUTH_AUTH_URL,
     decode_telegram_widget_tg_auth_result,
@@ -388,6 +407,29 @@ class ProgramsCatalogView(APIView):
             item["joined"] = membership is not None
             programs.append(item)
         return Response({"programs": programs}, status=status.HTTP_200_OK)
+
+
+class ProgramCatalogDetailView(APIView):
+    """
+    Member-facing detail for a catalog Site program, including unjoined programs.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, site_public_id):
+        site = get_site_by_public_id(site_public_id)
+        if site is None or not site_allows_cta_signup_membership(site):
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        membership = (
+            SiteMembership.objects.filter(site=site, user=request.user)
+            .select_related("site", "partner")
+            .first()
+        )
+        payload = _member_program_payload(site, membership=membership)
+        payload["joined"] = membership is not None
+        if membership is not None:
+            _add_personal_referral_fields(payload, request.user)
+        return Response({"program": payload}, status=status.HTTP_200_OK)
 
 
 class MyProgramDetailView(APIView):

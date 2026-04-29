@@ -16,6 +16,7 @@ from .views import (
     AccountAdditionalUsersListView,
     MyProgramsView,
     MyProgramDetailView,
+    ProgramCatalogDetailView,
     ProgramsCatalogView,
     SiteCtaJoinView,
 )
@@ -41,6 +42,7 @@ urlpatterns = [
     path('token/telegram/widget/', TelegramWidgetLoginView.as_view(), name='telegram_widget_login'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    path('programs/<uuid:site_public_id>/', ProgramCatalogDetailView.as_view(), name='program_catalog_detail'),
     path('programs/', ProgramsCatalogView.as_view(), name='programs_catalog'),
     path('me/programs/<uuid:site_public_id>/', MyProgramDetailView.as_view(), name='my_program_detail'),
     path('me/programs/', MyProgramsView.as_view(), name='my_programs'),

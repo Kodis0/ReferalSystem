@@ -30,7 +30,7 @@ describe("PostJoinBanner", () => {
     ).toHaveAttribute("href", `/lk/referral-program/${SID}`);
     expect(screen.getByRole("link", { name: /К агентским программам/i })).toHaveAttribute(
       "href",
-      "/lk/dashboard#my-programs"
+      "/lk/programs"
     );
 
     await userEvent.click(screen.getByRole("button", { name: /Понятно/i }));

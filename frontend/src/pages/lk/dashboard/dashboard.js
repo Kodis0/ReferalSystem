@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { parsePostJoinFromSearchParams } from "../../registration/postJoinNavigation";
 import { PostJoinBanner } from "./postJoinBanner";
-import { MyProgramsSection } from "./myProgramsSection";
 import "./dashboard.css";
 
 function Dashboard() {
@@ -35,7 +34,6 @@ function Dashboard() {
         />
       )}
 
-      <MyProgramsSection />
     </div>
   );
 }

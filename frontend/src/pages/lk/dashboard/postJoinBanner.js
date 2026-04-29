@@ -25,7 +25,7 @@ export function PostJoinBanner({ outcome, sitePublicId, siteDisplayLabel, onDism
         <Link to={`/lk/referral-program/${sitePublicId}`} className="lk-dashboard__post-join-link">
           Открыть программу
         </Link>
-        <Link to="/lk/dashboard#my-programs" className="lk-dashboard__post-join-link lk-dashboard__post-join-link_secondary">
+        <Link to="/lk/programs" className="lk-dashboard__post-join-link lk-dashboard__post-join-link_secondary">
           К агентским программам
         </Link>
       </div>

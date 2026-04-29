@@ -433,15 +433,15 @@ def site_allows_cta_signup_membership(site: Site) -> bool:
     if site.status != Site.Status.DRAFT:
         return False
 
+    has_public_identity = bool((site.publishable_key or "").strip() and site.public_id)
+    if has_public_identity and site.widget_enabled and site.last_widget_seen_at:
+        return True
+
     # A generated referral block is site-scoped and can be published before the
     # owner runs verification or enables the lead widget. Keep empty drafts
     # closed, but allow configured drafts whose public block already points
     # visitors to registration for this exact Site.public_id.
-    return bool(
-        (site.publishable_key or "").strip()
-        and site.public_id
-        and site_allowed_origins_list(site)
-    )
+    return bool(has_public_identity and site_allowed_origins_list(site))
 
 
 def resolve_valid_attribution(

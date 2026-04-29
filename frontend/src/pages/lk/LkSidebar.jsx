@@ -113,9 +113,36 @@ function ProgramsNavIcon() {
   );
 }
 
+function ProgramsCatalogNavIcon() {
+  return (
+    <svg
+      className="lk-sidebar__nav-icon-svg"
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5C17.22 3 18 3.78 18 4.75v14.5c0 .56-.62.9-1.1.6L12 16.82l-4.9 3.03A.72.72 0 0 1 6 19.25V4.75Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 7.5h5M9.5 10.5h4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0, onHeaderNavNavigate }) {
   const projectAvatarClipId = useId().replace(/:/g, "");
-  const { pathname, hash, search } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const currentPath = pathname.toLowerCase();
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -131,10 +158,8 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   const projectNodeRefs = useRef(new Map());
   const previousProjectPositionsRef = useRef(new Map());
 
-  const onDashboard = pathname === "/lk/dashboard";
   const programsListActive = currentPath === "/lk/programs";
-  const connectedProgramsActive =
-    (onDashboard && hash === "#my-programs") || currentPath.startsWith("/lk/referral-program/");
+  const connectedProgramsActive = currentPath.startsWith("/lk/referral-program/");
 
   const onPartnerList = pathname === "/lk/partner";
   const onCreateProject = pathname === "/lk/partner/new";
@@ -581,12 +606,12 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             className={itemClass(programsListActive)}
             aria-current={programsListActive ? "page" : undefined}
           >
-            <ProgramsNavIcon />
-            <span className="lk-sidebar__nav-text">Список программ</span>
+            <ProgramsCatalogNavIcon />
+            <span className="lk-sidebar__nav-text">Каталог программ</span>
           </Link>
 
           <Link
-            to="/lk/dashboard#my-programs"
+            to="/lk/programs"
             className={itemClass(connectedProgramsActive)}
             aria-current={connectedProgramsActive ? "page" : undefined}
           >

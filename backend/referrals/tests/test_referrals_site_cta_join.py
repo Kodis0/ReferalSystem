@@ -131,6 +131,30 @@ class SiteSignupJoinTests(TestCase):
         membership = SiteMembership.objects.get(site=draft_site, user=user)
         self.assertEqual(membership.joined_via, SiteMembership.JoinedVia.CTA_SIGNUP)
 
+    def test_register_allows_widget_seen_draft_site_without_manual_verify(self):
+        draft_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_draft_seen_" + uuid.uuid4().hex,
+            widget_enabled=True,
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://lumoref.ru",
+        )
+        self.assertEqual(draft_site.status, Site.Status.DRAFT)
+        email = "draft-seen-member@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(draft_site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=draft_site, user=user)
+        self.assertEqual(membership.joined_via, SiteMembership.JoinedVia.CTA_SIGNUP)
+
     def test_register_with_site_public_id_creates_site_membership(self):
         email = "site-member@example.com"
         r = self.client.post(
@@ -394,6 +418,19 @@ class LoggedInSiteCtaJoinTests(TestCase):
             publishable_key="pk_join_draft_api_ready_" + uuid.uuid4().hex,
             allowed_origins=["https://lumoref.ru"],
             widget_enabled=False,
+        )
+        r = self._post_join(self.member_user, site_public_id=str(draft.public_id))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "joined")
+        SiteMembership.objects.get(site=draft, user=self.member_user)
+
+    def test_join_allows_widget_seen_draft_site_without_manual_verify(self):
+        draft = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_draft_api_seen_" + uuid.uuid4().hex,
+            widget_enabled=True,
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://lumoref.ru",
         )
         r = self._post_join(self.member_user, site_public_id=str(draft.public_id))
         self.assertEqual(r.status_code, 200)

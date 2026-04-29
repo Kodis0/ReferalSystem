@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
   supportTicketAttachment: (ticketId, fileName) =>
     `${API_BASE}/users/me/support-tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(fileName)}/`,
   programsCatalog: `${API_BASE}/users/programs/`,
+  programDetail: (sitePublicId) => `${API_BASE}/users/programs/${encodeURIComponent(sitePublicId)}/`,
   myPrograms: `${API_BASE}/users/me/programs/`,
   myProgramDetail: (sitePublicId) => `${API_BASE}/users/me/programs/${encodeURIComponent(sitePublicId)}/`,
   referralCapture: `${API_BASE}/referrals/capture/`,
