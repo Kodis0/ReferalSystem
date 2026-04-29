@@ -8,6 +8,10 @@
 #   backend/.env                  — production secrets (never committed)
 #
 # Local deploy state (not in git): .deploy-state/
+#   last_successful_commit — updated only after all required steps for this deploy succeed
+#   last_frontend_build_commit — last commit for which npm run build completed successfully
+#   last_backend_restart_commit — last commit after which gunicorn restart completed successfully
+#   frontend_package_lock_hash, root_package_lock_hash, frontend_build_env.sig — frontend/npm consistency
 #
 # deploy user: SSH + git sync; passwordless sudo only for nginx/systemctl (recommended).
 # Gunicorn runs as www-data (see deploy/systemd/lumoref-gunicorn.service).
@@ -82,6 +86,58 @@ frontend_env_sig() {
   printf '%s\n' "${REACT_APP_API_URL:-}" "${REACT_APP_GOOGLE_CLIENT_ID:-}" | sha256sum | awk '{print $1}'
 }
 
+read_state_trim() {
+  local p="$1"
+  tr -d '[:space:]' < "${p}" 2>/dev/null || true
+}
+
+git_commit_exists() {
+  [[ -n "$1" ]] && git cat-file -e "$1^{commit}" 2>/dev/null
+}
+
+# Returns 0 if any path affecting SPA build / npm changed between refs (frontend tree + root lockfiles).
+frontend_affecting_paths_changed_between() {
+  local from_ref="$1"
+  local to_ref="$2"
+  [[ -n "${from_ref}" ]] && git_commit_exists "${from_ref}" || return 1
+  git_commit_exists "${to_ref}" || return 1
+  if git diff --name-only "${from_ref}" "${to_ref}" 2>/dev/null | grep -qE '^(frontend/|package\.json$|package-lock\.json$)'; then
+    return 0
+  fi
+  return 1
+}
+
+# Self-check: ensure CRA/Vite bundle referenced from index.html exists on disk.
+verify_frontend_build_bundle() {
+  local idx="${APP_ROOT}/frontend/build/index.html"
+  if [[ ! -f "${idx}" ]]; then
+    echo "    ERROR: ${idx} missing after build." >&2
+    return 1
+  fi
+  local src_attr
+  src_attr="$(grep -oE 'src="[^"]*main\.[^"]+\.js[^"]*"' "${idx}" 2>/dev/null | head -1 || true)"
+  if [[ -z "${src_attr}" ]]; then
+    src_attr="$(grep -oE "src='[^']*main\.[^']+\.js[^']*'" "${idx}" 2>/dev/null | head -1 || true)"
+    src_attr="${src_attr#src=\'}"
+    src_attr="${src_attr%\'}"
+  else
+    src_attr="${src_attr#src=\"}"
+    src_attr="${src_attr%\"}"
+  fi
+  if [[ -z "${src_attr}" ]]; then
+    echo "    ERROR: could not find main.*.js script reference in ${idx}" >&2
+    return 1
+  fi
+  local rel="${src_attr#/}"
+  local bundle="${APP_ROOT}/frontend/build/${rel}"
+  echo "    Frontend bundle (from index.html): ${rel}"
+  if [[ ! -f "${bundle}" ]]; then
+    echo "    ERROR: bundle file missing: ${bundle}" >&2
+    return 1
+  fi
+  echo "    Frontend build self-check: OK (bundle exists)"
+}
+
 playwright_browser_present() {
   [[ -d "${PLAYWRIGHT_BROWSERS_PATH}" ]] || return 1
   find "${PLAYWRIGHT_BROWSERS_PATH}" -type f \( -name chrome -o -name chromium -o -name headless_shell \) -perm -111 2>/dev/null | head -1 | grep -q .
@@ -139,6 +195,300 @@ safe_chown_deploy_tree() {
   exit 1
 }
 
+# Evaluate incremental deploy plan. Requires globals: NEW_COMMIT, PRE_SYNC_HEAD, LAST_SUCCESSFUL,
+# LAST_FE, FIRST_DEPLOY. Sets CHANGED_FILES, path flags, NEED_FRONTEND_BUILD / reasons, RUN_*.
+deploy_evaluate_plan() {
+  DIFF_BASE=""
+  if [[ "${FIRST_DEPLOY}" == "1" ]]; then
+    DIFF_BASE="${PRE_SYNC_HEAD}"
+  elif [[ -n "${LAST_SUCCESSFUL}" ]] && git_commit_exists "${LAST_SUCCESSFUL}"; then
+    if git merge-base --is-ancestor "${LAST_SUCCESSFUL}" "${NEW_COMMIT}" 2>/dev/null; then
+      DIFF_BASE="${LAST_SUCCESSFUL}"
+    else
+      echo "    Warning: last_successful_commit is not an ancestor of NEW_COMMIT; using pre-sync HEAD as diff base." >&2
+      DIFF_BASE="${PRE_SYNC_HEAD}"
+    fi
+  else
+    DIFF_BASE="${PRE_SYNC_HEAD}"
+  fi
+
+  CHANGED_FILES="$(git diff --name-only "${DIFF_BASE}" "${NEW_COMMIT}" 2>/dev/null || true)"
+  echo ""
+  echo "--- Deploy diff (${DIFF_BASE} .. ${NEW_COMMIT}) ---"
+  if [[ -z "${CHANGED_FILES}" ]]; then
+    echo "Changed files: <none>"
+  else
+    echo "Changed files:"
+    echo "${CHANGED_FILES}"
+  fi
+
+  FRONTEND_CHANGED=false
+  FRONTEND_DEPS_CHANGED=false
+  BACKEND_CHANGED=false
+  BACKEND_DEPS_CHANGED=false
+  BACKEND_MIGRATIONS_CHANGED=false
+  DEPLOY_NGINX_CHANGED=false
+  DEPLOY_SYSTEMD_CHANGED=false
+  PLAYWRIGHT_RELEVANT_CHANGED=false
+
+  if [[ "${FORCE_FULL_DEPLOY}" == "1" ]]; then
+    FRONTEND_CHANGED=true
+    FRONTEND_DEPS_CHANGED=true
+    BACKEND_CHANGED=true
+    BACKEND_DEPS_CHANGED=true
+    BACKEND_MIGRATIONS_CHANGED=true
+    DEPLOY_NGINX_CHANGED=true
+    DEPLOY_SYSTEMD_CHANGED=true
+    PLAYWRIGHT_RELEVANT_CHANGED=true
+  else
+    if echo "${CHANGED_FILES}" | grep -qE '^frontend/'; then FRONTEND_CHANGED=true; fi
+    if echo "${CHANGED_FILES}" | grep -qE '^frontend/package\.json$|^frontend/package-lock\.json$|^package\.json$|^package-lock\.json$'; then
+      FRONTEND_DEPS_CHANGED=true
+    fi
+    if echo "${CHANGED_FILES}" | grep -qE '^backend/'; then BACKEND_CHANGED=true; fi
+    if echo "${CHANGED_FILES}" | grep -qE '^backend/requirements\.txt$'; then
+      BACKEND_DEPS_CHANGED=true
+      PLAYWRIGHT_RELEVANT_CHANGED=true
+    fi
+    if echo "${CHANGED_FILES}" | grep -qE '^backend/.*/migrations/'; then BACKEND_MIGRATIONS_CHANGED=true; fi
+    if echo "${CHANGED_FILES}" | grep -qE '^deploy/nginx/'; then DEPLOY_NGINX_CHANGED=true; fi
+    if echo "${CHANGED_FILES}" | grep -qE '^deploy/systemd/'; then DEPLOY_SYSTEMD_CHANGED=true; fi
+    if echo "${CHANGED_FILES}" | grep -qE '^deploy/deploy\.sh$'; then PLAYWRIGHT_RELEVANT_CHANGED=true; fi
+  fi
+
+  REQ_HASH="$(sha256_file "${APP_ROOT}/backend/requirements.txt")"
+  STORED_REQ_HASH="$(read_state_trim "${DEPLOY_STATE_DIR}/backend_requirements_hash")"
+  FRONT_LOCK_HASH="$(sha256_file "${APP_ROOT}/frontend/package-lock.json")"
+  ROOT_LOCK_HASH="$(sha256_file "${APP_ROOT}/package-lock.json")"
+  STORED_FRONT_LOCK="$(read_state_trim "${DEPLOY_STATE_DIR}/frontend_package_lock_hash")"
+  STORED_ROOT_LOCK="$(read_state_trim "${DEPLOY_STATE_DIR}/root_package_lock_hash")"
+
+  resolve_google_client_id
+  CURRENT_ENV_SIG="$(frontend_env_sig)"
+  STORED_ENV_SIG="$(read_state_trim "${DEPLOY_STATE_DIR}/frontend_build_env.sig")"
+
+  BACKEND_ENV_HASH=""
+  if [[ -f "${BACKEND_ENV_FILE}" ]]; then
+    BACKEND_ENV_HASH="$(sha256sum "${BACKEND_ENV_FILE}" | awk '{print $1}')"
+  fi
+  STORED_BACKEND_ENV_HASH="$(read_state_trim "${DEPLOY_STATE_DIR}/backend_env.sha")"
+
+  BACKEND_ENV_CHANGED=false
+  if [[ -n "${BACKEND_ENV_HASH}" ]] && [[ -n "${STORED_BACKEND_ENV_HASH}" ]] && [[ "${BACKEND_ENV_HASH}" != "${STORED_BACKEND_ENV_HASH}" ]]; then
+    BACKEND_ENV_CHANGED=true
+  fi
+  if [[ -z "${STORED_BACKEND_ENV_HASH}" ]] && [[ -f "${BACKEND_ENV_FILE}" ]]; then
+    BACKEND_ENV_CHANGED=true
+  fi
+
+  ENV_SIG_CHANGED=false
+  if [[ -n "${STORED_ENV_SIG}" ]] && [[ "${CURRENT_ENV_SIG}" != "${STORED_ENV_SIG}" ]]; then
+    ENV_SIG_CHANGED=true
+  fi
+  if [[ -z "${STORED_ENV_SIG}" ]]; then
+    ENV_SIG_CHANGED=true
+  fi
+
+  LOCK_HASH_CHANGED=false
+  if [[ -n "${STORED_FRONT_LOCK}" ]] && [[ "${FRONT_LOCK_HASH}" != "${STORED_FRONT_LOCK}" ]]; then LOCK_HASH_CHANGED=true; fi
+  if [[ -n "${STORED_ROOT_LOCK}" ]] && [[ -n "${ROOT_LOCK_HASH}" ]] && [[ "${ROOT_LOCK_HASH}" != "${STORED_ROOT_LOCK}" ]]; then LOCK_HASH_CHANGED=true; fi
+  if [[ -z "${STORED_FRONT_LOCK}" ]]; then LOCK_HASH_CHANGED=true; fi
+
+  REQ_HASH_CHANGED=false
+  if [[ -n "${STORED_REQ_HASH}" ]] && [[ "${REQ_HASH}" != "${STORED_REQ_HASH}" ]]; then REQ_HASH_CHANGED=true; fi
+  if [[ -z "${STORED_REQ_HASH}" ]]; then REQ_HASH_CHANGED=true; fi
+
+  PLAYWRIGHT_MARKER_HASH="$(read_state_trim "${DEPLOY_STATE_DIR}/playwright_requirements_hash")"
+
+  FE_DIFF_FROM=""
+  if [[ -n "${LAST_FE}" ]] && git_commit_exists "${LAST_FE}"; then
+    if git merge-base --is-ancestor "${LAST_FE}" "${NEW_COMMIT}" 2>/dev/null; then
+      FE_DIFF_FROM="${LAST_FE}"
+    else
+      echo "    Warning: last_frontend_build_commit is not an ancestor of NEW_COMMIT; rebuilding SPA (history mismatch)." >&2
+      FE_DIFF_FROM=""
+    fi
+  fi
+
+  NEED_FRONTEND_BUILD=false
+  FE_BUILD_REASON=""
+  if [[ "${FORCE_FULL_DEPLOY}" == "1" ]]; then
+    NEED_FRONTEND_BUILD=true
+    FE_BUILD_REASON="FORCE_FULL_DEPLOY=1"
+  elif [[ "${FORCE_FRONTEND_BUILD}" == "1" ]]; then
+    NEED_FRONTEND_BUILD=true
+    FE_BUILD_REASON="FORCE_FRONTEND_BUILD=1"
+  elif [[ -z "${LAST_FE}" ]] || ! git_commit_exists "${LAST_FE}"; then
+    NEED_FRONTEND_BUILD=true
+    FE_BUILD_REASON="last_frontend_build_commit missing or invalid"
+  elif [[ "${ENV_SIG_CHANGED}" == true ]]; then
+    NEED_FRONTEND_BUILD=true
+    FE_BUILD_REASON="frontend build env signature changed (REACT_APP_* / resolved GOOGLE_OAUTH_CLIENT_ID)"
+  elif [[ "${LOCK_HASH_CHANGED}" == true ]]; then
+    NEED_FRONTEND_BUILD=true
+    FE_BUILD_REASON="frontend or root package-lock.json hash differs from deploy state"
+  elif [[ -n "${LAST_FE}" ]] && git_commit_exists "${LAST_FE}" && ! git merge-base --is-ancestor "${LAST_FE}" "${NEW_COMMIT}" 2>/dev/null; then
+    NEED_FRONTEND_BUILD=true
+    FE_BUILD_REASON="last_frontend_build_commit is not an ancestor of NEW_COMMIT"
+  elif [[ "${LAST_FE}" != "${NEW_COMMIT}" ]]; then
+    if [[ -n "${FE_DIFF_FROM}" ]] && frontend_affecting_paths_changed_between "${FE_DIFF_FROM}" "${NEW_COMMIT}"; then
+      NEED_FRONTEND_BUILD=true
+      FE_BUILD_REASON="frontend-related paths changed since last_frontend_build_commit (${LAST_FE}..${NEW_COMMIT})"
+    else
+      FE_BUILD_REASON="no frontend-related changes since last frontend build (${LAST_FE})"
+    fi
+  else
+    FE_BUILD_REASON="last_frontend_build_commit matches NEW_COMMIT and env/locks match state"
+  fi
+
+  NPM_CI_REASON=""
+  RUN_NPM_CI=false
+  if [[ "${FORCE_NPM_CI}" == "1" ]]; then
+    RUN_NPM_CI=true
+    NPM_CI_REASON="FORCE_NPM_CI=1"
+  elif [[ "${FRONTEND_DEPS_CHANGED}" == true ]]; then
+    RUN_NPM_CI=true
+    NPM_CI_REASON="package.json / package-lock.json changed in deploy diff (${DIFF_BASE}..${NEW_COMMIT})"
+  elif [[ ! -d "${APP_ROOT}/frontend/node_modules" ]]; then
+    RUN_NPM_CI=true
+    NPM_CI_REASON="frontend/node_modules missing"
+  elif [[ "${LOCK_HASH_CHANGED}" == true ]]; then
+    RUN_NPM_CI=true
+    NPM_CI_REASON="package-lock hash differs from deploy state"
+  else
+    NPM_CI_REASON="node_modules present and lockfiles unchanged vs state"
+  fi
+
+  BACKEND_RESTART_REASON=""
+  WANT_BACKEND_RESTART=false
+  if [[ "${FORCE_BACKEND_RESTART}" == "1" ]]; then
+    WANT_BACKEND_RESTART=true
+    BACKEND_RESTART_REASON="FORCE_BACKEND_RESTART=1"
+  elif [[ "${BACKEND_CHANGED}" == true ]]; then
+    WANT_BACKEND_RESTART=true
+    BACKEND_RESTART_REASON="backend paths changed in deploy diff"
+  elif [[ "${BACKEND_DEPS_CHANGED}" == true ]]; then
+    WANT_BACKEND_RESTART=true
+    BACKEND_RESTART_REASON="backend deps changed"
+  elif [[ "${DEPLOY_SYSTEMD_CHANGED}" == true ]]; then
+    WANT_BACKEND_RESTART=true
+    BACKEND_RESTART_REASON="deploy/systemd templates changed"
+  elif [[ "${BACKEND_ENV_CHANGED}" == true ]]; then
+    WANT_BACKEND_RESTART=true
+    BACKEND_RESTART_REASON="backend/.env hash changed vs deploy state"
+  else
+    BACKEND_RESTART_REASON="no backend restart triggers in deploy diff / env"
+  fi
+
+  DEPLOY_FE_TOUCHED=false
+  if echo "${CHANGED_FILES}" | grep -qE '^frontend/|^package\.json$|^package-lock\.json$'; then
+    DEPLOY_FE_TOUCHED=true
+  fi
+  FE_SUMMARY="no"
+  if [[ "${DEPLOY_FE_TOUCHED}" == true ]]; then
+    FE_SUMMARY="yes"
+  fi
+
+  echo ""
+  echo "Frontend deps changed (deploy diff): ${FRONTEND_DEPS_CHANGED}"
+  echo "Backend changed:            ${BACKEND_CHANGED}"
+  echo "Backend deps changed:       ${BACKEND_DEPS_CHANGED}"
+  echo "Backend migrations changed: ${BACKEND_MIGRATIONS_CHANGED}"
+  echo "deploy/nginx changed:       ${DEPLOY_NGINX_CHANGED}"
+  echo "deploy/systemd changed:     ${DEPLOY_SYSTEMD_CHANGED}"
+  echo "Playwright-relevant:        ${PLAYWRIGHT_RELEVANT_CHANGED}"
+  echo "Frontend env sig changed:   ${ENV_SIG_CHANGED}"
+  echo "Lock hash changed (state):  ${LOCK_HASH_CHANGED}"
+  echo "Requirements hash changed:  ${REQ_HASH_CHANGED}"
+  echo "Backend .env changed:       ${BACKEND_ENV_CHANGED}"
+  echo "First deploy state:         $([[ "${FIRST_DEPLOY}" == "1" ]] && echo yes || echo no)"
+
+  RUN_PIP=false
+  RUN_PLAYWRIGHT_INSTALL=false
+  RUN_MIGRATE=false
+  RUN_COLLECTSTATIC=false
+  RUN_NGINX=false
+  RUN_SYSTEMD_UPDATE=false
+  RUN_GUNICORN_RESTART=false
+  RUN_PLAYWRIGHT_PERSIST=false
+
+  if [[ "${FORCE_FULL_DEPLOY}" == "1" ]] || [[ "${FIRST_DEPLOY}" == "1" ]]; then
+    RUN_PIP=true
+    RUN_PLAYWRIGHT_INSTALL=true
+    RUN_NPM_CI=true
+    NPM_CI_REASON="first deploy or FORCE_FULL_DEPLOY=1"
+    RUN_BUILD=true
+    RUN_MIGRATE=true
+    RUN_COLLECTSTATIC=true
+    RUN_NGINX=true
+    RUN_SYSTEMD_UPDATE=true
+    RUN_GUNICORN_RESTART=true
+    RUN_PLAYWRIGHT_PERSIST=true
+  else
+    if [[ "${BACKEND_DEPS_CHANGED}" == true ]] || [[ "${REQ_HASH_CHANGED}" == true ]]; then RUN_PIP=true; fi
+    if [[ "${NEED_FRONTEND_BUILD}" == true ]]; then RUN_BUILD=true; else RUN_BUILD=false; fi
+
+    if [[ "${BACKEND_CHANGED}" == true ]] || [[ "${BACKEND_MIGRATIONS_CHANGED}" == true ]]; then
+      RUN_MIGRATE=true
+    fi
+
+    if [[ "${BACKEND_CHANGED}" == true ]] || [[ "${BACKEND_DEPS_CHANGED}" == true ]]; then
+      RUN_COLLECTSTATIC=true
+    fi
+
+    if [[ "${DEPLOY_NGINX_CHANGED}" == true ]]; then RUN_NGINX=true; fi
+    if [[ "${DEPLOY_SYSTEMD_CHANGED}" == true ]]; then RUN_SYSTEMD_UPDATE=true; fi
+
+    RUN_PLAYWRIGHT_INSTALL=false
+    if ! playwright_browser_present; then RUN_PLAYWRIGHT_INSTALL=true; fi
+    if [[ -n "${REQ_HASH}" ]] && [[ "${PLAYWRIGHT_MARKER_HASH}" != "${REQ_HASH}" ]]; then RUN_PLAYWRIGHT_INSTALL=true; fi
+    if [[ "${BACKEND_DEPS_CHANGED}" == true ]] || [[ "${PLAYWRIGHT_RELEVANT_CHANGED}" == true ]]; then
+      RUN_PLAYWRIGHT_INSTALL=true
+    fi
+
+    if [[ "${RUN_PLAYWRIGHT_INSTALL}" == true ]]; then
+      RUN_PLAYWRIGHT_PERSIST=true
+    fi
+
+    RUN_GUNICORN_RESTART=false
+    if [[ "${FORCE_BACKEND_RESTART}" == "1" ]] || [[ "${BACKEND_CHANGED}" == true ]] || [[ "${BACKEND_DEPS_CHANGED}" == true ]] || [[ "${DEPLOY_SYSTEMD_CHANGED}" == true ]] || [[ "${BACKEND_ENV_CHANGED}" == true ]]; then
+      RUN_GUNICORN_RESTART=true
+    fi
+    if [[ "${RUN_MIGRATE}" == true ]] || [[ "${RUN_COLLECTSTATIC}" == true ]]; then
+      RUN_GUNICORN_RESTART=true
+    fi
+  fi
+
+  GUNICORN_RESTART_REASON="${BACKEND_RESTART_REASON}"
+  if [[ "${RUN_GUNICORN_RESTART}" == true ]] && [[ "${WANT_BACKEND_RESTART}" == false ]]; then
+    GUNICORN_RESTART_REASON="migrate/collectstatic or related Django step requires gunicorn restart"
+  fi
+
+  echo ""
+  echo "OLD_COMMIT (pre-sync HEAD):     ${PRE_SYNC_HEAD}"
+  echo "NEW_COMMIT:                     ${NEW_COMMIT}"
+  echo "last_successful_commit:         ${LAST_SUCCESSFUL:-<none>}"
+  echo "last_frontend_build_commit:     ${LAST_FE:-<none>}"
+  echo "last_backend_restart_commit:    ${LAST_BACKEND_RESTART:-<none>}"
+  echo "Deploy diff base (backend/docs): ${DIFF_BASE}"
+  echo "frontend changed (deploy diff): ${FE_SUMMARY}"
+  if [[ "${NEED_FRONTEND_BUILD}" == true ]]; then
+    echo "Frontend build required:        yes (${FE_BUILD_REASON})"
+  else
+    echo "Frontend build required:        no (${FE_BUILD_REASON})"
+  fi
+  if [[ "${RUN_NPM_CI}" == true ]]; then
+    echo "npm ci required:                yes (${NPM_CI_REASON})"
+  else
+    echo "npm ci required:                no (${NPM_CI_REASON})"
+  fi
+  if [[ "${RUN_GUNICORN_RESTART}" == true ]]; then
+    echo "Backend restart required:       yes (${GUNICORN_RESTART_REASON})"
+  else
+    echo "Backend restart required:       no (${BACKEND_RESTART_REASON})"
+  fi
+}
+
 mkdir -p "${DEPLOY_STATE_DIR}"
 
 if [[ "${DRY_RUN}" == "1" ]]; then
@@ -146,21 +496,41 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   git fetch origin "${MAIN_BRANCH}"
   ORIGIN_HEAD="$(git rev-parse "origin/${MAIN_BRANCH}")"
   PRE_SYNC_HEAD="$(git rev-parse HEAD)"
-  LAST_SUCCESSFUL="$(tr -d '[:space:]' < "${DEPLOY_STATE_DIR}/last_successful_commit" 2>/dev/null || true)"
-  DIFF_BASE=""
-  if [[ -n "${LAST_SUCCESSFUL}" ]] && git cat-file -e "${LAST_SUCCESSFUL}^{commit}" 2>/dev/null; then
-    if git merge-base --is-ancestor "${LAST_SUCCESSFUL}" "${ORIGIN_HEAD}" 2>/dev/null; then
-      DIFF_BASE="${LAST_SUCCESSFUL}"
+  LAST_SUCCESSFUL="$(read_state_trim "${DEPLOY_STATE_DIR}/last_successful_commit")"
+  LAST_FE="$(read_state_trim "${DEPLOY_STATE_DIR}/last_frontend_build_commit")"
+  LAST_BACKEND_RESTART="$(read_state_trim "${DEPLOY_STATE_DIR}/last_backend_restart_commit")"
+  FIRST_DEPLOY=0
+  if [[ -z "${LAST_SUCCESSFUL}" ]] || ! git_commit_exists "${LAST_SUCCESSFUL}"; then
+    FIRST_DEPLOY=1
+  fi
+  NEW_COMMIT="${ORIGIN_HEAD}"
+  deploy_evaluate_plan
+  echo ""
+  echo "--- Planned steps (dry run) ---"
+fi
+
+if [[ "${DRY_RUN}" == "1" ]]; then
+  plan_line() {
+    local name="$1"
+    local var_name="$2"
+    local val="${!var_name}"
+    if [[ "${val}" == "true" ]]; then
+      echo "  RUN: ${name}"
+    else
+      echo "  SKIP: ${name}"
     fi
-  fi
-  if [[ -z "${DIFF_BASE}" ]]; then
-    DIFF_BASE="${PRE_SYNC_HEAD}"
-  fi
-  CHANGED_FILES="$(git diff --name-only "${DIFF_BASE}" "${ORIGIN_HEAD}" 2>/dev/null || true)"
-  echo "Old commit (diff base): ${DIFF_BASE}"
-  echo "Origin ${MAIN_BRANCH} (would become HEAD after reset): ${ORIGIN_HEAD}"
-  echo "Changed files (preview):"
-  echo "${CHANGED_FILES:-<none>}"
+  }
+  plan_line "pip install" RUN_PIP
+  plan_line "playwright install" RUN_PLAYWRIGHT_INSTALL
+  plan_line "playwright path in backend/.env" RUN_PLAYWRIGHT_PERSIST
+  plan_line "npm ci" RUN_NPM_CI
+  plan_line "npm run build" RUN_BUILD
+  plan_line "django migrate" RUN_MIGRATE
+  plan_line "django collectstatic" RUN_COLLECTSTATIC
+  plan_line "nginx template sync + reload" RUN_NGINX
+  plan_line "systemd unit sync + daemon-reload" RUN_SYSTEMD_UPDATE
+  plan_line "gunicorn restart" RUN_GUNICORN_RESTART
+  echo ""
   echo "(Dry run finished — no deploy actions executed.)"
   exit 0
 fi
@@ -172,11 +542,12 @@ if [[ ! -x "${PYTHON}" ]]; then
   exit 1
 fi
 
-# --- Record HEAD before sync (GitHub Actions may have reset already; diff uses last_successful + this fallback)
 PRE_SYNC_HEAD="$(git rev-parse HEAD)"
-LAST_SUCCESSFUL="$(tr -d '[:space:]' < "${DEPLOY_STATE_DIR}/last_successful_commit" 2>/dev/null || true)"
+LAST_SUCCESSFUL="$(read_state_trim "${DEPLOY_STATE_DIR}/last_successful_commit")"
+LAST_FE="$(read_state_trim "${DEPLOY_STATE_DIR}/last_frontend_build_commit")"
+LAST_BACKEND_RESTART="$(read_state_trim "${DEPLOY_STATE_DIR}/last_backend_restart_commit")"
 FIRST_DEPLOY=0
-if [[ -z "${LAST_SUCCESSFUL}" ]] || ! git cat-file -e "${LAST_SUCCESSFUL}^{commit}" 2>/dev/null; then
+if [[ -z "${LAST_SUCCESSFUL}" ]] || ! git_commit_exists "${LAST_SUCCESSFUL}"; then
   FIRST_DEPLOY=1
 fi
 
@@ -189,191 +560,22 @@ NEW_COMMIT="$(git rev-parse HEAD)"
 
 echo "Pre-sync HEAD:  ${PRE_SYNC_HEAD}"
 echo "New HEAD:       ${NEW_COMMIT}"
-echo "Last deployed:  ${LAST_SUCCESSFUL:-<none>}"
 
-if [[ "${FORCE_FULL_DEPLOY}" != "1" ]] && [[ -n "${LAST_SUCCESSFUL}" ]] && [[ "${NEW_COMMIT}" == "${LAST_SUCCESSFUL}" ]]; then
-  echo "Already deployed this commit (${NEW_COMMIT}); skipping heavy steps. Use FORCE_FULL_DEPLOY=1 to run everything."
+deploy_evaluate_plan
+
+ANY_ACTION=false
+for _rn in RUN_PIP RUN_PLAYWRIGHT_INSTALL RUN_NPM_CI RUN_BUILD RUN_MIGRATE RUN_COLLECTSTATIC RUN_NGINX RUN_SYSTEMD_UPDATE RUN_GUNICORN_RESTART RUN_PLAYWRIGHT_PERSIST; do
+  if [[ "${!_rn}" == "true" ]]; then ANY_ACTION=true; break; fi
+done
+if [[ "${ANY_ACTION}" == false ]]; then
+  echo ""
+  echo "No deploy actions required (incremental state matches this commit). Exiting."
   exit 0
 fi
 
-DIFF_BASE=""
-if [[ "${FIRST_DEPLOY}" == "1" ]]; then
-  DIFF_BASE="${PRE_SYNC_HEAD}"
-elif [[ -n "${LAST_SUCCESSFUL}" ]] && git cat-file -e "${LAST_SUCCESSFUL}^{commit}" 2>/dev/null; then
-  if git merge-base --is-ancestor "${LAST_SUCCESSFUL}" "${NEW_COMMIT}" 2>/dev/null; then
-    DIFF_BASE="${LAST_SUCCESSFUL}"
-  else
-    echo "    Warning: last_successful_commit is not an ancestor of NEW; using pre-sync HEAD as diff base." >&2
-    DIFF_BASE="${PRE_SYNC_HEAD}"
-  fi
-else
-  DIFF_BASE="${PRE_SYNC_HEAD}"
-fi
-
-CHANGED_FILES="$(git diff --name-only "${DIFF_BASE}" "${NEW_COMMIT}" 2>/dev/null || true)"
-echo ""
-echo "--- Deploy diff (${DIFF_BASE} .. ${NEW_COMMIT}) ---"
-if [[ -z "${CHANGED_FILES}" ]]; then
-  echo "Changed files: <none>"
-else
-  echo "Changed files:"
-  echo "${CHANGED_FILES}"
-fi
-
-FRONTEND_CHANGED=false
-FRONTEND_DEPS_CHANGED=false
-BACKEND_CHANGED=false
-BACKEND_DEPS_CHANGED=false
-BACKEND_MIGRATIONS_CHANGED=false
-DEPLOY_NGINX_CHANGED=false
-DEPLOY_SYSTEMD_CHANGED=false
-PLAYWRIGHT_RELEVANT_CHANGED=false
-
-if [[ "${FORCE_FULL_DEPLOY}" == "1" ]]; then
-  FRONTEND_CHANGED=true
-  FRONTEND_DEPS_CHANGED=true
-  BACKEND_CHANGED=true
-  BACKEND_DEPS_CHANGED=true
-  BACKEND_MIGRATIONS_CHANGED=true
-  DEPLOY_NGINX_CHANGED=true
-  DEPLOY_SYSTEMD_CHANGED=true
-  PLAYWRIGHT_RELEVANT_CHANGED=true
-else
-  if echo "${CHANGED_FILES}" | grep -qE '^frontend/'; then FRONTEND_CHANGED=true; fi
-  if echo "${CHANGED_FILES}" | grep -qE '^frontend/package\.json$|^frontend/package-lock\.json$|^package\.json$|^package-lock\.json$'; then
-    FRONTEND_DEPS_CHANGED=true
-  fi
-  if echo "${CHANGED_FILES}" | grep -qE '^backend/'; then BACKEND_CHANGED=true; fi
-  if echo "${CHANGED_FILES}" | grep -qE '^backend/requirements\.txt$'; then
-    BACKEND_DEPS_CHANGED=true
-    PLAYWRIGHT_RELEVANT_CHANGED=true
-  fi
-  if echo "${CHANGED_FILES}" | grep -qE '^backend/.*/migrations/'; then BACKEND_MIGRATIONS_CHANGED=true; fi
-  if echo "${CHANGED_FILES}" | grep -qE '^deploy/nginx/'; then DEPLOY_NGINX_CHANGED=true; fi
-  if echo "${CHANGED_FILES}" | grep -qE '^deploy/systemd/'; then DEPLOY_SYSTEMD_CHANGED=true; fi
-  if echo "${CHANGED_FILES}" | grep -qE '^deploy/deploy\.sh$'; then PLAYWRIGHT_RELEVANT_CHANGED=true; fi
-fi
-
-REQ_HASH="$(sha256_file "${APP_ROOT}/backend/requirements.txt")"
-STORED_REQ_HASH="$(cat "${DEPLOY_STATE_DIR}/backend_requirements_hash" 2>/dev/null | tr -d '[:space:]' || true)"
-FRONT_LOCK_HASH="$(sha256_file "${APP_ROOT}/frontend/package-lock.json")"
-ROOT_LOCK_HASH="$(sha256_file "${APP_ROOT}/package-lock.json")"
-STORED_FRONT_LOCK="$(cat "${DEPLOY_STATE_DIR}/frontend_package_lock_hash" 2>/dev/null | tr -d '[:space:]' || true)"
-STORED_ROOT_LOCK="$(cat "${DEPLOY_STATE_DIR}/root_package_lock_hash" 2>/dev/null | tr -d '[:space:]' || true)"
-
-resolve_google_client_id
-CURRENT_ENV_SIG="$(frontend_env_sig)"
-STORED_ENV_SIG="$(cat "${DEPLOY_STATE_DIR}/frontend_build_env.sig" 2>/dev/null | tr -d '[:space:]' || true)"
-
-BACKEND_ENV_HASH=""
-if [[ -f "${BACKEND_ENV_FILE}" ]]; then
-  BACKEND_ENV_HASH="$(sha256sum "${BACKEND_ENV_FILE}" | awk '{print $1}')"
-fi
-STORED_BACKEND_ENV_HASH="$(cat "${DEPLOY_STATE_DIR}/backend_env.sha" 2>/dev/null | tr -d '[:space:]' || true)"
-
-BACKEND_ENV_CHANGED=false
-if [[ -n "${BACKEND_ENV_HASH}" ]] && [[ -n "${STORED_BACKEND_ENV_HASH}" ]] && [[ "${BACKEND_ENV_HASH}" != "${STORED_BACKEND_ENV_HASH}" ]]; then
-  BACKEND_ENV_CHANGED=true
-fi
-if [[ -z "${STORED_BACKEND_ENV_HASH}" ]] && [[ -f "${BACKEND_ENV_FILE}" ]]; then
-  BACKEND_ENV_CHANGED=true
-fi
-
-ENV_SIG_CHANGED=false
-if [[ -n "${STORED_ENV_SIG}" ]] && [[ "${CURRENT_ENV_SIG}" != "${STORED_ENV_SIG}" ]]; then
-  ENV_SIG_CHANGED=true
-fi
-if [[ -z "${STORED_ENV_SIG}" ]]; then
-  ENV_SIG_CHANGED=true
-fi
-
-LOCK_HASH_CHANGED=false
-if [[ -n "${STORED_FRONT_LOCK}" ]] && [[ "${FRONT_LOCK_HASH}" != "${STORED_FRONT_LOCK}" ]]; then LOCK_HASH_CHANGED=true; fi
-if [[ -n "${STORED_ROOT_LOCK}" ]] && [[ -n "${ROOT_LOCK_HASH}" ]] && [[ "${ROOT_LOCK_HASH}" != "${STORED_ROOT_LOCK}" ]]; then LOCK_HASH_CHANGED=true; fi
-if [[ -z "${STORED_FRONT_LOCK}" ]]; then LOCK_HASH_CHANGED=true; fi
-
-REQ_HASH_CHANGED=false
-if [[ -n "${STORED_REQ_HASH}" ]] && [[ "${REQ_HASH}" != "${STORED_REQ_HASH}" ]]; then REQ_HASH_CHANGED=true; fi
-if [[ -z "${STORED_REQ_HASH}" ]]; then REQ_HASH_CHANGED=true; fi
-
-PLAYWRIGHT_MARKER_HASH="$(cat "${DEPLOY_STATE_DIR}/playwright_requirements_hash" 2>/dev/null | tr -d '[:space:]' || true)"
-
-echo ""
-echo "Frontend changed:           ${FRONTEND_CHANGED}"
-echo "Frontend deps changed:      ${FRONTEND_DEPS_CHANGED}"
-echo "Backend changed:            ${BACKEND_CHANGED}"
-echo "Backend deps changed:      ${BACKEND_DEPS_CHANGED}"
-echo "Backend migrations changed: ${BACKEND_MIGRATIONS_CHANGED}"
-echo "deploy/nginx changed:       ${DEPLOY_NGINX_CHANGED}"
-echo "deploy/systemd changed:     ${DEPLOY_SYSTEMD_CHANGED}"
-echo "Playwright-relevant:        ${PLAYWRIGHT_RELEVANT_CHANGED}"
-echo "Frontend env sig changed:   ${ENV_SIG_CHANGED}"
-echo "Lock hash changed (state):  ${LOCK_HASH_CHANGED}"
-echo "Requirements hash changed:  ${REQ_HASH_CHANGED}"
-echo "Backend .env changed:       ${BACKEND_ENV_CHANGED}"
-echo "First deploy state:         $([[ "${FIRST_DEPLOY}" == "1" ]] && echo yes || echo no)"
-
-# --- Decide steps
-RUN_PIP=false
-RUN_PLAYWRIGHT_INSTALL=false
-RUN_NPM_CI=false
-RUN_BUILD=false
-RUN_MIGRATE=false
-RUN_COLLECTSTATIC=false
-RUN_NGINX=false
-RUN_SYSTEMD_UPDATE=false
-RUN_GUNICORN_RESTART=false
-RUN_PLAYWRIGHT_PERSIST=false
-
-if [[ "${FORCE_FULL_DEPLOY}" == "1" ]] || [[ "${FIRST_DEPLOY}" == "1" ]]; then
-  RUN_PIP=true
-  RUN_PLAYWRIGHT_INSTALL=true
-  RUN_NPM_CI=true
-  RUN_BUILD=true
-  RUN_MIGRATE=true
-  RUN_COLLECTSTATIC=true
-  RUN_NGINX=true
-  RUN_SYSTEMD_UPDATE=true
-  RUN_GUNICORN_RESTART=true
-  RUN_PLAYWRIGHT_PERSIST=true
-else
-  if [[ "${BACKEND_DEPS_CHANGED}" == true ]] || [[ "${REQ_HASH_CHANGED}" == true ]]; then RUN_PIP=true; fi
-  if [[ "${FORCE_NPM_CI}" == "1" ]] || [[ "${FRONTEND_DEPS_CHANGED}" == true ]] || [[ ! -d "${APP_ROOT}/frontend/node_modules" ]] || [[ "${LOCK_HASH_CHANGED}" == true ]]; then
-    RUN_NPM_CI=true
-  fi
-  if [[ "${FORCE_FRONTEND_BUILD}" == "1" ]] || [[ "${FRONTEND_CHANGED}" == true ]] || [[ "${FRONTEND_DEPS_CHANGED}" == true ]] || [[ "${ENV_SIG_CHANGED}" == true ]]; then
-    RUN_BUILD=true
-  fi
-
-  # migrate: backend paths only (not frontend-only / docs-only)
-  if [[ "${BACKEND_CHANGED}" == true ]] || [[ "${BACKEND_MIGRATIONS_CHANGED}" == true ]]; then
-    RUN_MIGRATE=true
-  fi
-
-  if [[ "${BACKEND_CHANGED}" == true ]] || [[ "${BACKEND_DEPS_CHANGED}" == true ]]; then
-    RUN_COLLECTSTATIC=true
-  fi
-
-  if [[ "${DEPLOY_NGINX_CHANGED}" == true ]]; then RUN_NGINX=true; fi
-  if [[ "${DEPLOY_SYSTEMD_CHANGED}" == true ]]; then RUN_SYSTEMD_UPDATE=true; fi
-
-  RUN_PLAYWRIGHT_INSTALL=false
-  if ! playwright_browser_present; then RUN_PLAYWRIGHT_INSTALL=true; fi
-  if [[ -n "${REQ_HASH}" ]] && [[ "${PLAYWRIGHT_MARKER_HASH}" != "${REQ_HASH}" ]]; then RUN_PLAYWRIGHT_INSTALL=true; fi
-  if [[ "${BACKEND_DEPS_CHANGED}" == true ]] || [[ "${PLAYWRIGHT_RELEVANT_CHANGED}" == true ]]; then
-    RUN_PLAYWRIGHT_INSTALL=true
-  fi
-
-  if [[ "${RUN_PLAYWRIGHT_INSTALL}" == true ]]; then
-    RUN_PLAYWRIGHT_PERSIST=true
-  fi
-
-  if [[ "${FORCE_BACKEND_RESTART}" == "1" ]] || [[ "${BACKEND_CHANGED}" == true ]] || [[ "${BACKEND_DEPS_CHANGED}" == true ]] || [[ "${DEPLOY_SYSTEMD_CHANGED}" == true ]] || [[ "${BACKEND_ENV_CHANGED}" == true ]]; then
-    RUN_GUNICORN_RESTART=true
-  fi
-  if [[ "${RUN_MIGRATE}" == true ]] || [[ "${RUN_COLLECTSTATIC}" == true ]]; then
-    RUN_GUNICORN_RESTART=true
-  fi
+if [[ "${NEED_FRONTEND_BUILD}" == true ]] && [[ "${RUN_BUILD}" != true ]]; then
+  echo "Internal error: frontend build required but RUN_BUILD is false." >&2
+  exit 1
 fi
 
 echo ""
@@ -496,6 +698,18 @@ if [[ "${RUN_NPM_CI}" == true ]] || [[ "${RUN_BUILD}" == true ]]; then
       npm run build
       echo "    Fixing ownership of frontend/build for deploy user + readability"
       safe_chown_deploy_tree "${APP_ROOT}/frontend/build"
+      (
+        cd "${APP_ROOT}"
+        verify_frontend_build_bundle
+      )
+      FRONT_LOCK_HASH="$(sha256_file "${APP_ROOT}/frontend/package-lock.json")"
+      ROOT_LOCK_HASH="$(sha256_file "${APP_ROOT}/package-lock.json")"
+      echo "${NEW_COMMIT}" > "${DEPLOY_STATE_DIR}/last_frontend_build_commit"
+      echo "${FRONT_LOCK_HASH}" > "${DEPLOY_STATE_DIR}/frontend_package_lock_hash"
+      echo "${ROOT_LOCK_HASH}" > "${DEPLOY_STATE_DIR}/root_package_lock_hash"
+      resolve_google_client_id
+      echo "$(frontend_env_sig)" > "${DEPLOY_STATE_DIR}/frontend_build_env.sig"
+      echo "    Deploy state: last_frontend_build_commit=${NEW_COMMIT}"
     else
       echo "Skipping npm run build"
     fi
@@ -586,11 +800,18 @@ else
 fi
 
 # --- Gunicorn
+BACKEND_RESTART_RECORDED=0
 if [[ "${RUN_GUNICORN_RESTART}" == true ]]; then
   log_section "Gunicorn: restart"
   if systemctl is-active --quiet "${SYSTEMD_UNIT}" 2>/dev/null; then
     if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
-      sudo systemctl restart "${SYSTEMD_UNIT}"
+      if sudo -n systemctl restart "${SYSTEMD_UNIT}"; then
+        echo "${NEW_COMMIT}" > "${DEPLOY_STATE_DIR}/last_backend_restart_commit"
+        BACKEND_RESTART_RECORDED=1
+        echo "    Deploy state: last_backend_restart_commit=${NEW_COMMIT}"
+      else
+        echo "    WARNING: systemctl restart returned non-zero; last_backend_restart_commit not updated." >&2
+      fi
     else
       echo "    WARNING: ${SYSTEMD_UNIT} is active, but passwordless sudo is unavailable; backend was not restarted."
       echo "    Run manually on the server: sudo systemctl restart ${SYSTEMD_UNIT}"
@@ -602,16 +823,27 @@ else
   echo "Skipping gunicorn restart"
 fi
 
-# --- Persist deploy state
+if [[ "${RUN_GUNICORN_RESTART}" == true ]] && [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+  if systemctl is-active --quiet "${SYSTEMD_UNIT}" 2>/dev/null && [[ "${BACKEND_RESTART_RECORDED}" != "1" ]]; then
+    echo "ERROR: Gunicorn restart was required but did not complete successfully; refusing to update last_successful_commit." >&2
+    exit 1
+  fi
+fi
+
+# --- Persist deploy state (last_successful_commit only after all planned steps above succeeded)
+FRONT_LOCK_HASH="$(sha256_file "${APP_ROOT}/frontend/package-lock.json")"
+ROOT_LOCK_HASH="$(sha256_file "${APP_ROOT}/package-lock.json")"
+REQ_HASH="$(sha256_file "${APP_ROOT}/backend/requirements.txt")"
 echo "${NEW_COMMIT}" > "${DEPLOY_STATE_DIR}/last_successful_commit"
 echo "${FRONT_LOCK_HASH}" > "${DEPLOY_STATE_DIR}/frontend_package_lock_hash"
 echo "${ROOT_LOCK_HASH}" > "${DEPLOY_STATE_DIR}/root_package_lock_hash"
 echo "${REQ_HASH}" > "${DEPLOY_STATE_DIR}/backend_requirements_hash"
-if [[ "${RUN_BUILD}" == true ]]; then
-  echo "$(frontend_env_sig)" > "${DEPLOY_STATE_DIR}/frontend_build_env.sig"
-elif [[ ! -f "${DEPLOY_STATE_DIR}/frontend_build_env.sig" ]]; then
-  echo "$(frontend_env_sig)" > "${DEPLOY_STATE_DIR}/frontend_build_env.sig"
-  echo "    Note: seeded frontend_build_env.sig (no SPA build this run; avoids repeated env-sig churn)."
+if [[ "${RUN_BUILD}" != true ]]; then
+  if [[ ! -f "${DEPLOY_STATE_DIR}/frontend_build_env.sig" ]]; then
+    resolve_google_client_id
+    echo "$(frontend_env_sig)" > "${DEPLOY_STATE_DIR}/frontend_build_env.sig"
+    echo "    Note: seeded frontend_build_env.sig (no SPA build this run; avoids repeated env-sig churn)."
+  fi
 fi
 if [[ -n "${BACKEND_ENV_HASH}" ]]; then
   echo "${BACKEND_ENV_HASH}" > "${DEPLOY_STATE_DIR}/backend_env.sha"

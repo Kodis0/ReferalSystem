@@ -66,7 +66,7 @@ Docker для прод-рантайма не требуется: venv + systemd 
 
 | Файл | Назначение |
 |------|------------|
-| `deploy/deploy.sh` | Инкрементальный деплой: `git fetch` + `git reset --hard origin/main`, затем по diff с последним успешным коммитом (`.deploy-state/last_successful_commit`) пропускаются лишние шаги (pip / Playwright / `npm ci` / сборка / migrate / collectstatic / рестарт). Полный цикл как раньше: `FORCE_FULL_DEPLOY=1` или первый деплой без state |
+| `deploy/deploy.sh` | Инкрементальный деплой: `git fetch` + `git reset --hard origin/main`, затем план строится по **нескольким** server-only state-файлам в `.deploy-state/` (см. раздел 11), а не только по `last_successful_commit`. Полный цикл: `FORCE_FULL_DEPLOY=1` или первый деплой без state |
 | `deploy/nginx/lumoref.conf` | Прод nginx + TLS (после выдачи сертификатов) |
 | `deploy/nginx/lumoref.http-bootstrap.conf` | Только HTTP до появления сертификатов |
 | `deploy/systemd/lumoref-gunicorn.service` | Unit для Gunicorn |
@@ -159,7 +159,16 @@ sudo rm -rf /var/www/lumoref/app/frontend/build
 
 ## 11. Инкрементальный деплой и флаги
 
-Состояние между деплоями хранится **только на сервере** в каталоге **`.deploy-state/`** (в git не коммитится). Там: последний успешно выкатанный коммит, хеши `package-lock` / `requirements.txt`, сигнатура SPA-env для сборки, при необходимости — метки Playwright.
+Состояние между деплоями хранится **только на сервере** в каталоге **`.deploy-state/`** (в git не коммитится). **Нельзя** полагаться на один только `last_successful_commit` как на единственный маркер: фронт и бэкенд обновляются независимо; отдельно фиксируется, для какого коммита реально прошла сборка фронта и рестарт Gunicorn.
+
+| Файл | Смысл |
+|------|--------|
+| `last_successful_commit` | Обновляется **только** после успешного завершения **всех** запланированных шагов текущего прогона (в т.ч. обязательного рестарта, если он был в плане и доступен `sudo`). |
+| `last_frontend_build_commit` | Коммит, для которого успешно выполнен `npm run build` и пройден self-check по `frontend/build/index.html`. |
+| `last_backend_restart_commit` | Коммит, после которого успешно выполнен `systemctl restart` юнита Gunicorn (если рестарт был в плане и юнит был активен). |
+| `frontend_package_lock_hash` / `root_package_lock_hash` | SHA256 содержимого соответствующих `package-lock.json` на момент успешной сборки фронта или финальной фиксации state. |
+| `frontend_build_env.sig` | Сигнатура `REACT_APP_*` (и выведенного из `backend/.env` Client ID), участвующих в прод-сборке SPA. |
+| Также | `backend_requirements_hash`, `backend_env.sha`, метки Playwright — как раньше. |
 
 **Обычный деплой:** push в `main` — срабатывает GitHub Actions и на сервере `deploy/deploy.sh`.
 
@@ -184,15 +193,24 @@ FORCE_FULL_DEPLOY=1 bash deploy/deploy.sh
 DRY_RUN=1 bash deploy/deploy.sh
 ```
 
-**Принудительная пересборка фронта** (например, сменили секреты `REACT_APP_*` в CI и нужна новая сборка при том же коммите):
+**Принудительно пересобрать фронт** (например, сменили секреты `REACT_APP_*` в CI и нужна новая сборка при том же коммите):
 
 ```bash
 FORCE_FRONTEND_BUILD=1 bash deploy/deploy.sh
 ```
 
-Дополнительно: `FORCE_NPM_CI=1`, `FORCE_BACKEND_RESTART=1`.
+Дополнительно: `FORCE_NPM_CI=1`, `FORCE_BACKEND_RESTART=1`. Эти флаги **не игнорируются**: даже если `HEAD` совпадает с `last_successful_commit`, скрипт не выходит «раньше времени» — сначала вычисляется план (см. лог: `Frontend build required`, `npm ci required`, `Backend restart required`).
 
-Если текущий `HEAD` уже совпадает с последним успешным коммитом в `.deploy-state`, скрипт завершится с сообщением «Already deployed…» без тяжёлых шагов (для повторного прогона используйте `FORCE_FULL_DEPLOY=1` или смените коммит).
+**Если подозреваете «старый» фронт после деплоя:** на сервере проверьте, какой бандл указан в сборке и что файл на диске существует:
+
+```bash
+grep -oE 'static/js/main[^"]*\.js' /var/www/lumoref/app/frontend/build/index.html
+ls -la /var/www/lumoref/app/frontend/build/static/js/main.*.js
+```
+
+(Подставьте свой `DEPLOY_PATH` вместо `/var/www/lumoref/app`.)
+
+Повторный деплой **того же коммита** без `FORCE_*` и при актуальном state не выполняет тяжёлых шагов. Принудительный полный прогон: `FORCE_FULL_DEPLOY=1 bash deploy/deploy.sh`.
 
 ## 12. Ручные команды на сервере
 
