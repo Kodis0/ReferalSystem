@@ -60,6 +60,18 @@ function apiErrorDisplayText(payload) {
   return "";
 }
 
+/** Human message for POST activate failure (409 embed readiness etc.). */
+export function formatActivateConflictMessage(payload, integrationData) {
+  const code = payload?.code;
+  const er = payload?.embed_readiness;
+  const seen = Boolean(integrationData?.last_widget_seen_at);
+  if (code === "site_not_ready_for_activate" && er && er.widget_enabled === false && seen) {
+    return "Виджет найден на сайте, но выключен в настройках. Включите виджет.";
+  }
+  const fallback = apiErrorDisplayText(payload);
+  return fallback || "Не удалось активировать сайт.";
+}
+
 /**
  * Загрузка интеграции сайта и действия как в `SiteShellWidgetActionsBar` (шапка сайта / меню карточки).
  *
@@ -101,6 +113,7 @@ export function useSiteShellIntegrationActions({
   const [deleteSiteBusy, setDeleteSiteBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activateLoading, setActivateLoading] = useState(false);
+  const [activateError, setActivateError] = useState("");
 
   const siteId = isUuidString(sitePublicId) ? sitePublicId.trim() : "";
 
@@ -133,6 +146,7 @@ export function useSiteShellIntegrationActions({
           return;
         }
         setError("");
+        setActivateError("");
         setData(intPayload);
         setWidgetEnabled(Boolean(intPayload.widget_enabled));
         const resDiag = await fetch(
@@ -179,6 +193,7 @@ export function useSiteShellIntegrationActions({
       setDeleteSiteBusy(false);
       setSaving(false);
       setActivateLoading(false);
+      setActivateError("");
       return undefined;
     }
     void load();
@@ -214,6 +229,7 @@ export function useSiteShellIntegrationActions({
         if (typeof payload?.widget_enabled === "boolean") {
           setWidgetEnabled(Boolean(payload.widget_enabled));
         }
+        setActivateError("");
         emitSiteOwnerActivity(siteId);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
@@ -235,7 +251,30 @@ export function useSiteShellIntegrationActions({
   const onActivate = useCallback(async () => {
     if (!siteId) return;
     setActivateLoading(true);
+    setActivateError("");
     try {
+      let integrationSnapshot = data;
+      if (
+        integrationSnapshot &&
+        integrationSnapshot.widget_enabled === false &&
+        integrationSnapshot.last_widget_seen_at
+      ) {
+        const resPatch = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, siteId), {
+          method: "PATCH",
+          headers: authHeaders(),
+          credentials: "include",
+          body: JSON.stringify({ widget_enabled: true }),
+        });
+        const patchPayload = await resPatch.json().catch(() => ({}));
+        if (resPatch.ok) {
+          setData(patchPayload);
+          if (typeof patchPayload?.widget_enabled === "boolean") {
+            setWidgetEnabled(Boolean(patchPayload.widget_enabled));
+          }
+          integrationSnapshot = patchPayload;
+          emitSiteOwnerActivity(siteId);
+        }
+      }
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationActivate, siteId), {
         method: "POST",
         headers: authHeaders(),
@@ -247,13 +286,16 @@ export function useSiteShellIntegrationActions({
         setData(payload);
         emitSiteOwnerActivity(siteId);
         await load();
+        return;
       }
+      setActivateError(formatActivateConflictMessage(payload, integrationSnapshot));
     } catch (e) {
       console.error(e);
+      setActivateError("Сетевая ошибка");
     } finally {
       setActivateLoading(false);
     }
-  }, [load, siteId]);
+  }, [data, load, siteId]);
 
   const onVerify = useCallback(async () => {
     if (!siteId) return;
@@ -392,6 +434,7 @@ export function useSiteShellIntegrationActions({
     deleteSiteBusy,
     saving,
     activateLoading,
+    activateError,
     actionsRef,
     load,
   };

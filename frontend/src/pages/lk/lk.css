@@ -800,16 +800,25 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   border-radius: 999px;
 }
 
+/* Как у .lk-sidebar__collapse-arrow: тот же easing и длительность переворота */
 .lk-header__chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   opacity: 0.85;
-  transition: transform 0.18s ease;
+  transform: rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .lk-header__chevron_open {
   transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-header__chevron {
+    transition: none;
+  }
 }
 
 /* Выпадающие меню: панель в духе cloud-консолей (тёмный фон #17212b, линия #2c3743, тень 4/12). */

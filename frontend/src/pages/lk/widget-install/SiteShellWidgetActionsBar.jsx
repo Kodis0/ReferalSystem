@@ -21,6 +21,8 @@ export default function SiteShellWidgetActionsBar({
   deleteMenuTestId,
   /** Пока нет payload интеграции, переключение виджета для `active` — no-op без `data`; блокируем кнопку. */
   toggleDisabledUntilReady = false,
+  /** Только `variant="menu"`: текст после ошибки активации */
+  activateError = "",
 }) {
   const captureRunning = lifecycleStatus === "active" && widgetEnabled;
   const toggleLabel = (() => {
@@ -35,6 +37,11 @@ export default function SiteShellWidgetActionsBar({
   if (variant === "menu") {
     return (
       <>
+        {activateError ? (
+          <div className="owner-programs__service-card-menu-hint" role="alert">
+            {activateError}
+          </div>
+        ) : null}
         <button
           type="button"
           className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row owner-programs__service-card-menu-item_danger"

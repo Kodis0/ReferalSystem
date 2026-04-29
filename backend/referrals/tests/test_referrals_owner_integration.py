@@ -1430,6 +1430,63 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(site.status, Site.Status.ACTIVE)
         self.assertIsNotNone(site.activated_at)
 
+    def test_patch_widget_enabled_true_persists(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_we_true_" + uuid.uuid4().hex,
+            allowed_origins=["https://we-save.example"],
+            widget_enabled=False,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.patch(
+            f"/referrals/site/integration/?site_public_id={site.public_id}",
+            data={"widget_enabled": True},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["widget_enabled"])
+        site.refresh_from_db()
+        self.assertTrue(site.widget_enabled)
+
+    def test_activate_409_when_widget_disabled_and_never_seen(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_act_never_" + uuid.uuid4().hex,
+            allowed_origins=["https://act-never.example"],
+            widget_enabled=False,
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+            last_widget_seen_at=None,
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data.get("code"), "site_not_ready_for_activate")
+        self.assertFalse(r.data["embed_readiness"]["widget_enabled"])
+
+    def test_activate_enables_widget_when_seen_but_flag_was_false(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_act_seen_" + uuid.uuid4().hex,
+            allowed_origins=["https://act-seen.example"],
+            widget_enabled=False,
+            last_widget_seen_at=timezone.now(),
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data["widget_enabled"])
+        site.refresh_from_db()
+        self.assertTrue(site.widget_enabled)
+
     def test_patch_display_name_and_origin_scoped_by_site_public_id(self):
         project = Project.objects.create(owner=self.owner, name="Old", description="Old description")
         site = Site.objects.create(

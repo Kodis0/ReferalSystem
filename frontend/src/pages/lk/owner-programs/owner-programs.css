@@ -1008,8 +1008,23 @@
 .owner-programs__site-shell-toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.owner-programs__site-shell-toolbar-alert {
+  flex: 1 0 100%;
+  margin: 0;
+  max-width: 28rem;
+  text-align: right;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 182, 193, 0.98);
+}
+
+[data-theme="light"] .owner-programs__site-shell-toolbar-alert {
+  color: #b42318;
 }
 
 .owner-programs__site-shell-toolbar .owner-programs__icon-action {

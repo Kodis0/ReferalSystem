@@ -24,6 +24,7 @@ export default function SiteShellToolbarSubscriber({
     deleteSiteBusy,
     saving,
     activateLoading,
+    activateError,
     actionsRef,
   } = useSiteShellIntegrationActions({
     sitePublicId,
@@ -44,20 +45,28 @@ export default function SiteShellToolbarSubscriber({
     }
     const lifecycleForToolbar = diag?.site_status || data?.status;
     setSiteShellToolbar(
-      <SiteShellWidgetActionsBar
-        actionsRef={actionsRef}
-        deleteSiteBusy={deleteSiteBusy}
-        verifyLoading={verifyLoading}
-        refreshBusy={refreshBusy}
-        lifecycleStatus={lifecycleForToolbar}
-        widgetEnabled={widgetEnabled}
-        toggleBusy={saving || activateLoading}
-        variant="toolbar"
-      />,
+      <>
+        {activateError ? (
+          <div className="owner-programs__site-shell-toolbar-alert" role="alert">
+            {activateError}
+          </div>
+        ) : null}
+        <SiteShellWidgetActionsBar
+          actionsRef={actionsRef}
+          deleteSiteBusy={deleteSiteBusy}
+          verifyLoading={verifyLoading}
+          refreshBusy={refreshBusy}
+          lifecycleStatus={lifecycleForToolbar}
+          widgetEnabled={widgetEnabled}
+          toggleBusy={saving || activateLoading}
+          variant="toolbar"
+        />
+      </>,
     );
     return () => setSiteShellToolbar(null);
   }, [
     activateLoading,
+    activateError,
     data,
     deleteSiteBusy,
     diag?.site_status,

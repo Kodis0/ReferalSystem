@@ -672,6 +672,7 @@ export default function ProjectOverviewPage() {
         widgetEnabled={widgetEnabled}
         toggleBusy={siteMenuIntegration.saving || siteMenuIntegration.activateLoading}
         toggleDisabledUntilReady={toggleDisabledUntilReady}
+        activateError={siteMenuIntegration.activateError}
       />
     );
   };

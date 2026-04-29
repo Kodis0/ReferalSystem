@@ -45,7 +45,7 @@ from .serializers import (
     SiteOwnerIntegrationUpdateSerializer,
     serialize_owner_project_metadata,
 )
-from .owner_site_integration_update import site_embed_ready
+from .owner_site_integration_update import enable_widget_if_widget_seen_and_structurally_ready, site_embed_ready
 from .widget_install_verify import (
     build_default_verify_page_url,
     human_message_for_page_scan_url_error,
@@ -761,6 +761,8 @@ class SiteOwnerIntegrationActivateView(APIView):
         site, error = _resolve_owner_site(request)
         if error is not None:
             return error
+        enable_widget_if_widget_seen_and_structurally_ready(site)
+        site.refresh_from_db()
         readiness = build_embed_readiness(site)
         if not site_embed_ready(site):
             return Response(

@@ -26,6 +26,28 @@ def site_embed_ready(site: Site) -> bool:
     return all(bool(v) for v in readiness.values())
 
 
+def enable_widget_if_widget_seen_and_structurally_ready(site: Site) -> bool:
+    """
+    If the embed already reported activity (last_widget_seen_at) but the internal
+    ``widget_enabled`` flag is off, turn it on when origins/key/id are in place.
+    Returns True when the row was saved.
+    """
+    if site.widget_enabled:
+        return False
+    if site.last_widget_seen_at is None:
+        return False
+    readiness = build_embed_readiness(site)
+    if not (
+        readiness["origins_configured"]
+        and readiness["publishable_key_present"]
+        and readiness["public_id_present"]
+    ):
+        return False
+    site.widget_enabled = True
+    site.save(update_fields=["widget_enabled", "updated_at"])
+    return True
+
+
 def project_metadata_updates_from_owner_payload(data: dict, cfg: dict) -> dict[str, str]:
     updates: dict[str, str] = {}
     if "display_name" in data:
