@@ -87,6 +87,58 @@ playwright_browser_present() {
   find "${PLAYWRIGHT_BROWSERS_PATH}" -type f \( -name chrome -o -name chromium -o -name headless_shell \) -perm -111 2>/dev/null | head -1 | grep -q .
 }
 
+# Avoid flooding CI logs with thousands of "Permission denied" lines from rm(1).
+SAFE_RM_LOG="${SAFE_RM_LOG:-/tmp/lumoref-rm-node-modules.log}"
+
+safe_remove_dir() {
+  local path="$1"
+  [[ -e "${path}" ]] || return 0
+  : > "${SAFE_RM_LOG}"
+  if rm -rf "${path}" >>"${SAFE_RM_LOG}" 2>&1; then
+    return 0
+  fi
+  if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+    if sudo -n rm -rf "${path}" >>"${SAFE_RM_LOG}" 2>&1; then
+      return 0
+    fi
+  else
+    echo "Cannot remove ${path} due to permissions (passwordless sudo unavailable). Fix ownership, then rerun deploy:" >&2
+    echo "  sudo chown -R deploy:deploy ${APP_ROOT}/frontend" >&2
+    echo "  sudo rm -rf ${APP_ROOT}/frontend/node_modules" >&2
+    echo "  sudo rm -rf ${APP_ROOT}/frontend/build" >&2
+    echo "(rm details: ${SAFE_RM_LOG})" >&2
+    exit 1
+  fi
+  echo "Cannot remove ${path} due to permissions. Run:" >&2
+  echo "  sudo chown -R deploy:deploy ${APP_ROOT}/frontend" >&2
+  echo "  sudo rm -rf ${APP_ROOT}/frontend/node_modules" >&2
+  echo "  sudo rm -rf ${APP_ROOT}/frontend/build" >&2
+  echo "(rm details: ${SAFE_RM_LOG})" >&2
+  exit 1
+}
+
+SAFE_CHOWN_LOG="${SAFE_CHOWN_LOG:-/tmp/lumoref-chown-deploy.log}"
+
+safe_chown_deploy_tree() {
+  local path="$1"
+  [[ -e "${path}" ]] || return 0
+  : > "${SAFE_CHOWN_LOG}"
+  if chown -R "$(id -un):$(id -gn)" "${path}" >>"${SAFE_CHOWN_LOG}" 2>&1; then
+    return 0
+  fi
+  if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+    if sudo -n chown -R "$(id -un):$(id -gn)" "${path}" >>"${SAFE_CHOWN_LOG}" 2>&1; then
+      return 0
+    fi
+    echo "Cannot chown ${path} (sudo failed). See ${SAFE_CHOWN_LOG}" >&2
+    exit 1
+  fi
+  echo "Cannot chown ${path} due to permissions (passwordless sudo unavailable). Run:" >&2
+  echo "  sudo chown -R deploy:deploy ${path}" >&2
+  echo "(details: ${SAFE_CHOWN_LOG})" >&2
+  exit 1
+}
+
 mkdir -p "${DEPLOY_STATE_DIR}"
 
 if [[ "${DRY_RUN}" == "1" ]]; then
@@ -112,6 +164,8 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   echo "(Dry run finished — no deploy actions executed.)"
   exit 0
 fi
+
+safe_chown_deploy_tree "${DEPLOY_STATE_DIR}"
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "Python venv not found at ${VENV_PATH}. Create it and install requirements first." >&2
@@ -428,17 +482,7 @@ if [[ "${RUN_NPM_CI}" == true ]] || [[ "${RUN_BUILD}" == true ]]; then
     if [[ "${RUN_NPM_CI}" == true ]]; then
       log_section "Frontend: npm ci"
       if [[ -d node_modules ]]; then
-        if ! rm -rf node_modules; then
-          if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
-            echo "    frontend/node_modules: sudo rm -rf (owned by another user — e.g. prior sudo npm install)"
-            sudo rm -rf node_modules
-          else
-            echo "ERROR: cannot remove ${APP_ROOT}/frontend/node_modules (permission denied)." >&2
-            echo "  On the server run once: sudo rm -rf ${APP_ROOT}/frontend/node_modules" >&2
-            echo "  Or fix ownership: sudo chown -R $(whoami):$(whoami) ${APP_ROOT}/frontend" >&2
-            exit 1
-          fi
-        fi
+        safe_remove_dir "${APP_ROOT}/frontend/node_modules"
       fi
       npm ci
     else
@@ -446,13 +490,12 @@ if [[ "${RUN_NPM_CI}" == true ]] || [[ "${RUN_BUILD}" == true ]]; then
     fi
     if [[ "${RUN_BUILD}" == true ]]; then
       log_section "Frontend: npm run build (API URL=${REACT_APP_API_URL})"
+      if [[ -e "${APP_ROOT}/frontend/build" ]]; then
+        safe_remove_dir "${APP_ROOT}/frontend/build"
+      fi
       npm run build
       echo "    Fixing ownership of frontend/build for deploy user + readability"
-      if ! chown -R "$(id -un):$(id -gn)" "${APP_ROOT}/frontend/build" 2>/dev/null; then
-        if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
-          sudo chown -R "$(id -un):$(id -gn)" "${APP_ROOT}/frontend/build"
-        fi
-      fi
+      safe_chown_deploy_tree "${APP_ROOT}/frontend/build"
     else
       echo "Skipping npm run build"
     fi

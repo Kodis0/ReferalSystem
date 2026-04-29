@@ -139,19 +139,23 @@ Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` и
 
 Нестандартный SSH-порт: в `appleboy/ssh-action` можно добавить параметр `port` в workflow — при необходимости расширьте workflow локально.
 
-### npm: `EACCES` / `unlink` в `frontend/node_modules`
+### npm: `EACCES` / `unlink` / `Permission denied` при удалении `frontend/node_modules`
 
-Сообщение вида `permission denied, unlink '.../node_modules/.bin/acorn'` значит, что каталог `node_modules` (или часть файлов) принадлежит **другому пользователю** (часто **root** после ручного `sudo npm install` на сервере). Тогда пользователь деплоя не может удалить файлы перед `npm ci`.
+Сообщение вида `permission denied, unlink '.../node_modules/.bin/acorn'` значит, что каталог `node_modules` (или часть файлов) принадлежит **другому пользователю** (часто **root** после ручного `sudo npm install` на сервере). Тогда пользователь деплоя не может удалить дерево перед `npm ci`.
 
-**Что делать:** после мержа актуального `deploy/deploy.sh` скрипт сам попытается сделать `sudo rm -rf frontend/node_modules`, если доступен passwordless `sudo` (как для nginx/systemd). Иначе один раз на VPS:
+В логе Actions/`deploy.sh` длинный поток строк `rm: … Permission denied` больше не дублируется в stdout: детали попадают в **`/tmp/lumoref-rm-node-modules.log`**, в консоли — короткая инструкция.
+
+**Если деплой падает на правах на `node_modules` или `build`**, один раз на VPS (подставьте пользователя деплоя вместо `deploy`, если он другой):
 
 ```bash
+sudo chown -R deploy:deploy /var/www/lumoref/app/frontend
 sudo rm -rf /var/www/lumoref/app/frontend/node_modules
-# или выровнять владельца всего фронта под пользователя деплоя:
-sudo chown -R deploy_user:deploy_user /var/www/lumoref/app/frontend
+sudo rm -rf /var/www/lumoref/app/frontend/build
 ```
 
-Дальше деплой снова под пользователем из GitHub Actions должен проходить.
+Затем снова запустите деплой (`bash deploy/deploy.sh` или push в `main`).
+
+Если доступен passwordless `sudo`, скрипт сам попробует `sudo rm -rf` после неудачного обычного `rm` (без спама в лог GitHub Actions).
 
 ## 11. Инкрементальный деплой и флаги
 
