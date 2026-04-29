@@ -35,13 +35,6 @@ jobs:
             MAIN_BRANCH="${DEPLOY_MAIN_BRANCH:-main}"
             git fetch origin "${MAIN_BRANCH}"
             git checkout "${MAIN_BRANCH}"
-            if sudo -n true 2>/dev/null; then
-              sudo chown -R "$(id -u):$(id -g)" "${DEPLOY_PATH}"
-              chmod -R u+rwX "${DEPLOY_PATH}"
-            else
-              echo "    passwordless sudo unavailable; assuming ${DEPLOY_PATH} is already owned by $(id -un)"
-              chmod -R u+rwX "${DEPLOY_PATH}" 2>/dev/null || true
-            fi
             git reset --hard "origin/${MAIN_BRANCH}"
             chmod +x deploy/deploy.sh
             bash deploy/deploy.sh
