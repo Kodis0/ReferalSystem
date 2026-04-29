@@ -2209,6 +2209,68 @@ describe("ProjectSettingsPage", () => {
     expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(60);
   });
 
+  it("after save keeps referral lock days from config_json when PATCH omits top-level field", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && opts?.method === "PATCH") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A", referral_lock_days: 60 },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    await userEvent.clear(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i));
+    await userEvent.type(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i), "60");
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-save-success")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(60);
+  });
+
   it("does not replace invalid referral lock days with default on save", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
       const u = String(url);

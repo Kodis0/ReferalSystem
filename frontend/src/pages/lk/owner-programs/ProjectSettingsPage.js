@@ -68,7 +68,18 @@ function commissionPercentFromPayload(payload) {
 }
 
 function referralLockDaysFromPayload(payload, fallback = "30") {
-  const value = payload?.referral_lock_days;
+  const cfg =
+    payload?.config_json && typeof payload.config_json === "object" && !Array.isArray(payload.config_json)
+      ? payload.config_json
+      : null;
+  const top = payload?.referral_lock_days;
+  const fromCfg = cfg?.referral_lock_days;
+  const value =
+    top !== null && top !== undefined && top !== ""
+      ? top
+      : fromCfg !== null && fromCfg !== undefined && fromCfg !== ""
+        ? fromCfg
+        : undefined;
   if (value === null || value === undefined || value === "") return fallback;
   const numberValue = parseInt(String(value), 10);
   if (

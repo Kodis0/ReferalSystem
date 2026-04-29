@@ -138,12 +138,14 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r = self.api.patch(url, {"referral_lock_days": 45}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["referral_lock_days"], 45)
+        self.assertEqual((r.data.get("config_json") or {}).get("referral_lock_days"), 45)
         site.refresh_from_db()
         self.assertEqual(site.config_json.get("referral_lock_days"), 45)
 
         r_get = self.api.get(url)
         self.assertEqual(r_get.status_code, 200)
         self.assertEqual(r_get.data["referral_lock_days"], 45)
+        self.assertEqual((r_get.data.get("config_json") or {}).get("referral_lock_days"), 45)
 
     def test_site_owner_integration_update_serializer_save_merges_referral_lock_days(self):
         site = Site.objects.create(
@@ -173,11 +175,13 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r = self.api.patch(url, {"referral_lock_days": 60}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["referral_lock_days"], 60)
+        self.assertEqual((r.data.get("config_json") or {}).get("referral_lock_days"), 60)
         site.refresh_from_db()
         self.assertEqual(site.config_json.get("referral_lock_days"), 60)
         r_get = self.api.get(url)
         self.assertEqual(r_get.status_code, 200)
         self.assertEqual(r_get.data["referral_lock_days"], 60)
+        self.assertEqual((r_get.data.get("config_json") or {}).get("referral_lock_days"), 60)
         payload = _member_program_payload(site)
         self.assertEqual(payload["referral_lock_days"], 60)
 

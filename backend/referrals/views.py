@@ -504,6 +504,7 @@ class SiteOwnerIntegrationView(APIView):
             ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
             return Response(ser.data)
         upd.save()
+        site.refresh_from_db()
         ser = SiteOwnerIntegrationSerializer(site, context={"request": request})
         return Response(ser.data)
 
