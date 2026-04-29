@@ -54,6 +54,7 @@ from .widget_install_verify import (
 from .services import (
     REFERRAL_BUILDER_WORKSPACE_KEY,
     SITE_COMMISSION_PERCENT_CONFIG_KEY,
+    SITE_REFERRAL_LOCK_DAYS_CONFIG_KEY,
     SITE_SHELL_AVATAR_CONFIG_KEY,
     SITE_CAPTURE_CONFIG_KEY,
     SITE_DISPLAY_NAME_CONFIG_KEY,
@@ -71,6 +72,7 @@ from .services import (
     referral_capture_origin_allowed,
     sanitize_site_capture_config,
     normalize_site_commission_percent,
+    normalize_site_referral_lock_days,
     site_owner_display_name,
     site_shell_avatar_data_url,
 )
@@ -600,6 +602,10 @@ class SiteOwnerIntegrationView(APIView):
             cfg[SITE_COMMISSION_PERCENT_CONFIG_KEY] = str(
                 normalize_site_commission_percent(data["commission_percent"])
             )
+        if "referral_lock_days" in data:
+            cfg[SITE_REFERRAL_LOCK_DAYS_CONFIG_KEY] = normalize_site_referral_lock_days(
+                data["referral_lock_days"]
+            )
         if "referral_builder_workspace" in data:
             wb = data.get("referral_builder_workspace")
             if wb is None or wb == {}:
@@ -631,6 +637,7 @@ class SiteOwnerIntegrationView(APIView):
             or "description" in data
             or "site_description" in data
             or "commission_percent" in data
+            or "referral_lock_days" in data
             or "referral_builder_workspace" in data
             or project_updates
         ):

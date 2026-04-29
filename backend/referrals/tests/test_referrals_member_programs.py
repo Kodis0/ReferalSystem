@@ -415,6 +415,43 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["program"]["commission_percent"], "8.25")
 
+    def test_program_catalog_detail_uses_site_referral_lock_days(self):
+        site = self._site(
+            "catalog_detail_lock_days",
+            config_json={"site_display_name": "Lock Days Site", "referral_lock_days": 45},
+        )
+
+        self.api.force_authenticate(user=self.user_a)
+        catalog = self.api.get("/users/programs/")
+        mine_empty = self.api.get("/users/me/programs/")
+        detail = self.api.get(f"/users/programs/{site.public_id}/")
+
+        row = next(x for x in catalog.data["programs"] if x["site_public_id"] == str(site.public_id))
+        self.assertEqual(row["referral_lock_days"], 45)
+        self.assertEqual(mine_empty.data["programs"], [])
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data["program"]["referral_lock_days"], 45)
+
+        SiteMembership.objects.create(site=site, user=self.user_a)
+        mine = self.api.get("/users/me/programs/")
+        mine_row = next(x for x in mine.data["programs"] if x["site_public_id"] == str(site.public_id))
+        self.assertEqual(mine_row["referral_lock_days"], 45)
+
+    def test_program_catalog_detail_falls_back_to_settings_referral_lock_days(self):
+        site = self._site(
+            "catalog_detail_lock_days_fallback",
+            config_json={"site_display_name": "Lock Days Fallback"},
+        )
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            r.data["program"]["referral_lock_days"],
+            int(getattr(settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)),
+        )
+
     def test_program_catalog_detail_allows_widget_seen_draft_without_manual_verify(self):
         site = Site.objects.create(
             owner=self.owner,

@@ -507,13 +507,13 @@
 .lk-widget-install__snippet-card {
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: none;
   background: rgba(0, 0, 0, 0.12);
   box-shadow: none;
 }
 
 [data-theme="light"] .lk-widget-install__snippet-card {
-  border-color: rgba(0, 0, 0, 0.1);
+  border: none;
   background: rgba(0, 0, 0, 0.03);
   box-shadow: none;
 }

@@ -2096,6 +2096,7 @@ describe("ProjectSettingsPage", () => {
             site_display_name: "Магазин",
             site_description: "Описание",
             commission_percent: "6.50",
+            referral_lock_days: 45,
             project: { name: "Магазин", description: "Описание", avatar_data_url: "" },
             config_json: { display_name: "legacy" },
             widget_enabled: true,
@@ -2121,7 +2122,8 @@ describe("ProjectSettingsPage", () => {
     expect(screen.getByLabelText(/Название сайта/i)).toHaveValue("Магазин");
     expect(screen.getByLabelText(/Описание сайта/i)).toHaveValue("Описание");
     expect(screen.getByLabelText(/Домен или origin/i)).toHaveValue("https://shop.example");
-    expect(screen.getByLabelText(/Процент выплаты рефералам/i)).toHaveValue(6.5);
+    expect(screen.getByLabelText(/Процент выплаты рефералам/i)).toHaveValue("6.5");
+    expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(45);
     expect(screen.getByTestId("proj-settings-platform-select")).toHaveTextContent("Tilda");
   });
 
@@ -2138,6 +2140,7 @@ describe("ProjectSettingsPage", () => {
             site_display_name: "A",
             site_description: "Old desc",
             commission_percent: "5.00",
+            referral_lock_days: 30,
             project: { name: "A", description: "Old desc", avatar_data_url: "" },
             config_json: { display_name: "A" },
             widget_enabled: true,
@@ -2154,6 +2157,7 @@ describe("ProjectSettingsPage", () => {
             site_display_name: "B",
             site_description: "New desc",
             commission_percent: "7.25",
+            referral_lock_days: 60,
             project: { name: "A", description: "Old desc", avatar_data_url: "" },
             config_json: { display_name: "A", description: "Old desc" },
             widget_enabled: true,
@@ -2184,6 +2188,8 @@ describe("ProjectSettingsPage", () => {
     await userEvent.type(screen.getByLabelText(/Домен или origin/i), "https://b.example");
     await userEvent.clear(screen.getByLabelText(/Процент выплаты рефералам/i));
     await userEvent.type(screen.getByLabelText(/Процент выплаты рефералам/i), "7.25");
+    await userEvent.clear(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i));
+    await userEvent.type(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i), "60");
     await userEvent.click(screen.getByTestId("proj-settings-platform-select"));
     await userEvent.click(await screen.findByRole("option", { name: "Generic" }));
     await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
@@ -2198,7 +2204,120 @@ describe("ProjectSettingsPage", () => {
       origin: "https://b.example",
       platform_preset: "generic",
       commission_percent: "7.25",
+      referral_lock_days: 60,
     });
+    expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(60);
+  });
+
+  it("does not replace invalid referral lock days with default on save", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    const input = screen.getByLabelText(/Срок закрепления пользователя за рефералом/i);
+    await userEvent.clear(input);
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+
+    expect(await screen.findByText("Укажите срок закрепления от 1 до 365 дней.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, opts]) => opts?.method === "PATCH")).toBe(false);
+  });
+
+  it("keeps the latest referral lock days when save immediately follows input blur", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && opts?.method === "PATCH") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: 45,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    const input = screen.getByLabelText(/Срок закрепления пользователя за рефералом/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, "45");
+    input.blur();
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-save-success")).toBeInTheDocument();
+    });
+    const patchCall = fetchMock.mock.calls.find(([, opts]) => opts?.method === "PATCH");
+    expect(JSON.parse(patchCall[1].body).referral_lock_days).toBe(45);
+    expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(45);
   });
 
   it("shows error when save fails", async () => {

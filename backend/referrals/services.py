@@ -72,8 +72,11 @@ _PROJECT_AVATAR_PALETTES = (
 )
 DEFAULT_OWNER_PROJECT_NAME = "Общий проект"
 SITE_COMMISSION_PERCENT_CONFIG_KEY = "commission_percent"
+SITE_REFERRAL_LOCK_DAYS_CONFIG_KEY = "referral_lock_days"
 SITE_DEFAULT_COMMISSION_PERCENT = Decimal("5.00")
 SITE_MIN_COMMISSION_PERCENT = Decimal("5.00")
+SITE_MIN_REFERRAL_LOCK_DAYS = 1
+SITE_MAX_REFERRAL_LOCK_DAYS = 365
 
 # Предустановленная иконка «Общий проект» (бренд LUMO / Frame 18); остальные проекты — generate_project_avatar_data_url().
 _DEFAULT_OWNER_PROJECT_AVATAR_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 1078 1078" fill="none">
@@ -104,6 +107,7 @@ _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
         SITE_SHELL_DESCRIPTION_CONFIG_KEY,
         SITE_CAPTURE_CONFIG_KEY,
         SITE_COMMISSION_PERCENT_CONFIG_KEY,
+        SITE_REFERRAL_LOCK_DAYS_CONFIG_KEY,
         REFERRAL_BUILDER_WORKSPACE_KEY,
     }
 )
@@ -136,6 +140,35 @@ def site_commission_percent(site: Site) -> Decimal:
         return normalize_site_commission_percent(raw)
     except ValueError:
         return SITE_DEFAULT_COMMISSION_PERCENT
+
+
+def default_site_referral_lock_days() -> int:
+    try:
+        days = int(getattr(settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30))
+    except (TypeError, ValueError):
+        days = 30
+    return min(SITE_MAX_REFERRAL_LOCK_DAYS, max(SITE_MIN_REFERRAL_LOCK_DAYS, days))
+
+
+def normalize_site_referral_lock_days(value) -> int:
+    try:
+        days = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError("invalid_referral_lock_days")
+    if days < SITE_MIN_REFERRAL_LOCK_DAYS:
+        raise ValueError("referral_lock_days_too_low")
+    if days > SITE_MAX_REFERRAL_LOCK_DAYS:
+        raise ValueError("referral_lock_days_too_high")
+    return days
+
+
+def site_referral_lock_days(site: Site) -> int:
+    cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    raw = cfg.get(SITE_REFERRAL_LOCK_DAYS_CONFIG_KEY, default_site_referral_lock_days())
+    try:
+        return normalize_site_referral_lock_days(raw)
+    except ValueError:
+        return default_site_referral_lock_days()
 
 
 def _timing_safe_str_eq(expected: str, got: str) -> bool:

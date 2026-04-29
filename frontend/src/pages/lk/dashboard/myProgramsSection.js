@@ -27,6 +27,12 @@ function programStatusLabel(status) {
   return status || "—";
 }
 
+function formatReferralLockDays(value) {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return "—";
+  return `${numberValue.toLocaleString("ru-RU")} дн.`;
+}
+
 function domainHostFromValue(value) {
   if (typeof value !== "string" || !value.trim()) return "";
   const raw = value.trim();
@@ -225,6 +231,7 @@ export function MyProgramsSection() {
             const domain = programSiteLabel(p);
             const status = programStatusLabel(p.site_status);
             const platform = p.platform_preset || "—";
+            const lockDays = `Срок закрепления: ${formatReferralLockDays(p.referral_lock_days)}`;
             const leavingThisProgram = leavingSiteId === p.site_public_id;
             return (
               <div
@@ -271,8 +278,8 @@ export function MyProgramsSection() {
                   <span className="owner-programs__service-card-status-dot owner-programs__service-card-status-dot_success" aria-hidden="true" />
                   <span className="owner-programs__service-card-headline-title">{title}</span>
                 </div>
-                <div className="owner-programs__service-card-specs" title={[domain, status, platform].join(" · ")}>
-                  {[domain, status, platform].join(" · ")}
+                <div className="owner-programs__service-card-specs" title={[domain, status, platform, lockDays].join(" · ")}>
+                  {[domain, status, platform, lockDays].join(" · ")}
                 </div>
               </div>
             );

@@ -33,6 +33,7 @@ describe("Programs Catalog", () => {
                 joined: true,
                 joined_at: "2026-01-10T12:00:00+00:00",
                 site_status: "verified",
+                referral_lock_days: 45,
               },
               {
                 site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
@@ -40,6 +41,7 @@ describe("Programs Catalog", () => {
                 site_origin_label: "other.example",
                 joined: false,
                 site_status: "active",
+                referral_lock_days: 30,
               },
             ],
           }),
@@ -61,6 +63,7 @@ describe("Programs Catalog", () => {
       expect(screen.getByText("other.example")).toBeInTheDocument();
     });
     expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Срок закрепления:/i)).not.toBeInTheDocument();
 
     const links = screen.getAllByTestId("programs-catalog-list-link");
     expect(links[0]).toHaveAttribute("data-nav-target", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");

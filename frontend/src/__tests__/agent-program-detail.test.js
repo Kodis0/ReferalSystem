@@ -61,9 +61,12 @@ describe("Agent program detail page", () => {
     renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
+      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("Demo Shop");
     });
-    expect(screen.getByText("Demo Shop")).toBeInTheDocument();
+    expect(screen.queryByText("Название домена")).not.toBeInTheDocument();
+    expect(screen.queryByText("Название сайта")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "demo.example" })).toHaveAttribute("href", "https://demo.example/");
+    expect(screen.getByRole("link", { name: "demo.example" })).toHaveAttribute("target", "_blank");
     expect(screen.getByText("Partner program description")).toBeInTheDocument();
     expect(screen.getByText(/Дата подключения:/i)).toBeInTheDocument();
     expect(screen.getByText("12,5%")).toBeInTheDocument();
@@ -102,7 +105,7 @@ describe("Agent program detail page", () => {
     const { container } = renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
+      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("Demo Shop");
     });
     const img = container.querySelector(".lk-dashboard__program-card-avatar-img");
     expect(img).toHaveAttribute(
@@ -134,7 +137,7 @@ describe("Agent program detail page", () => {
     renderDetail({ from: "/lk/my-programs" });
 
     await waitFor(() => {
-      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
+      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("Demo Shop");
     });
     expect(screen.getByRole("link", { name: "Назад" })).toHaveAttribute("href", "/lk/my-programs");
   });

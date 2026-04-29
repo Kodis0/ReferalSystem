@@ -9,6 +9,10 @@ import "../settings/settings.css";
 import "./CreateOwnerProjectPage.css";
 import "./owner-programs.css";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
+
+const REFERRAL_LOCK_DAYS_MIN = 1;
+const REFERRAL_LOCK_DAYS_MAX = 365;
+
 function authHeaders() {
   const token = localStorage.getItem("access_token");
   return {
@@ -63,6 +67,20 @@ function commissionPercentFromPayload(payload) {
   return String(numberValue);
 }
 
+function referralLockDaysFromPayload(payload, fallback = "30") {
+  const value = payload?.referral_lock_days;
+  if (value === null || value === undefined || value === "") return fallback;
+  const numberValue = parseInt(String(value), 10);
+  if (
+    !Number.isFinite(numberValue) ||
+    numberValue < REFERRAL_LOCK_DAYS_MIN ||
+    numberValue > REFERRAL_LOCK_DAYS_MAX
+  ) {
+    return fallback;
+  }
+  return String(numberValue);
+}
+
 function parseCommissionPercent(value) {
   if (typeof value === "string") {
     return Number(value.trim().replace(",", "."));
@@ -73,6 +91,14 @@ function parseCommissionPercent(value) {
 function normalizeCommissionPercentInput(value) {
   const numberValue = parseCommissionPercent(value);
   return Math.max(5, Number.isFinite(numberValue) ? numberValue : 5);
+}
+
+function normalizeReferralLockDaysInput(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const numberValue = Number(raw);
+  if (!Number.isInteger(numberValue)) return "";
+  return String(Math.min(REFERRAL_LOCK_DAYS_MAX, Math.max(REFERRAL_LOCK_DAYS_MIN, numberValue)));
 }
 
 const PLATFORM_OPTIONS = [
@@ -100,6 +126,7 @@ export default function ProjectSettingsPage() {
   const [origin, setOrigin] = useState("");
   const [platformPreset, setPlatformPreset] = useState("tilda");
   const [commissionPercent, setCommissionPercent] = useState("5");
+  const [referralLockDays, setReferralLockDays] = useState("30");
 
   const [saveState, setSaveState] = useState("idle");
   const [saveError, setSaveError] = useState("");
@@ -113,6 +140,7 @@ export default function ProjectSettingsPage() {
         method: "GET",
         headers: authHeaders(),
         credentials: "include",
+        cache: "no-store",
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -127,6 +155,7 @@ export default function ProjectSettingsPage() {
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setCommissionPercent(commissionPercentFromPayload(payload));
+      setReferralLockDays(referralLockDaysFromPayload(payload));
       setPlatformPreset(
         payload.platform_preset === "generic" || payload.platform_preset === "tilda"
           ? payload.platform_preset
@@ -150,7 +179,17 @@ export default function ProjectSettingsPage() {
     setSaveState("saving");
     setSaveError("");
     try {
+      const form = e.currentTarget;
       const normalizedCommissionPercent = normalizeCommissionPercentInput(commissionPercent);
+      const rawReferralLockDays = new FormData(form).get("referral_lock_days");
+      const normalizedReferralLockDays = normalizeReferralLockDaysInput(rawReferralLockDays);
+      if (!normalizedReferralLockDays) {
+        setSaveError("Укажите срок закрепления от 1 до 365 дней.");
+        setSaveState("error");
+        return;
+      }
+      setCommissionPercent(normalizedCommissionPercent.toFixed(2));
+      setReferralLockDays(normalizedReferralLockDays);
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, id), {
         method: "PATCH",
         headers: authHeaders(),
@@ -161,6 +200,7 @@ export default function ProjectSettingsPage() {
           origin: origin.trim(),
           platform_preset: platformPreset,
           commission_percent: normalizedCommissionPercent.toFixed(2),
+          referral_lock_days: Number(normalizedReferralLockDays),
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -176,7 +216,7 @@ export default function ProjectSettingsPage() {
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setCommissionPercent(commissionPercentFromPayload(payload));
-      await load();
+      setReferralLockDays(referralLockDaysFromPayload(payload, normalizedReferralLockDays));
       setSaveState("success");
       emitSiteOwnerActivity(id);
       if (typeof reloadProjectHead === "function") {
@@ -316,6 +356,32 @@ export default function ProjectSettingsPage() {
                       value={commissionPercent}
                       onChange={(e) => setCommissionPercent(e.target.value)}
                       onBlur={() => setCommissionPercent(String(normalizeCommissionPercentInput(commissionPercent)))}
+                      disabled={saveState === "saving"}
+                    />
+                  </div>
+                </div>
+              </label>
+
+              <label className="formControl" htmlFor="proj-settings-referral-lock-days">
+                <div className="formControl__label">
+                  <span className="text text_s text_bold text_grey text_align_left">
+                    Срок закрепления пользователя за рефералом, дней
+                  </span>
+                </div>
+                <div className="input">
+                  <div className="inputWrapper">
+                    <input
+                      id="proj-settings-referral-lock-days"
+                      className="inputField"
+                      type="number"
+                      name="referral_lock_days"
+                      min={REFERRAL_LOCK_DAYS_MIN}
+                      max={REFERRAL_LOCK_DAYS_MAX}
+                      step="1"
+                      inputMode="numeric"
+                      value={referralLockDays}
+                      onChange={(e) => setReferralLockDays(e.target.value)}
+                      onBlur={(e) => setReferralLockDays(String(normalizeReferralLockDaysInput(e.target.value)))}
                       disabled={saveState === "saving"}
                     />
                   </div>

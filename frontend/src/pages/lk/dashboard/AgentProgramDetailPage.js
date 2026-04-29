@@ -27,6 +27,18 @@ function programSiteName(program) {
   return displayLabel || programSiteLabel(program);
 }
 
+function programSiteHref(program) {
+  const label = programSiteLabel(program);
+  if (!label || label.startsWith("Программа ·")) return "";
+  try {
+    const url = new URL(label.includes("://") ? label : `https://${label}`);
+    if (url.protocol === "http:" || url.protocol === "https:") return url.href;
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 function programDescription(program) {
   const value = typeof program?.site_description === "string" ? program.site_description.trim() : "";
   return value || "Описание программы пока не добавлено.";
@@ -207,14 +219,21 @@ export default function AgentProgramDetailPage() {
                 />
               </div>
               <div className="lk-dashboard__program-card-copy">
-                <p className="lk-dashboard__program-card-kicker">Название домена</p>
                 <h1 className="lk-dashboard__program-card-title" data-testid="agent-program-title">
-                  {programSiteLabel(program)}
-                </h1>
-                <p className="lk-dashboard__program-card-name">
-                  <span>Название сайта</span>
                   {programSiteName(program)}
-                </p>
+                </h1>
+                {programSiteHref(program) ? (
+                  <a
+                    className="lk-dashboard__program-card-name"
+                    href={programSiteHref(program)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {programSiteLabel(program)}
+                  </a>
+                ) : (
+                  <p className="lk-dashboard__program-card-name">{programSiteLabel(program)}</p>
+                )}
               </div>
             </div>
 
@@ -227,10 +246,6 @@ export default function AgentProgramDetailPage() {
               <div className="lk-dashboard__program-metric">
                 <span>Вознаграждение</span>
                 <strong>{formatCommissionPercent(program.commission_percent)}</strong>
-              </div>
-              <div className="lk-dashboard__program-metric">
-                <span>За что начисляется</span>
-                <strong>Процент от оплаченных заказов привлечённых клиентов</strong>
               </div>
               <div className="lk-dashboard__program-metric">
                 <span>Срок закрепления</span>

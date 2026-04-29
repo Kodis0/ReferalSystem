@@ -81,6 +81,7 @@ describe("Dashboard My Programs", () => {
                 joined_at: "2026-01-10T12:00:00+00:00",
                 site_status: "verified",
                 platform_preset: "tilda",
+                referral_lock_days: 45,
               },
             ],
           }),
@@ -99,7 +100,7 @@ describe("Dashboard My Programs", () => {
       expect(screen.getByTestId("my-programs-list")).toBeInTheDocument();
     });
     expect(screen.getByText("Demo Shop")).toBeInTheDocument();
-    expect(screen.getByText("demo.example · В сети · tilda")).toBeInTheDocument();
+    expect(screen.getByText("demo.example · В сети · tilda · Срок закрепления: 45 дн.")).toBeInTheDocument();
     const card = screen.getByTestId("agent-program-list-link");
     expect(card).toHaveClass("owner-programs__service-card");
     expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();

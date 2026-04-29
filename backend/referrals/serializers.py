@@ -7,10 +7,13 @@ from rest_framework import serializers
 from .models import Site
 from .services import (
     persist_project_avatar_if_empty,
+    SITE_MAX_REFERRAL_LOCK_DAYS,
+    SITE_MIN_REFERRAL_LOCK_DAYS,
     site_commission_percent,
     site_capture_config_dict,
     site_owner_display_name,
     site_owner_shell_description,
+    site_referral_lock_days,
     site_shell_avatar_data_url,
 )
 
@@ -106,6 +109,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
     site_avatar_data_url = serializers.SerializerMethodField()
     capture_config = serializers.SerializerMethodField()
     commission_percent = serializers.SerializerMethodField()
+    referral_lock_days = serializers.SerializerMethodField()
 
     class Meta:
         model = Site
@@ -124,6 +128,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "site_avatar_data_url",
             "capture_config",
             "commission_percent",
+            "referral_lock_days",
             "project",
             "widget_embed_snippet",
             "public_api_base",
@@ -154,6 +159,9 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
 
     def get_commission_percent(self, obj: Site) -> str:
         return str(site_commission_percent(obj))
+
+    def get_referral_lock_days(self, obj: Site) -> int:
+        return site_referral_lock_days(obj)
 
     def get_widget_script_base(self, obj: Site) -> str:
         return (getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
@@ -200,6 +208,11 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
         max_digits=5,
         decimal_places=2,
         min_value=Decimal("5.00"),
+        required=False,
+    )
+    referral_lock_days = serializers.IntegerField(
+        min_value=SITE_MIN_REFERRAL_LOCK_DAYS,
+        max_value=SITE_MAX_REFERRAL_LOCK_DAYS,
         required=False,
     )
     referral_builder_workspace = serializers.JSONField(required=False, allow_null=True)
