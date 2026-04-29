@@ -55,6 +55,26 @@ function siteDescriptionFromPayload(payload) {
   return "";
 }
 
+function commissionPercentFromPayload(payload) {
+  const value = payload?.commission_percent;
+  if (value === null || value === undefined || value === "") return "5";
+  const numberValue = parseCommissionPercent(value);
+  if (!Number.isFinite(numberValue) || numberValue < 5) return "5";
+  return String(numberValue);
+}
+
+function parseCommissionPercent(value) {
+  if (typeof value === "string") {
+    return Number(value.trim().replace(",", "."));
+  }
+  return Number(value);
+}
+
+function normalizeCommissionPercentInput(value) {
+  const numberValue = parseCommissionPercent(value);
+  return Math.max(5, Number.isFinite(numberValue) ? numberValue : 5);
+}
+
 const PLATFORM_OPTIONS = [
   { value: "tilda", label: "Tilda" },
   { value: "generic", label: "Generic" },
@@ -79,6 +99,7 @@ export default function ProjectSettingsPage() {
   const [description, setDescription] = useState("");
   const [origin, setOrigin] = useState("");
   const [platformPreset, setPlatformPreset] = useState("tilda");
+  const [commissionPercent, setCommissionPercent] = useState("5");
 
   const [saveState, setSaveState] = useState("idle");
   const [saveError, setSaveError] = useState("");
@@ -105,6 +126,7 @@ export default function ProjectSettingsPage() {
       setDisplayName(siteNameFromPayload(payload));
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
+      setCommissionPercent(commissionPercentFromPayload(payload));
       setPlatformPreset(
         payload.platform_preset === "generic" || payload.platform_preset === "tilda"
           ? payload.platform_preset
@@ -128,6 +150,7 @@ export default function ProjectSettingsPage() {
     setSaveState("saving");
     setSaveError("");
     try {
+      const normalizedCommissionPercent = normalizeCommissionPercentInput(commissionPercent);
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, id), {
         method: "PATCH",
         headers: authHeaders(),
@@ -137,6 +160,7 @@ export default function ProjectSettingsPage() {
           site_description: description.trim(),
           origin: origin.trim(),
           platform_preset: platformPreset,
+          commission_percent: normalizedCommissionPercent.toFixed(2),
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -151,6 +175,8 @@ export default function ProjectSettingsPage() {
       setDisplayName(siteNameFromPayload(payload));
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
+      setCommissionPercent(commissionPercentFromPayload(payload));
+      await load();
       setSaveState("success");
       emitSiteOwnerActivity(id);
       if (typeof reloadProjectHead === "function") {
@@ -207,7 +233,7 @@ export default function ProjectSettingsPage() {
               <form className="form" onSubmit={onSave} data-testid="project-settings-form">
               <label className="formControl" htmlFor="proj-settings-name">
                 <div className="formControl__label">
-                  <span className="text text_s text_bold text_grey text_align_left">Название сайта в ЛК</span>
+                  <span className="text text_s text_bold text_grey text_align_left">Название сайта</span>
                 </div>
                 <div className="input">
                   <div className="inputWrapper">
@@ -225,7 +251,7 @@ export default function ProjectSettingsPage() {
 
               <label className="formControl" htmlFor="proj-settings-description">
                 <div className="formControl__label">
-                  <span className="text text_s text_bold text_grey text_align_left">Описание сайта в ЛК</span>
+                  <span className="text text_s text_bold text_grey text_align_left">Описание сайта</span>
                 </div>
                 <div className="input">
                   <div className="inputWrapper">
@@ -275,6 +301,26 @@ export default function ProjectSettingsPage() {
                   />
                 </div>
               </div>
+
+              <label className="formControl" htmlFor="proj-settings-commission-percent">
+                <div className="formControl__label">
+                  <span className="text text_s text_bold text_grey text_align_left">Процент выплаты рефералам</span>
+                </div>
+                <div className="input">
+                  <div className="inputWrapper">
+                    <input
+                      id="proj-settings-commission-percent"
+                      className="inputField"
+                      type="text"
+                      inputMode="decimal"
+                      value={commissionPercent}
+                      onChange={(e) => setCommissionPercent(e.target.value)}
+                      onBlur={() => setCommissionPercent(String(normalizeCommissionPercentInput(commissionPercent)))}
+                      disabled={saveState === "saving"}
+                    />
+                  </div>
+                </div>
+              </label>
 
               {saveError ? <div className="formError">{saveError}</div> : null}
               {saveState === "success" ? (

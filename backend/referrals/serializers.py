@@ -1,3 +1,4 @@
+from decimal import Decimal
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -6,6 +7,7 @@ from rest_framework import serializers
 from .models import Site
 from .services import (
     persist_project_avatar_if_empty,
+    site_commission_percent,
     site_capture_config_dict,
     site_owner_display_name,
     site_owner_shell_description,
@@ -103,6 +105,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
     site_description = serializers.SerializerMethodField()
     site_avatar_data_url = serializers.SerializerMethodField()
     capture_config = serializers.SerializerMethodField()
+    commission_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = Site
@@ -120,6 +123,7 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "site_description",
             "site_avatar_data_url",
             "capture_config",
+            "commission_percent",
             "project",
             "widget_embed_snippet",
             "public_api_base",
@@ -147,6 +151,9 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
 
     def get_capture_config(self, obj: Site) -> dict[str, object]:
         return site_capture_config_dict(obj)
+
+    def get_commission_percent(self, obj: Site) -> str:
+        return str(site_commission_percent(obj))
 
     def get_widget_script_base(self, obj: Site) -> str:
         return (getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
@@ -189,6 +196,12 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     )
     config_json = serializers.JSONField(required=False)
     capture_config = serializers.JSONField(required=False)
+    commission_percent = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        min_value=Decimal("5.00"),
+        required=False,
+    )
     referral_builder_workspace = serializers.JSONField(required=False, allow_null=True)
     widget_enabled = serializers.BooleanField(required=False)
     verification_url = serializers.CharField(max_length=2048, required=False, allow_blank=True)

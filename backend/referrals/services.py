@@ -71,6 +71,9 @@ _PROJECT_AVATAR_PALETTES = (
     ("#082F49", "#1D4ED8", "#0F3D91", "#2563EB"),
 )
 DEFAULT_OWNER_PROJECT_NAME = "Общий проект"
+SITE_COMMISSION_PERCENT_CONFIG_KEY = "commission_percent"
+SITE_DEFAULT_COMMISSION_PERCENT = Decimal("5.00")
+SITE_MIN_COMMISSION_PERCENT = Decimal("5.00")
 
 # Предустановленная иконка «Общий проект» (бренд LUMO / Frame 18); остальные проекты — generate_project_avatar_data_url().
 _DEFAULT_OWNER_PROJECT_AVATAR_SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 1078 1078" fill="none">
@@ -100,6 +103,7 @@ _PUBLIC_WIDGET_PRIVATE_CONFIG_KEYS = frozenset(
         SITE_DISPLAY_NAME_CONFIG_KEY,
         SITE_SHELL_DESCRIPTION_CONFIG_KEY,
         SITE_CAPTURE_CONFIG_KEY,
+        SITE_COMMISSION_PERCENT_CONFIG_KEY,
         REFERRAL_BUILDER_WORKSPACE_KEY,
     }
 )
@@ -113,6 +117,25 @@ def _ttl_delta():
 def _default_commission_percent() -> Decimal:
     raw = getattr(settings, "REFERRAL_DEFAULT_COMMISSION_PERCENT", "10.00")
     return Decimal(str(raw))
+
+
+def normalize_site_commission_percent(value) -> Decimal:
+    try:
+        pct = Decimal(str(value)).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError("invalid_commission_percent")
+    if pct < SITE_MIN_COMMISSION_PERCENT:
+        raise ValueError("commission_percent_too_low")
+    return pct
+
+
+def site_commission_percent(site: Site) -> Decimal:
+    cfg = site.config_json if isinstance(site.config_json, dict) else {}
+    raw = cfg.get(SITE_COMMISSION_PERCENT_CONFIG_KEY, SITE_DEFAULT_COMMISSION_PERCENT)
+    try:
+        return normalize_site_commission_percent(raw)
+    except ValueError:
+        return SITE_DEFAULT_COMMISSION_PERCENT
 
 
 def _timing_safe_str_eq(expected: str, got: str) -> bool:

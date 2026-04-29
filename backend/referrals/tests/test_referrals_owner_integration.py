@@ -81,9 +81,30 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIn(f'data-rs-site="{site.public_id}"', snippet)
         self.assertIn('data-rs-key="pk_integration_test"', snippet)
         self.assertEqual(r.data.get("site_avatar_data_url"), "")
+        self.assertEqual(r.data.get("commission_percent"), "5.00")
         self.assertEqual(r.data.get("verification_url"), "")
         self.assertEqual(r.data.get("verification_status"), Site.VerificationStatus.NOT_STARTED)
         self.assertIsNone(r.data.get("last_verification_at"))
+
+    def test_patch_site_commission_percent_validates_minimum(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_commission_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+
+        r_low = self.api.patch(url, {"commission_percent": "4.99"}, format="json")
+        self.assertEqual(r_low.status_code, 400)
+        self.assertIn("commission_percent", r_low.data)
+
+        r = self.api.patch(url, {"commission_percent": "7.50"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["commission_percent"], "7.50")
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("commission_percent"), "7.50")
 
     def test_patch_site_avatar_does_not_change_project_avatar(self):
         project = Project.objects.create(

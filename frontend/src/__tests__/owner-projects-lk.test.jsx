@@ -2025,6 +2025,7 @@ describe("ProjectSettingsPage", () => {
             platform_preset: "tilda",
             site_display_name: "Магазин",
             site_description: "Описание",
+            commission_percent: "6.50",
             project: { name: "Магазин", description: "Описание", avatar_data_url: "" },
             config_json: { display_name: "legacy" },
             widget_enabled: true,
@@ -2050,6 +2051,7 @@ describe("ProjectSettingsPage", () => {
     expect(screen.getByLabelText(/Название сайта/i)).toHaveValue("Магазин");
     expect(screen.getByLabelText(/Описание сайта/i)).toHaveValue("Описание");
     expect(screen.getByLabelText(/Домен или origin/i)).toHaveValue("https://shop.example");
+    expect(screen.getByLabelText(/Процент выплаты рефералам/i)).toHaveValue(6.5);
     expect(screen.getByTestId("proj-settings-platform-select")).toHaveTextContent("Tilda");
   });
 
@@ -2065,6 +2067,7 @@ describe("ProjectSettingsPage", () => {
             platform_preset: "tilda",
             site_display_name: "A",
             site_description: "Old desc",
+            commission_percent: "5.00",
             project: { name: "A", description: "Old desc", avatar_data_url: "" },
             config_json: { display_name: "A" },
             widget_enabled: true,
@@ -2080,6 +2083,7 @@ describe("ProjectSettingsPage", () => {
             platform_preset: "generic",
             site_display_name: "B",
             site_description: "New desc",
+            commission_percent: "7.25",
             project: { name: "A", description: "Old desc", avatar_data_url: "" },
             config_json: { display_name: "A", description: "Old desc" },
             widget_enabled: true,
@@ -2108,6 +2112,8 @@ describe("ProjectSettingsPage", () => {
     await userEvent.type(screen.getByLabelText(/Описание сайта/i), "New desc");
     await userEvent.clear(screen.getByLabelText(/Домен или origin/i));
     await userEvent.type(screen.getByLabelText(/Домен или origin/i), "https://b.example");
+    await userEvent.clear(screen.getByLabelText(/Процент выплаты рефералам/i));
+    await userEvent.type(screen.getByLabelText(/Процент выплаты рефералам/i), "7.25");
     await userEvent.click(screen.getByTestId("proj-settings-platform-select"));
     await userEvent.click(await screen.findByRole("option", { name: "Generic" }));
     await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
@@ -2121,6 +2127,7 @@ describe("ProjectSettingsPage", () => {
       site_description: "New desc",
       origin: "https://b.example",
       platform_preset: "generic",
+      commission_percent: "7.25",
     });
   });
 

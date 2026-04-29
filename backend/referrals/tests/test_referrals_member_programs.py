@@ -177,9 +177,21 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(prog["site_description"], "Public terms")
         self.assertEqual(prog["site_status"], Site.Status.VERIFIED)
         self.assertTrue(prog["program_active"])
+        self.assertEqual(prog["commission_percent"], "5.00")
         self.assertFalse(prog["joined"])
         self.assertNotIn("joined_at", prog)
         self.assertNotIn("ref_code", prog)
+
+    def test_program_catalog_detail_uses_site_commission_percent(self):
+        site = self._site(
+            "catalog_detail_commission",
+            config_json={"site_display_name": "Commission Site", "commission_percent": "8.25"},
+        )
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["program"]["commission_percent"], "8.25")
 
     def test_program_catalog_detail_allows_widget_seen_draft_without_manual_verify(self):
         site = Site.objects.create(

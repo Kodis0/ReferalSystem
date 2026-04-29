@@ -32,6 +32,7 @@ from referrals.services import (
     link_session_attributions_to_user,
     owner_site_list_origin_display,
     partner_dashboard_payload,
+    site_commission_percent,
     site_allows_cta_signup_membership,
     site_cta_display_label,
 )
@@ -51,8 +52,6 @@ from .serializers import (
 def _member_program_payload(site, *, membership=None):
     _, site_origin_label = owner_site_list_origin_display(site)
     participants_count = SiteMembership.objects.filter(site=site).count()
-    partner = getattr(membership, "partner", None) if membership is not None else None
-    commission_percent = getattr(partner, "commission_percent", None)
     payload = {
         "site_public_id": str(site.public_id),
         "site_display_label": site_cta_display_label(site),
@@ -60,7 +59,7 @@ def _member_program_payload(site, *, membership=None):
         "site_description": site_owner_shell_description(site),
         "site_status": site.status,
         "program_active": site_allows_cta_signup_membership(site),
-        "commission_percent": str(commission_percent) if commission_percent is not None else "",
+        "commission_percent": str(site_commission_percent(site)),
         "referral_lock_days": int(getattr(django_settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)),
         "participants_count": participants_count,
     }
