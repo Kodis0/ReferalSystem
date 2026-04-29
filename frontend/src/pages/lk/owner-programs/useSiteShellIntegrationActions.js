@@ -68,6 +68,9 @@ export function formatActivateConflictMessage(payload, integrationData) {
   if (code === "site_not_ready_for_activate" && er && er.widget_enabled === false && seen) {
     return "Виджет найден на сайте, но выключен в настройках. Включите виджет.";
   }
+  if (code === "site_not_verified" && seen) {
+    return "Код виджета найден, но сайт ещё не прошёл проверку. Нажмите «Проверить подключение» или повторите попытку через несколько секунд.";
+  }
   const fallback = apiErrorDisplayText(payload);
   return fallback || "Не удалось активировать сайт.";
 }

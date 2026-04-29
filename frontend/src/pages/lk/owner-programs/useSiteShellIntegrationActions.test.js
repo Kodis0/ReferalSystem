@@ -29,4 +29,12 @@ describe("formatActivateConflictMessage", () => {
     );
     expect(msg).not.toContain("выключен в настройках");
   });
+
+  it("for site_not_verified with widget seen, suggests verify — not missing script", () => {
+    const msg = formatActivateConflictMessage(
+      { code: "site_not_verified", detail: "site_not_verified" },
+      { last_widget_seen_at: "2026-04-29T17:10:49Z" },
+    );
+    expect(msg).toContain("Проверить подключение");
+  });
 });

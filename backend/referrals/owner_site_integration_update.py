@@ -3,6 +3,8 @@ Apply validated owner PATCH payload to Site (single implementation for view + se
 """
 from __future__ import annotations
 
+from django.utils import timezone
+
 from referrals.models import Site
 from referrals.owner_diagnostics import build_embed_readiness
 from referrals.owner_site_activity import log_integration_patch
@@ -18,6 +20,7 @@ from referrals.services import (
     normalize_site_commission_percent,
     normalize_site_referral_lock_days,
     sanitize_site_capture_config,
+    site_origin_is_allowed,
 )
 
 
@@ -45,6 +48,32 @@ def enable_widget_if_widget_seen_and_structurally_ready(site: Site) -> bool:
         return False
     site.widget_enabled = True
     site.save(update_fields=["widget_enabled", "updated_at"])
+    return True
+
+
+def ensure_site_verified_if_widget_seen(site: Site) -> bool:
+    """
+    Promote ``draft`` → ``verified`` when the widget already reported from an allowed
+    origin and embed prerequisites match ``site_embed_ready`` (origins, key, id, widget flag).
+
+    Does not verify without ``last_widget_seen_at`` or when ``last_widget_seen_origin``
+    is missing / not in ``allowed_origins``. Returns True if the row was saved.
+    """
+    if site.status != Site.Status.DRAFT:
+        return False
+    if site.last_widget_seen_at is None:
+        return False
+    seen_origin = (site.last_widget_seen_origin or "").strip()
+    if not seen_origin:
+        return False
+    if not site_origin_is_allowed(site, seen_origin):
+        return False
+    if not site_embed_ready(site):
+        return False
+    site.status = Site.Status.VERIFIED
+    if site.verified_at is None:
+        site.verified_at = timezone.now()
+    site.save(update_fields=["status", "verified_at", "updated_at"])
     return True
 
 

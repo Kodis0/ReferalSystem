@@ -1393,6 +1393,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data.get("code"), "site_missing")
 
     def test_activate_requires_verified_site(self):
+        """Draft without widget_seen signal cannot activate (embed structurally ready)."""
         site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_activate_draft_" + uuid.uuid4().hex,
@@ -1408,6 +1409,69 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.status_code, 409)
         self.assertEqual(r.data["detail"], "site_not_verified")
         self.assertEqual(r.data.get("code"), "site_not_verified")
+
+    def test_activate_promotes_draft_when_widget_seen_on_allowed_origin(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_draft_seen_ok_" + uuid.uuid4().hex,
+            allowed_origins=["https://seen-direct.example"],
+            widget_enabled=True,
+            status=Site.Status.DRAFT,
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://seen-direct.example",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], Site.Status.ACTIVE)
+        self.assertIsNotNone(r.data["activated_at"])
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.ACTIVE)
+        self.assertIsNotNone(site.verified_at)
+
+    def test_activate_draft_seen_origin_not_allowed_stays_not_verified(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_seen_bad_origin_" + uuid.uuid4().hex,
+            allowed_origins=["https://allowed-only.example"],
+            widget_enabled=True,
+            status=Site.Status.DRAFT,
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://other-origin.example",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data.get("code"), "site_not_verified")
+        site.refresh_from_db()
+        self.assertEqual(site.status, Site.Status.DRAFT)
+
+    def test_activate_verified_promotion_does_not_clear_config_json(self):
+        cfg = {"amount_selector": ".keep-me", "capture_config": {"version": 1, "enabled_optional_fields": ["email"]}}
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_cfg_keep_" + uuid.uuid4().hex,
+            allowed_origins=["https://cfg-keep.example"],
+            widget_enabled=True,
+            status=Site.Status.DRAFT,
+            config_json=cfg,
+            last_widget_seen_at=timezone.now(),
+            last_widget_seen_origin="https://cfg-keep.example",
+        )
+        self.api.force_authenticate(self.owner)
+        r = self.api.post(
+            f"/referrals/site/integration/activate/?site_public_id={site.public_id}",
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("amount_selector"), ".keep-me")
 
     def test_activate_promotes_verified_site(self):
         site = Site.objects.create(
