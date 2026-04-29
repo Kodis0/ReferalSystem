@@ -831,7 +831,7 @@ describe("WidgetInstallScreen", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Сайт подключён")).toBeInTheDocument();
+      expect(screen.getByText("Код найден")).toBeInTheDocument();
     });
     expect(screen.getByText("Виджет успешно запустился на сайте.")).toBeInTheDocument();
   });
@@ -1086,7 +1086,7 @@ describe("WidgetInstallScreen", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Сайт подключён")).toBeInTheDocument();
+      expect(screen.getByText("Код найден")).toBeInTheDocument();
     });
 
     jest.useRealTimers();

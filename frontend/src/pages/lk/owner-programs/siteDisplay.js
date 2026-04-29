@@ -2,10 +2,65 @@
 export function siteLifecycleLabelRu(status) {
   const map = {
     draft: "Черновик",
-    verified: "Проверен",
+    verified: "Готов к активации",
     active: "Активен",
+    paused: "Остановлен",
+    disabled: "Остановлен",
+    inactive: "Остановлен",
   };
   return map[status] || status || "—";
+}
+
+function normalizedSiteStatus(siteLike) {
+  const raw =
+    typeof siteLike?.status === "string" && siteLike.status.trim()
+      ? siteLike.status
+      : typeof siteLike?.site_status === "string"
+        ? siteLike.site_status
+        : "";
+  return raw.trim().toLowerCase();
+}
+
+export function getSiteLifecycleStatus(siteOrIntegration) {
+  const status = normalizedSiteStatus(siteOrIntegration);
+
+  if (siteOrIntegration?.widget_enabled === false) {
+    return {
+      tone: "muted",
+      label: "Виджет выключен",
+      description: "Сбор заявок для сайта сейчас выключен.",
+    };
+  }
+
+  if (status === "active") {
+    return {
+      tone: "success",
+      label: "Активен",
+      description: "Сайт активирован.",
+    };
+  }
+
+  if (status === "verified") {
+    return {
+      tone: "warning",
+      label: "Готов к активации",
+      description: "Код проверен, сайт ещё не активирован.",
+    };
+  }
+
+  if (status === "paused" || status === "disabled" || status === "inactive") {
+    return {
+      tone: "danger",
+      label: "Остановлен",
+      description: "Сайт не принимает заявки.",
+    };
+  }
+
+  return {
+    tone: "muted",
+    label: status === "draft" ? "Черновик" : siteLifecycleLabelRu(status),
+    description: "Сайт ещё не активирован.",
+  };
 }
 
 export function formatSiteCardTitle(publicId, primaryOrigin, displayName) {

@@ -10,14 +10,11 @@ import "./owner-programs.css";
 import {
   domainHostFromValue,
   formatDomainLine,
-  siteLifecycleLabelRu,
+  getSiteLifecycleStatus,
   sitePrimaryDomainLabel,
 } from "./siteDisplay";
 import {
-  isSiteCapturePaused,
   preserveResolvedReachabilityPhase,
-  reachabilityDotPhase,
-  reachabilityLabel,
   SITE_REACHABILITY_POLL_MS,
   withSitePublicIdQuery,
 } from "./siteReachability";
@@ -203,38 +200,13 @@ function ServiceActionsIcon() {
   );
 }
 
-function serviceStatusTone(status) {
-  const value = typeof status === "string" ? status.trim().toLowerCase() : "";
-  if (!value) return "success";
-  if (value.includes("draft") || value.includes("чернов")) return "warning";
-  if (value.includes("error") || value.includes("fail") || value.includes("disabled")) return "danger";
-  return "success";
-}
-
-function serviceStatusPresentation(site, reachabilityPhase, isCurrent) {
+function serviceStatusPresentation(site, isCurrent) {
   const currentSuffix = isCurrent ? " · текущий" : "";
-  if (isSiteCapturePaused(site)) {
-    const dotClassName = `owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase("paused")}`;
-    return {
-      label: `${reachabilityLabel("paused")}${currentSuffix}`,
-      cardDotClassName: dotClassName,
-      listDotClassName: dotClassName,
-    };
-  }
-  if (reachabilityPhase === "checking" || reachabilityPhase === "online" || reachabilityPhase === "offline") {
-    const dotClassName = `owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(reachabilityPhase)}`;
-    return {
-      label: `${reachabilityLabel(reachabilityPhase)}${currentSuffix}`,
-      cardDotClassName: dotClassName,
-      listDotClassName: dotClassName,
-    };
-  }
-
-  const statusTone = serviceStatusTone(site.status);
+  const lifecycle = getSiteLifecycleStatus(site);
   return {
-    label: `${siteLifecycleLabelRu(site.status)}${currentSuffix}`,
-    cardDotClassName: `owner-programs__service-card-status-dot owner-programs__service-card-status-dot_${statusTone}`,
-    listDotClassName: `owner-programs__services-list-status owner-programs__services-list-status_${statusTone}`,
+    label: `${lifecycle.label}${currentSuffix}`,
+    cardDotClassName: `owner-programs__service-card-status-dot owner-programs__service-card-status-dot_${lifecycle.tone}`,
+    listDotClassName: `owner-programs__services-list-status owner-programs__services-list-status_${lifecycle.tone}`,
   };
 }
 
@@ -863,7 +835,7 @@ export default function ProjectOverviewPage() {
                   const isCurrent = site.public_id === sitePublicId;
                   const title = serviceTitle(site);
                   const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
-                  const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
+                  const status = serviceStatusPresentation(site, hasSiteId && isCurrent);
                   const siteCardAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   const menuOpen = activeMenuSiteId === site.public_id;
@@ -938,7 +910,7 @@ export default function ProjectOverviewPage() {
                 {filteredSites.map((site) => {
                   const isCurrent = site.public_id === sitePublicId;
                   const domain = sitePrimaryDomainLabel(site) || formatDomainLine(site.primary_origin, [site.primary_origin]);
-                  const status = serviceStatusPresentation(site, siteReachabilityById[site.public_id]?.phase || "idle", hasSiteId && isCurrent);
+                  const status = serviceStatusPresentation(site, hasSiteId && isCurrent);
                   const siteListAvatarUrl =
                     typeof site.avatar_data_url === "string" ? site.avatar_data_url.trim() : "";
                   const menuOpen = activeMenuSiteId === site.public_id;

@@ -10,15 +10,8 @@ import "../lk.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
-import { sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
-import {
-  isSiteCapturePaused,
-  preserveResolvedReachabilityPhase,
-  reachabilityDotPhase,
-  reachabilityLabel,
-  SITE_REACHABILITY_POLL_MS,
-  withSitePublicIdQuery,
-} from "./siteReachability";
+import { getSiteLifecycleStatus, sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
+import { withSitePublicIdQuery } from "./siteReachability";
 import SiteShellToolbarSubscriber from "./SiteShellToolbarSubscriber";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
@@ -186,8 +179,6 @@ export default function SiteProjectLayout() {
   const setSiteShellToolbar = useCallback((node) => {
     setSiteShellToolbarSlot(node);
   }, []);
-  /** idle — не показываем; no_url — нет origin; checking | online | offline — бейдж */
-  const [siteReachability, setSiteReachability] = useState({ phase: "idle" });
   const createMenuRef = useRef(null);
   const locationViewMode = location.state?.projectViewMode;
   const { user } = useCurrentUser();
@@ -797,55 +788,6 @@ export default function SiteProjectLayout() {
   const hideShellChromeForFocusedConnect = onProjectWidgetConnectPath;
   const hideShellChrome = hideShellChromeForSiteCreate || hideShellChromeForFocusedConnect;
 
-  useEffect(() => {
-    if (!isSiteRouteShell || hideShellChrome || !routeSitePublicId) {
-      setSiteReachability({ phase: "idle" });
-      return undefined;
-    }
-    if (headLoading || !siteRowForShell) {
-      return undefined;
-    }
-    if (!siteShellOrigin.trim()) {
-      setSiteReachability({ phase: "no_url" });
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function runOnce() {
-      if (cancelled) return;
-      setSiteReachability((prev) => (prev.phase === "idle" ? { phase: "checking" } : prev));
-      try {
-        const url = withSitePublicIdQuery(API_ENDPOINTS.siteReachability, routeSitePublicId);
-        const res = await fetch(url, { headers: authHeaders(), credentials: "include" });
-        const body = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!res.ok) {
-          setSiteReachability((prev) => ({
-            phase: preserveResolvedReachabilityPhase(prev.phase),
-          }));
-          return;
-        }
-        setSiteReachability({
-          phase: body.reachable ? "online" : "offline",
-        });
-      } catch {
-        if (!cancelled) {
-          setSiteReachability((prev) => ({
-            phase: preserveResolvedReachabilityPhase(prev.phase),
-          }));
-        }
-      }
-    }
-
-    runOnce();
-    const timer = window.setInterval(runOnce, SITE_REACHABILITY_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [headLoading, hideShellChrome, isSiteRouteShell, routeSitePublicId, siteRowForShell, siteShellOrigin]);
-
   const isDefaultProject = Boolean(
     projectEntry?.project?.is_default || projectEntry?.is_default || headTitle === "Общий проект",
   );
@@ -915,17 +857,8 @@ export default function SiteProjectLayout() {
     return <Navigate to="/lk/partner" replace />;
   }
 
-  const siteCapturePaused = Boolean(siteRowForShell && isSiteCapturePaused(siteRowForShell));
-  const reachabilityDisplayPhase = siteCapturePaused ? "paused" : siteReachability.phase;
-
-  const showSiteReachability =
-    isSiteRouteShell &&
-    !headLoading &&
-    siteRowForShell &&
-    (siteCapturePaused ||
-      siteReachability.phase === "checking" ||
-      siteReachability.phase === "online" ||
-      siteReachability.phase === "offline");
+  const shellLifecycle = getSiteLifecycleStatus(siteRowForShell);
+  const showSiteLifecycle = Boolean(isSiteRouteShell && !headLoading && siteRowForShell);
 
   const shellBusy = headLoading && !hideShellChrome;
 
@@ -1046,18 +979,18 @@ export default function SiteProjectLayout() {
                       </div>
                       <div
                         className={
-                          showSiteReachability
+                          showSiteLifecycle
                             ? "owner-programs__shell-meta-row owner-programs__shell-meta-row_site"
                             : "owner-programs__shell-meta-row"
                         }
                       >
-                        {showSiteReachability ? (
+                        {showSiteLifecycle ? (
                           <p className="owner-programs__shell-reachability" role="status" aria-live="polite">
                             <span
-                              className={`owner-programs__shell-reachability-dot owner-programs__shell-reachability-dot_${reachabilityDotPhase(reachabilityDisplayPhase)}`}
+                              className={`owner-programs__service-card-status-dot owner-programs__service-card-status-dot_${shellLifecycle.tone}`}
                               aria-hidden="true"
                             />
-                            <span className="owner-programs__shell-reachability-text">{reachabilityLabel(reachabilityDisplayPhase)}</span>
+                            <span className="owner-programs__shell-reachability-text">{shellLifecycle.label}</span>
                           </p>
                         ) : null}
                         <div

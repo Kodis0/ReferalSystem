@@ -2905,6 +2905,10 @@
   background: #f2c94c;
 }
 
+.owner-programs__service-card-status-dot_muted {
+  background: #94a3b8;
+}
+
 .owner-programs__service-card-status-dot_danger {
   background: #ff6270;
 }
@@ -3035,6 +3039,10 @@
 
 .owner-programs__services-list-status_warning {
   background: #f2c94c;
+}
+
+.owner-programs__services-list-status_muted {
+  background: #94a3b8;
 }
 
 .owner-programs__services-list-status_danger {

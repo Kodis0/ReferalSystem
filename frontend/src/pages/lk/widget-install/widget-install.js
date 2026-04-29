@@ -216,7 +216,7 @@ function buildAllowedOrigins(originValue) {
 /** Human-readable integration_status for owner UI */
 function integrationStatusLabel(status) {
   const map = {
-    healthy: "Подключено",
+    healthy: "Подключение работает",
     needs_attention: "Нужно проверить",
     disabled: "Отключено",
     incomplete: "Не завершено",
@@ -481,7 +481,7 @@ function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
   if (localState.status === "found") {
     return {
       tone: "ok",
-      title: "Сайт подключён",
+      title: "Код найден",
       message: "Виджет успешно запустился на сайте.",
     };
   }
@@ -506,7 +506,7 @@ function connectionCheckPresentation(localState, persistedCheck, opts = {}) {
   if (persistedFound) {
     return {
       tone: "ok",
-      title: "Подключение найдено",
+      title: "Код найден",
       message: persistedOrigin
         ? `Сигнал от установленного кода уже получен с ${persistedOrigin}.`
         : "Сайт уже связался с системой.",
