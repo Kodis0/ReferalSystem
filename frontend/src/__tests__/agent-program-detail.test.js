@@ -246,6 +246,46 @@ describe("Agent program detail page", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("ignores detail status event for another site and cleans up listener on unmount", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "Only Shop",
+              site_origin_label: "only.example",
+              site_status: "active",
+              widget_enabled: true,
+              program_active: true,
+              joined: false,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    const { unmount } = renderDetail();
+
+    await screen.findByText("Активна");
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lumoref:site-status-changed", {
+          detail: { site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff" },
+        }),
+      );
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+    act(() => {
+      window.dispatchEvent(new CustomEvent("lumoref:site-status-changed"));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("joins only the current program after explicit click", async () => {
     let detailCalls = 0;
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {

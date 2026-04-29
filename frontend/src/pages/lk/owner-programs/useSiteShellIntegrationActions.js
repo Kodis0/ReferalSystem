@@ -235,7 +235,7 @@ export function useSiteShellIntegrationActions({
         }
         setActivateError("");
         emitSiteOwnerActivity(siteId);
-        dispatchLumorefSiteStatusChanged(siteId);
+        dispatchLumorefSiteStatusChanged(payload);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
           headers: authHeaders(),
@@ -278,7 +278,7 @@ export function useSiteShellIntegrationActions({
           }
           integrationSnapshot = patchPayload;
           emitSiteOwnerActivity(siteId);
-          dispatchLumorefSiteStatusChanged(siteId);
+          dispatchLumorefSiteStatusChanged(patchPayload);
         }
       }
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationActivate, siteId), {
@@ -291,7 +291,7 @@ export function useSiteShellIntegrationActions({
       if (res.ok) {
         setData(payload);
         emitSiteOwnerActivity(siteId);
-        dispatchLumorefSiteStatusChanged(siteId);
+        dispatchLumorefSiteStatusChanged(payload);
         await load();
         return;
       }
@@ -318,7 +318,7 @@ export function useSiteShellIntegrationActions({
       if (res.ok) {
         setData(payload);
         emitSiteOwnerActivity(siteId);
-        dispatchLumorefSiteStatusChanged(siteId);
+        dispatchLumorefSiteStatusChanged(payload);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
           headers: authHeaders(),

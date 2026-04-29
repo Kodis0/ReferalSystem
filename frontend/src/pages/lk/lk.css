@@ -811,12 +811,21 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.lk-header__support-btn > .lk-header__chevron,
+.lk-header__account-btn > .lk-header__chevron {
+  transition:
+    color 0.2s ease,
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .lk-header__chevron_open {
   transform: rotate(180deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lk-header__chevron {
+  .lk-header__chevron,
+  .lk-header__support-btn > .lk-header__chevron,
+  .lk-header__account-btn > .lk-header__chevron {
     transition: none;
   }
 }

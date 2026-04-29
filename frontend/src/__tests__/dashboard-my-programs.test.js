@@ -186,6 +186,51 @@ describe("Dashboard My Programs", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("ignores my programs status event for another site and cleans up listener on unmount", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/me/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Only Shop",
+                site_origin_label: "only.example",
+                site_status: "active",
+                widget_enabled: true,
+                program_active: true,
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Only Shop");
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lumoref:site-status-changed", {
+          detail: { site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff" },
+        }),
+      );
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+    act(() => {
+      window.dispatchEvent(new CustomEvent("lumoref:site-status-changed"));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("renders connected program avatar from API and falls back to letter without avatar", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes("/users/me/programs/")) {

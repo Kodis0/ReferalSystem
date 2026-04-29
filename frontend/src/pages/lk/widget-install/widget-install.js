@@ -14,6 +14,7 @@ import widgetInstallTildaHeadEditorPng from "../../../static/images/widget-insta
 import widgetInstallTildaInsertCodePng from "../../../static/images/widget-install-tilda-insert-code.png";
 import widgetInstallTildaPublishPng from "../../../static/images/widget-install-tilda-publish.png";
 import widgetInstallTildaSiteSettingsPng from "../../../static/images/widget-install-tilda-site-settings.png";
+import { dispatchLumorefSiteStatusChanged } from "../lkProgramListsSync";
 import { siteLifecycleLabelRu } from "../owner-programs/siteDisplay";
 import { emitSiteOwnerActivity } from "../owner-programs/siteOwnerActivityBus";
 
@@ -1071,6 +1072,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       setSaveHint("Сохранено");
       setTimeout(() => setSaveHint(""), 2500);
       emitSiteOwnerActivity(String(payload?.public_id || selectedSitePublicId || "").trim());
+      dispatchLumorefSiteStatusChanged(payload);
       const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId), {
         method: "GET",
         headers: authHeaders(),
@@ -1137,6 +1139,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       setConnectionCheckUi({ status: "found" });
       setOtherPageVerifyOpen(false);
       emitSiteOwnerActivity(String(intPayload?.public_id || selectedSitePublicIdRef.current || "").trim());
+      dispatchLumorefSiteStatusChanged(intPayload);
       if (focusedConnectViewRef.current) {
         const widgetPath = buildProjectSiteWidgetPath(
           intPayload,
@@ -1272,6 +1275,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       setConnectionCheckUi({ status: "found" });
       setOtherPageVerifyOpen(false);
       emitSiteOwnerActivity(String(selectedSitePublicId || payload?.public_id || "").trim());
+      dispatchLumorefSiteStatusChanged(payload);
       const resDiag = await fetch(
         siteDiagnosticsFetchUrl(API_ENDPOINTS.siteIntegrationDiagnostics, selectedSitePublicId, false),
         {
@@ -1330,6 +1334,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       }
       setData(payload);
       emitSiteOwnerActivity(String(selectedSitePublicId || payload?.public_id || "").trim());
+      dispatchLumorefSiteStatusChanged(payload);
       await load();
       if (focusedConnectView) {
         const widgetPath = buildProjectSiteWidgetPath(

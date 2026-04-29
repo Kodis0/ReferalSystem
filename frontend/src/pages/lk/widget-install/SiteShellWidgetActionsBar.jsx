@@ -1,4 +1,4 @@
-import { CirclePause, CirclePlay, PlugZap, RefreshCw, Trash2 } from "lucide-react";
+import { CirclePause, CirclePlay, RefreshCw, Trash2, Zap } from "lucide-react";
 
 /**
  * Кнопки в шапке сайта (удалить / вкл-выкл сбор / проверить / обновить).
@@ -80,7 +80,7 @@ export default function SiteShellWidgetActionsBar({
           data-testid="site-shell-action-verify"
         >
           <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
-            <PlugZap size={iconSize} strokeWidth={2} />
+            <Zap size={iconSize} strokeWidth={2} />
           </span>
           <span>{verifyLoading ? "Проверка…" : "Проверить подключение"}</span>
         </button>
@@ -134,7 +134,7 @@ export default function SiteShellWidgetActionsBar({
         title="Проверить подключение"
         data-testid="site-shell-action-verify"
       >
-        <PlugZap size={iconSize} strokeWidth={2} aria-hidden />
+        <Zap size={iconSize} strokeWidth={2} aria-hidden />
       </button>
       <button
         type="button"

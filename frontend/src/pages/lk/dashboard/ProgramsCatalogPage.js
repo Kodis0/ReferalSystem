@@ -44,6 +44,7 @@ export default function ProgramsCatalogPage() {
   const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
   const [filterListboxOpen, setFilterListboxOpen] = useState(null);
   const filtersWrapRef = useRef(null);
+  const programsRef = useRef([]);
   const [activeMenuSiteId, setActiveMenuSiteId] = useState("");
   const [joiningSiteId, setJoiningSiteId] = useState("");
   const [leavingSiteId, setLeavingSiteId] = useState("");
@@ -122,7 +123,9 @@ export default function ProgramsCatalogPage() {
       const res = await fetch(API_ENDPOINTS.programsCatalog, catalogListFetchInit(token));
       if (!res.ok) return;
       const data = await res.json();
-      setPrograms(Array.isArray(data.programs) ? data.programs : []);
+      const nextPrograms = Array.isArray(data.programs) ? data.programs : [];
+      programsRef.current = nextPrograms;
+      setPrograms(nextPrograms);
     } catch {
       /* ignore */
     }
@@ -147,7 +150,11 @@ export default function ProgramsCatalogPage() {
         return res.json();
       })
       .then((data) => {
-        if (!cancelled) setPrograms(Array.isArray(data.programs) ? data.programs : []);
+        if (!cancelled) {
+          const nextPrograms = Array.isArray(data.programs) ? data.programs : [];
+          programsRef.current = nextPrograms;
+          setPrograms(nextPrograms);
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -162,7 +169,14 @@ export default function ProgramsCatalogPage() {
   }, [catalogListFetchInit]);
 
   useEffect(() => {
-    function onProgramsAvatarSourcesUpdated() {
+    function onProgramsAvatarSourcesUpdated(event) {
+      const changedSiteId = String(event?.detail?.site_public_id || "").trim();
+      if (
+        changedSiteId &&
+        !programsRef.current.some((program) => String(program?.site_public_id || "").trim() === changedSiteId)
+      ) {
+        return;
+      }
       refetchPrograms();
     }
     window.addEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);

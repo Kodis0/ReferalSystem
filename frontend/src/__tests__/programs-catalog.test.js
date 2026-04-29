@@ -153,6 +153,93 @@ describe("Programs Catalog", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("ignores status change event for another site and cleans up listener on unmount", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Only Shop",
+                site_origin_label: "only.example",
+                site_status: "active",
+                widget_enabled: true,
+                program_active: true,
+                commission_percent: "12",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Only Shop");
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lumoref:site-status-changed", {
+          detail: { site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff" },
+        }),
+      );
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+    act(() => {
+      window.dispatchEvent(new CustomEvent("lumoref:site-status-changed"));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("refetches catalog on visibilitychange visible", async () => {
+    let active = true;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Visible Shop",
+                site_origin_label: "visible.example",
+                site_status: "active",
+                widget_enabled: active,
+                program_active: active,
+                commission_percent: "12",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Активна");
+    active = false;
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await screen.findByText("Виджет выключен");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("renders API avatar with stable cache version and falls back to letter without avatar", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes("/users/programs/")) {

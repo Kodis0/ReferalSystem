@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
@@ -92,6 +92,7 @@ function ProgramCountryFlag({ domain }) {
 export function MyProgramsSection() {
   const navigate = useNavigate();
   const [programs, setPrograms] = useState(null);
+  const programsRef = useRef([]);
   const [programsError, setProgramsError] = useState(null);
   const [leavingSiteId, setLeavingSiteId] = useState("");
   const [leaveError, setLeaveError] = useState("");
@@ -112,9 +113,12 @@ export function MyProgramsSection() {
       });
       if (!res.ok) throw new Error("programs_fetch_failed");
       const data = await res.json();
-      setPrograms(Array.isArray(data.programs) ? data.programs : []);
+      const nextPrograms = Array.isArray(data.programs) ? data.programs : [];
+      programsRef.current = nextPrograms;
+      setPrograms(nextPrograms);
     } catch {
       setProgramsError(true);
+      programsRef.current = [];
       setPrograms([]);
     }
   }, []);
@@ -124,7 +128,14 @@ export function MyProgramsSection() {
   }, [fetchMyPrograms]);
 
   useEffect(() => {
-    function onProgramsAvatarSourcesUpdated() {
+    function onProgramsAvatarSourcesUpdated(event) {
+      const changedSiteId = String(event?.detail?.site_public_id || "").trim();
+      if (
+        changedSiteId &&
+        !programsRef.current.some((program) => String(program?.site_public_id || "").trim() === changedSiteId)
+      ) {
+        return;
+      }
       fetchMyPrograms();
     }
     window.addEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
@@ -188,7 +199,9 @@ export function MyProgramsSection() {
       });
       if (!listRes.ok) throw new Error("program_leave_list_failed");
       const listData = await listRes.json();
-      setPrograms(Array.isArray(listData.programs) ? listData.programs : []);
+      const nextPrograms = Array.isArray(listData.programs) ? listData.programs : [];
+      programsRef.current = nextPrograms;
+      setPrograms(nextPrograms);
     } catch (error) {
       const raw = error instanceof Error ? error.message.replace("program_leave_failed_", "") : "";
       const suffix = raw && raw !== "program_leave_failed" ? ` (${raw})` : "";
