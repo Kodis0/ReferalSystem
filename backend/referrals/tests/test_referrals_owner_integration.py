@@ -147,6 +147,60 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r_get.data["referral_lock_days"], 45)
         self.assertEqual((r_get.data.get("config_json") or {}).get("referral_lock_days"), 45)
 
+    def test_referral_lock_days_two_sequential_values_patch_db_get_program(self):
+        first_value = 41
+        second_value = 82
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_rld_seq_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+
+        r1 = self.api.patch(url, {"referral_lock_days": first_value}, format="json")
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.data["referral_lock_days"], first_value)
+        self.assertEqual((r1.data.get("config_json") or {}).get("referral_lock_days"), first_value)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("referral_lock_days"), first_value)
+        self.assertEqual(_member_program_payload(site)["referral_lock_days"], first_value)
+
+        r2 = self.api.patch(url, {"referral_lock_days": second_value}, format="json")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data["referral_lock_days"], second_value)
+        self.assertEqual((r2.data.get("config_json") or {}).get("referral_lock_days"), second_value)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("referral_lock_days"), second_value)
+
+        r_get = self.api.get(url)
+        self.assertEqual(r_get.status_code, 200)
+        self.assertEqual(r_get.data["referral_lock_days"], second_value)
+        self.assertEqual((r_get.data.get("config_json") or {}).get("referral_lock_days"), second_value)
+        self.assertEqual(_member_program_payload(site)["referral_lock_days"], second_value)
+
+    def test_patch_partial_config_json_merges_preserving_referral_lock_days(self):
+        first_value = 53
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_cfg_merge_rld_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+        r_lock = self.api.patch(url, {"referral_lock_days": first_value}, format="json")
+        self.assertEqual(r_lock.status_code, 200)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("referral_lock_days"), first_value)
+
+        r_merge = self.api.patch(url, {"config_json": {"amount_selector": ".merged"}}, format="json")
+        self.assertEqual(r_merge.status_code, 200)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("referral_lock_days"), first_value)
+        self.assertEqual(site.config_json.get("amount_selector"), ".merged")
+
     def test_site_owner_integration_update_serializer_save_merges_referral_lock_days(self):
         site = Site.objects.create(
             owner=self.owner,

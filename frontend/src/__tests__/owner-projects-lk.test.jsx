@@ -2209,6 +2209,225 @@ describe("ProjectSettingsPage", () => {
     expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(60);
   });
 
+  it("sends two successive referral_lock_days values and updates the input from API", async () => {
+    const firstValue = 41;
+    const secondValue = 82;
+    let storedReferralLockDays = 30;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: storedReferralLockDays,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A", referral_lock_days: storedReferralLockDays },
+            widget_enabled: true,
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && opts?.method === "PATCH") {
+        const body = JSON.parse(opts.body);
+        if (typeof body.referral_lock_days === "number") {
+          storedReferralLockDays = body.referral_lock_days;
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: storedReferralLockDays,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A", referral_lock_days: storedReferralLockDays },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    const input = screen.getByLabelText(/Срок закрепления пользователя за рефералом/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, String(firstValue));
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-save-success")).toBeInTheDocument();
+    });
+    const firstPatch = fetchMock.mock.calls.find(([, o]) => o?.method === "PATCH");
+    expect(JSON.parse(firstPatch[1].body).referral_lock_days).toBe(firstValue);
+    expect(input).toHaveValue(firstValue);
+
+    await userEvent.clear(input);
+    await userEvent.type(input, String(secondValue));
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(secondValue);
+    });
+    const patchCalls = fetchMock.mock.calls.filter(([, o]) => o?.method === "PATCH");
+    expect(JSON.parse(patchCalls[patchCalls.length - 1][1].body).referral_lock_days).toBe(secondValue);
+  });
+
+  it("after save uses config_json.referral_lock_days when top-level is missing", async () => {
+    const firstValue = 37;
+    const secondValue = 64;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && opts?.method === "PATCH") {
+        const body = JSON.parse(opts.body);
+        const rld = body.referral_lock_days;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A", referral_lock_days: rld },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    const input = screen.getByLabelText(/Срок закрепления пользователя за рефералом/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, String(firstValue));
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-save-success")).toBeInTheDocument();
+    });
+    expect(input).toHaveValue(firstValue);
+
+    await userEvent.clear(input);
+    await userEvent.type(input, String(secondValue));
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Срок закрепления пользователя за рефералом/i)).toHaveValue(secondValue);
+    });
+    const patchCalls = fetchMock.mock.calls.filter(([, o]) => o?.method === "PATCH");
+    expect(JSON.parse(patchCalls[patchCalls.length - 1][1].body).referral_lock_days).toBe(secondValue);
+  });
+
+  it("after save keeps submitted referral_lock_days when response omits both top-level and config key", async () => {
+    const submittedValue = 71;
+    jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
+      const u = String(url);
+      if (u.includes("/referrals/site/integration/") && (!opts || !opts.method || opts.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && opts?.method === "PATCH") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            public_id: siteId,
+            allowed_origins: ["https://a.example"],
+            platform_preset: "tilda",
+            site_display_name: "A",
+            site_description: "Old desc",
+            commission_percent: "5.00",
+            project: { name: "A", description: "Old desc", avatar_data_url: "" },
+            config_json: { display_name: "A" },
+            widget_enabled: true,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({}) });
+    });
+
+    render(
+      <MemoryRouter initialEntries={[`/lk/partner/project/1/settings`]}>
+        <Routes>
+          <Route path="/lk/partner/project/:projectId" element={<ProjectStubLayout primarySitePublicId={siteId} projectId={1} />}>
+            <Route path="settings" element={<ProjectSettingsPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("project-settings-form")).toBeInTheDocument();
+    });
+    const input = screen.getByLabelText(/Срок закрепления пользователя за рефералом/i);
+    await userEvent.clear(input);
+    await userEvent.type(input, String(submittedValue));
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-save-success")).toBeInTheDocument();
+    });
+    expect(input).toHaveValue(submittedValue);
+  });
+
   it("after save keeps referral lock days from config_json when PATCH omits top-level field", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url, opts) => {
       const u = String(url);
@@ -2392,6 +2611,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
             project: { name: "", description: "", avatar_data_url: "" },
             config_json: {},
             widget_enabled: true,
@@ -2437,6 +2658,8 @@ describe("ProjectSettingsPage", () => {
             public_id: siteId,
             allowed_origins: ["https://a.example"],
             platform_preset: "tilda",
+            commission_percent: "5.00",
+            referral_lock_days: 30,
             project: { name: "", description: "", avatar_data_url: "" },
             config_json: {},
             widget_enabled: true,

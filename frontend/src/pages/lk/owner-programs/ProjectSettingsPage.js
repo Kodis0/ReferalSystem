@@ -67,7 +67,7 @@ function commissionPercentFromPayload(payload) {
   return String(numberValue);
 }
 
-function referralLockDaysFromPayload(payload, fallback = "30") {
+function referralLockDaysFromPayload(payload) {
   const cfg =
     payload?.config_json && typeof payload.config_json === "object" && !Array.isArray(payload.config_json)
       ? payload.config_json
@@ -80,16 +80,28 @@ function referralLockDaysFromPayload(payload, fallback = "30") {
       : fromCfg !== null && fromCfg !== undefined && fromCfg !== ""
         ? fromCfg
         : undefined;
-  if (value === null || value === undefined || value === "") return fallback;
+  if (value === null || value === undefined || value === "") return "";
   const numberValue = parseInt(String(value), 10);
   if (
     !Number.isFinite(numberValue) ||
     numberValue < REFERRAL_LOCK_DAYS_MIN ||
     numberValue > REFERRAL_LOCK_DAYS_MAX
   ) {
-    return fallback;
+    return "";
   }
   return String(numberValue);
+}
+
+function referralLockDaysAfterSaveFromResponse(payload, submittedReferralLockDays) {
+  const cfg =
+    payload?.config_json && typeof payload.config_json === "object" && !Array.isArray(payload.config_json)
+      ? payload.config_json
+      : null;
+  const saved =
+    payload?.referral_lock_days ??
+    cfg?.referral_lock_days ??
+    submittedReferralLockDays;
+  return String(saved);
 }
 
 function parseCommissionPercent(value) {
@@ -137,7 +149,7 @@ export default function ProjectSettingsPage() {
   const [origin, setOrigin] = useState("");
   const [platformPreset, setPlatformPreset] = useState("tilda");
   const [commissionPercent, setCommissionPercent] = useState("5");
-  const [referralLockDays, setReferralLockDays] = useState("30");
+  const [referralLockDays, setReferralLockDays] = useState("");
 
   const [saveState, setSaveState] = useState("idle");
   const [saveError, setSaveError] = useState("");
@@ -190,29 +202,28 @@ export default function ProjectSettingsPage() {
     setSaveState("saving");
     setSaveError("");
     try {
-      const form = e.currentTarget;
       const normalizedCommissionPercent = normalizeCommissionPercentInput(commissionPercent);
-      const rawReferralLockDays = new FormData(form).get("referral_lock_days");
-      const normalizedReferralLockDays = normalizeReferralLockDaysInput(rawReferralLockDays);
+      const normalizedReferralLockDays = normalizeReferralLockDaysInput(referralLockDays);
       if (!normalizedReferralLockDays) {
         setSaveError("Укажите срок закрепления от 1 до 365 дней.");
         setSaveState("error");
         return;
       }
+      const submittedReferralLockDays = Number(normalizedReferralLockDays);
       setCommissionPercent(normalizedCommissionPercent.toFixed(2));
-      setReferralLockDays(normalizedReferralLockDays);
+      const patchPayload = {
+        site_display_name: displayName.trim(),
+        site_description: description.trim(),
+        origin: origin.trim(),
+        platform_preset: platformPreset,
+        commission_percent: normalizedCommissionPercent.toFixed(2),
+        referral_lock_days: submittedReferralLockDays,
+      };
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegration, id), {
         method: "PATCH",
         headers: authHeaders(),
         credentials: "include",
-        body: JSON.stringify({
-          site_display_name: displayName.trim(),
-          site_description: description.trim(),
-          origin: origin.trim(),
-          platform_preset: platformPreset,
-          commission_percent: normalizedCommissionPercent.toFixed(2),
-          referral_lock_days: Number(normalizedReferralLockDays),
-        }),
+        body: JSON.stringify(patchPayload),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -227,7 +238,7 @@ export default function ProjectSettingsPage() {
       setDescription(siteDescriptionFromPayload(payload));
       setOrigin(primaryOriginFromPayload(payload));
       setCommissionPercent(commissionPercentFromPayload(payload));
-      setReferralLockDays(referralLockDaysFromPayload(payload, normalizedReferralLockDays));
+      setReferralLockDays(referralLockDaysAfterSaveFromResponse(payload, patchPayload.referral_lock_days));
       setSaveState("success");
       emitSiteOwnerActivity(id);
       if (typeof reloadProjectHead === "function") {

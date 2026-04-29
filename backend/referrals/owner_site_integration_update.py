@@ -80,7 +80,9 @@ def apply_site_owner_integration_update(site: Site, data: dict, *, log_actor=Non
         site.platform_preset = data["platform_preset"]
     cfg = dict(site.config_json) if isinstance(site.config_json, dict) else {}
     if "config_json" in data:
-        cfg = dict(data["config_json"] or {})
+        incoming = data.get("config_json")
+        if isinstance(incoming, dict):
+            cfg = {**cfg, **incoming}
     if "site_display_name" in data:
         site_display_name = (data.get("site_display_name") or "").strip()
         if site_display_name:
