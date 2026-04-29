@@ -139,6 +139,20 @@ Workflow: `.github/workflows/deploy.yml` — при push в ветку `main` и
 
 Нестандартный SSH-порт: в `appleboy/ssh-action` можно добавить параметр `port` в workflow — при необходимости расширьте workflow локально.
 
+### npm: `EACCES` / `unlink` в `frontend/node_modules`
+
+Сообщение вида `permission denied, unlink '.../node_modules/.bin/acorn'` значит, что каталог `node_modules` (или часть файлов) принадлежит **другому пользователю** (часто **root** после ручного `sudo npm install` на сервере). Тогда пользователь деплоя не может удалить файлы перед `npm ci`.
+
+**Что делать:** после мержа актуального `deploy/deploy.sh` скрипт сам попытается сделать `sudo rm -rf frontend/node_modules`, если доступен passwordless `sudo` (как для nginx/systemd). Иначе один раз на VPS:
+
+```bash
+sudo rm -rf /var/www/lumoref/app/frontend/node_modules
+# или выровнять владельца всего фронта под пользователя деплоя:
+sudo chown -R deploy_user:deploy_user /var/www/lumoref/app/frontend
+```
+
+Дальше деплой снова под пользователем из GitHub Actions должен проходить.
+
 ## 11. Ручные команды на сервере
 
 ```bash

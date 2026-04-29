@@ -122,6 +122,20 @@ else
 fi
 (
   cd frontend
+  # npm ci replaces node_modules; EACCES on unlink if a prior install ran as root (sudo npm).
+  if [[ -d node_modules ]]; then
+    if ! rm -rf node_modules; then
+      if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
+        echo "    frontend/node_modules: sudo rm -rf (owned by another user — e.g. prior sudo npm install)"
+        sudo rm -rf node_modules
+      else
+        echo "ERROR: cannot remove ${APP_ROOT}/frontend/node_modules (permission denied)." >&2
+        echo "  On the server run once: sudo rm -rf ${APP_ROOT}/frontend/node_modules" >&2
+        echo "  Or fix ownership: sudo chown -R $(whoami):$(whoami) ${APP_ROOT}/frontend" >&2
+        exit 1
+      fi
+    fi
+  fi
   npm ci
   npm run build
 )
