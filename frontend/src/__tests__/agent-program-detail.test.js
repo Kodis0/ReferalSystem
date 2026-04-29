@@ -77,6 +77,40 @@ describe("Agent program detail page", () => {
     expect(screen.getByRole("button", { name: "Скопировать ссылку" })).toBeInTheDocument();
   });
 
+  it("renders detail avatar from API with stable cache version", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "Demo Shop",
+              site_origin_label: "demo.example",
+              avatar_data_url: "https://cdn.example/detail-icon.png",
+              avatar_updated_at: "2026-04-29T19:00:00+00:00",
+              site_status: "verified",
+              program_active: true,
+              joined: true,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    const { container } = renderDetail();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
+    });
+    const img = container.querySelector(".lk-dashboard__program-card-avatar-img");
+    expect(img).toHaveAttribute(
+      "src",
+      "https://cdn.example/detail-icon.png?v=2026-04-29T19%3A00%3A00%2B00%3A00"
+    );
+  });
+
   it("returns to my programs when opened from my programs", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes(`/users/programs/${SITE_ID}/`)) {

@@ -1,19 +1,56 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { siteExternalFaviconUrl, siteFaviconHostname } from "./siteDisplay";
 
+function cacheBustedManualUrl(url, version) {
+  const value = typeof url === "string" ? url.trim() : "";
+  const stableVersion = typeof version === "string" ? version.trim() : "";
+  if (!value || !stableVersion || value.startsWith("data:") || value.startsWith("blob:")) return value;
+  const separator = value.includes("?") ? "&" : "?";
+  return `${value}${separator}v=${encodeURIComponent(stableVersion)}`;
+}
+
 /**
- * Favicon for a site-like object (owner Site API shape or member program payload), with letter fallback.
+ * Аватар сайта/программы: своё фото → аккаунт (fallback) → favicon → буква.
+ * Индекс кандидата сбрасывается при любом изменении URLов props — без залипания старой картинки.
  */
-export function SiteFaviconAvatar({ siteLike, manualUrl, letter, imgClassName }) {
+export function SiteFaviconAvatar({
+  siteLike,
+  manualUrl,
+  manualVersion,
+  accountFallbackUrl,
+  letter,
+  imgClassName,
+  useExternalFavicon = true,
+}) {
   const trimmedManual = typeof manualUrl === "string" ? manualUrl.trim() : "";
+  const resolvedManualVersion =
+    typeof manualVersion === "string" && manualVersion.trim()
+      ? manualVersion.trim()
+      : typeof siteLike?.avatar_updated_at === "string" && siteLike.avatar_updated_at.trim()
+        ? siteLike.avatar_updated_at.trim()
+        : typeof siteLike?.updated_at === "string"
+          ? siteLike.updated_at.trim()
+          : "";
+  const manualSrc = cacheBustedManualUrl(trimmedManual, resolvedManualVersion);
+  const trimmedAccount = typeof accountFallbackUrl === "string" ? accountFallbackUrl.trim() : "";
   const faviconHost = siteFaviconHostname(siteLike);
-  const faviconUrl = siteExternalFaviconUrl(faviconHost);
-  const initialSrc = trimmedManual || faviconUrl || "";
-  const [src, setSrc] = useState(initialSrc);
+  const faviconUrl = useExternalFavicon ? siteExternalFaviconUrl(faviconHost) : "";
+
+  const candidates = useMemo(() => {
+    const list = [];
+    if (manualSrc) list.push(manualSrc);
+    if (trimmedAccount) list.push(trimmedAccount);
+    if (faviconUrl) list.push(faviconUrl);
+    return list;
+  }, [manualSrc, trimmedAccount, faviconUrl]);
+
+  const [candidateIndex, setCandidateIndex] = useState(0);
 
   useEffect(() => {
-    setSrc(trimmedManual || faviconUrl || "");
-  }, [trimmedManual, faviconUrl]);
+    setCandidateIndex(0);
+  }, [manualSrc, trimmedAccount, faviconUrl]);
+
+  const src = candidateIndex < candidates.length ? candidates[candidateIndex] || "" : "";
 
   if (!src) {
     return <span>{letter}</span>;
@@ -27,11 +64,7 @@ export function SiteFaviconAvatar({ siteLike, manualUrl, letter, imgClassName })
       alt=""
       className={cls}
       onError={() => {
-        if (trimmedManual && src === trimmedManual && faviconUrl) {
-          setSrc(faviconUrl);
-          return;
-        }
-        setSrc("");
+        setCandidateIndex((i) => Math.min(i + 1, candidates.length));
       }}
     />
   );

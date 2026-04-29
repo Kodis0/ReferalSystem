@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "./dashboard.css";
 
 function formatJoinedAt(iso) {
@@ -90,6 +91,7 @@ export default function AgentProgramDetailPage() {
       try {
         const res = await fetch(API_ENDPOINTS.programDetail(sitePublicId), {
           headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
         });
         if (res.status === 404) {
           if (cancelled?.()) return;
@@ -196,7 +198,13 @@ export default function AgentProgramDetailPage() {
           <section className="lk-dashboard__program-card" data-testid="agent-program-card">
             <div className="lk-dashboard__program-card-head">
               <div className="lk-dashboard__program-card-avatar" aria-hidden="true">
-                {programAvatarLetter(programSiteLabel(program))}
+                <SiteFaviconAvatar
+                  manualUrl={typeof program.avatar_data_url === "string" ? program.avatar_data_url.trim() : ""}
+                  siteLike={program}
+                  letter={programAvatarLetter(programSiteLabel(program))}
+                  imgClassName="lk-dashboard__program-card-avatar-img"
+                  useExternalFavicon={false}
+                />
               </div>
               <div className="lk-dashboard__program-card-copy">
                 <p className="lk-dashboard__program-card-kicker">Название домена</p>

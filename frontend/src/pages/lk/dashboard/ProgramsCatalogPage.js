@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ListFilter, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { LK_PROGRAM_LISTS_REFETCH_EVENT } from "../lkProgramListsSync";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "../lk.css";
 import "../owner-programs/owner-programs.css";
@@ -251,20 +252,25 @@ export default function ProgramsCatalogPage() {
     };
   }, [activeMenuSiteId]);
 
+  const catalogListFetchInit = useCallback((token) => {
+    return {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    };
+  }, []);
+
   const refetchPrograms = useCallback(async () => {
     const token = localStorage.getItem("access_token");
     if (!token) return;
     try {
-      const res = await fetch(API_ENDPOINTS.programsCatalog, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(API_ENDPOINTS.programsCatalog, catalogListFetchInit(token));
       if (!res.ok) return;
       const data = await res.json();
       setPrograms(Array.isArray(data.programs) ? data.programs : []);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [catalogListFetchInit]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,9 +285,7 @@ export default function ProgramsCatalogPage() {
 
     setPrograms(null);
     setError(false);
-    fetch(API_ENDPOINTS.programsCatalog, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(API_ENDPOINTS.programsCatalog, catalogListFetchInit(token))
       .then((res) => {
         if (!res.ok) throw new Error("programs_catalog_fetch_failed");
         return res.json();
@@ -299,7 +303,30 @@ export default function ProgramsCatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [catalogListFetchInit]);
+
+  useEffect(() => {
+    function onProgramsAvatarSourcesUpdated() {
+      refetchPrograms();
+    }
+    window.addEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+    window.addEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
+    window.addEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
+    return () => {
+      window.removeEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+      window.removeEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
+      window.removeEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
+    };
+  }, [refetchPrograms]);
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      refetchPrograms();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [refetchPrograms]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredPrograms = Array.isArray(programs)
@@ -505,10 +532,12 @@ export default function ProgramsCatalogPage() {
                     <div className="lk-dashboard__programs-item-top">
                       <div className="lk-dashboard__programs-avatar" aria-hidden="true">
                         <SiteFaviconAvatar
+                          key={`cat-${p.site_public_id}-${String(p.avatar_data_url || "").slice(0, 48)}-${String(p.avatar_updated_at || "")}`}
                           manualUrl={typeof p.avatar_data_url === "string" ? p.avatar_data_url.trim() : ""}
                           siteLike={p}
                           letter={programAvatarLetter(label)}
                           imgClassName="lk-dashboard__programs-avatar-img"
+                          useExternalFavicon={false}
                         />
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { API_ENDPOINTS } from "../../../config/api";
+import { dispatchLkProgramListsRefetch } from "../lkProgramListsSync";
 import fileToAvatarDataUrl from "./fileToAvatarDataUrl";
 import "../owner-programs/owner-programs.css";
 
@@ -74,6 +75,8 @@ export default function AccountSettingsAvatar({ user, fetchUser, setUser, disabl
         setUser(payload);
       }
       await fetchUser();
+      window.dispatchEvent(new CustomEvent("lk-account-avatar-updated"));
+      dispatchLkProgramListsRefetch();
     },
     [fetchUser, setUser],
   );

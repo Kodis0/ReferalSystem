@@ -67,6 +67,54 @@ describe("Programs Catalog", () => {
     expect(links[1]).toHaveAttribute("data-nav-target", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
   });
 
+  it("renders API avatar with stable cache version and falls back to letter without avatar", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Demo Shop",
+                site_origin_label: "demo.example",
+                avatar_data_url: "https://cdn.example/icon.png",
+                avatar_updated_at: "2026-04-29T18:00:00+00:00",
+                joined: false,
+                site_status: "verified",
+              },
+              {
+                site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+                site_display_label: "Other Shop",
+                site_origin_label: "other.example",
+                avatar_data_url: "",
+                joined: false,
+                site_status: "verified",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("demo.example");
+    const img = container.querySelector(".lk-dashboard__programs-avatar-img");
+    expect(img).toHaveAttribute(
+      "src",
+      "https://cdn.example/icon.png?v=2026-04-29T18%3A00%3A00%2B00%3A00"
+    );
+    fireEvent.error(img);
+    expect(screen.getByText("D")).toBeInTheDocument();
+    expect(screen.getByText("O")).toBeInTheDocument();
+  });
+
   it("mount loads catalog via GET /users/programs/ only and never POST /users/site/join/", async () => {
     const siteId = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {

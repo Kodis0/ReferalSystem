@@ -12,7 +12,6 @@ from .services import (
     site_owner_display_name,
     site_owner_shell_description,
     site_shell_avatar_data_url,
-    site_shell_hide_external_favicon,
 )
 
 
@@ -105,7 +104,6 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
     site_display_name = serializers.SerializerMethodField()
     site_description = serializers.SerializerMethodField()
     site_avatar_data_url = serializers.SerializerMethodField()
-    site_shell_hide_external_favicon = serializers.SerializerMethodField()
     capture_config = serializers.SerializerMethodField()
     commission_percent = serializers.SerializerMethodField()
 
@@ -124,7 +122,6 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
             "site_display_name",
             "site_description",
             "site_avatar_data_url",
-            "site_shell_hide_external_favicon",
             "capture_config",
             "commission_percent",
             "project",
@@ -151,9 +148,6 @@ class SiteOwnerIntegrationSerializer(serializers.ModelSerializer):
 
     def get_site_avatar_data_url(self, obj: Site) -> str:
         return site_shell_avatar_data_url(obj)
-
-    def get_site_shell_hide_external_favicon(self, obj: Site) -> bool:
-        return site_shell_hide_external_favicon(obj)
 
     def get_capture_config(self, obj: Site) -> dict[str, object]:
         return site_capture_config_dict(obj)
@@ -196,7 +190,6 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
     description = serializers.CharField(max_length=2000, trim_whitespace=True, required=False, allow_blank=True)
     avatar_data_url = serializers.CharField(required=False, allow_blank=True)
     site_avatar_data_url = serializers.CharField(required=False, allow_blank=True)
-    site_shell_hide_external_favicon = serializers.BooleanField(required=False)
     platform_preset = serializers.ChoiceField(
         choices=Site.PlatformPreset.choices,
         required=False,

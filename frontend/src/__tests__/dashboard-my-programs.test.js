@@ -105,6 +105,52 @@ describe("Dashboard My Programs", () => {
     expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
   });
 
+  it("renders connected program avatar from API and falls back to letter without avatar", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/me/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Demo Shop",
+                site_origin_label: "demo.example",
+                avatar_data_url: "https://cdn.example/my-icon.png",
+                avatar_updated_at: "2026-04-29T18:30:00+00:00",
+                site_status: "verified",
+                platform_preset: "tilda",
+              },
+              {
+                site_public_id: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+                site_display_label: "Other Shop",
+                site_origin_label: "other.example",
+                avatar_data_url: "",
+                site_status: "verified",
+                platform_preset: "tilda",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Demo Shop");
+    const img = container.querySelector(".owner-programs__service-card-avatar-img");
+    expect(img).toHaveAttribute(
+      "src",
+      "https://cdn.example/my-icon.png?v=2026-04-29T18%3A30%3A00%2B00%3A00"
+    );
+    expect(screen.getByText("O")).toBeInTheDocument();
+  });
+
   it("removes program after leaving membership", async () => {
     const siteId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     let programsPayload = [

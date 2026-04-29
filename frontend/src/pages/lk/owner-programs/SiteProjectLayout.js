@@ -2,18 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Globe } from "lucide-react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import useCurrentUser from "../../../hooks/useCurrentUser";
+import { dispatchLkProgramListsRefetch } from "../lkProgramListsSync";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../lk.css";
 import "../partner/partner.css";
 import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
-import {
-  siteExternalFaviconUrl,
-  siteFaviconHostname,
-  sitePrimaryBrowseHref,
-  sitePrimaryDomainLabel,
-} from "./siteDisplay";
+import { sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
 import {
   preserveResolvedReachabilityPhase,
   reachabilityDotPhase,
@@ -188,11 +185,15 @@ export default function SiteProjectLayout() {
   const setSiteShellToolbar = useCallback((node) => {
     setSiteShellToolbarSlot(node);
   }, []);
-  const [siteShellFaviconBroken, setSiteShellFaviconBroken] = useState(false);
   /** idle — не показываем; no_url — нет origin; checking | online | offline — бейдж */
   const [siteReachability, setSiteReachability] = useState({ phase: "idle" });
   const createMenuRef = useRef(null);
   const locationViewMode = location.state?.projectViewMode;
+  const { user } = useCurrentUser();
+  const partnerAccountAvatarUrl =
+    typeof user?.avatar_data_url === "string" ? user.avatar_data_url.trim() : "";
+  /** На маршруте сайта: фото сайта или то же фото, что в настройках аккаунта партнёра. */
+  const siteShellVisualSrc = isSiteRouteShell ? avatarDataUrl || partnerAccountAvatarUrl : "";
   // Project's primary site: for project-level pages that resolve a default site where
   // the URL does not carry :sitePublicId (e.g. legacy settings). Not used for /members.
   // It must NOT be used as a substitute for canonical :sitePublicId when rendering
@@ -515,6 +516,7 @@ export default function SiteProjectLayout() {
       setAvatarSaveState("success");
       setAvatarSuccessMessage(successMessage);
       window.dispatchEvent(new CustomEvent("lk-project-avatar-updated"));
+      dispatchLkProgramListsRefetch();
       window.setTimeout(() => {
         setAvatarSaveState("idle");
         setAvatarSuccessMessage("");
@@ -557,45 +559,7 @@ export default function SiteProjectLayout() {
         new CustomEvent("lk-site-avatar-updated", { detail: { sitePublicId: routeSitePublicId } }),
       );
       emitSiteOwnerActivity(routeSitePublicId);
-      window.setTimeout(() => {
-        setAvatarSaveState("idle");
-        setAvatarSuccessMessage("");
-      }, 1800);
-    },
-    [routeSitePublicId, loadHead],
-  );
-
-  const saveSiteShellHideExternalFavicon = useCallback(
-    async (hide, successMessage) => {
-      if (!routeSitePublicId) {
-        throw new Error("Не удалось определить сайт");
-      }
-      const res = await fetch(withSitePublicIdQuery(API_ENDPOINTS.siteIntegration, routeSitePublicId), {
-        method: "PATCH",
-        headers: authHeaders(),
-        credentials: "include",
-        body: JSON.stringify({ site_shell_hide_external_favicon: hide }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = payload?.code ?? payload?.detail;
-        const detailMsg =
-          typeof detail === "string"
-            ? detail
-            : Array.isArray(detail)
-              ? detail.join("\n")
-              : detail != null
-                ? String(detail)
-                : "";
-        throw new Error(detailMsg || `Не удалось сохранить (${res.status})`);
-      }
-      await loadHead();
-      setAvatarSaveState("success");
-      setAvatarSuccessMessage(successMessage);
-      window.dispatchEvent(
-        new CustomEvent("lk-site-avatar-updated", { detail: { sitePublicId: routeSitePublicId } }),
-      );
-      emitSiteOwnerActivity(routeSitePublicId);
+      dispatchLkProgramListsRefetch();
       window.setTimeout(() => {
         setAvatarSaveState("idle");
         setAvatarSuccessMessage("");
@@ -608,22 +572,6 @@ export default function SiteProjectLayout() {
     if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
     return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
   }, [projectEntry, routeSitePublicId]);
-  const shellHidesExternalFavicon = Boolean(siteRowForShell?.site_shell_hide_external_favicon);
-  const siteShellFaviconUrl = useMemo(
-    () => (isSiteRouteShell ? siteExternalFaviconUrl(siteFaviconHostname(siteRowForShell)) : ""),
-    [isSiteRouteShell, siteRowForShell],
-  );
-  const siteShellShowsFavicon = Boolean(siteShellFaviconUrl && !siteShellFaviconBroken && !shellHidesExternalFavicon);
-
-  useEffect(() => {
-    setSiteShellFaviconBroken(false);
-  }, [siteShellFaviconUrl]);
-
-  useEffect(() => {
-    if (!avatarDataUrl) {
-      setSiteShellFaviconBroken(false);
-    }
-  }, [avatarDataUrl]);
 
   const handleAvatarChange = useCallback(
     async (event) => {
@@ -673,15 +621,9 @@ export default function SiteProjectLayout() {
       if (isSiteRouteShell && !routeSitePublicId) return;
 
       const removeUploadedSiteAvatar = Boolean(isSiteRouteShell && avatarDataUrl);
-      const dismissAutoFavicon =
-        isSiteRouteShell &&
-        !avatarDataUrl &&
-        Boolean(siteShellFaviconUrl) &&
-        !siteShellFaviconBroken &&
-        !shellHidesExternalFavicon;
       const removeUploadedProjectAvatar = !isSiteRouteShell && Boolean(avatarDataUrl);
 
-      if (!removeUploadedSiteAvatar && !dismissAutoFavicon && !removeUploadedProjectAvatar) return;
+      if (!removeUploadedSiteAvatar && !removeUploadedProjectAvatar) return;
 
       setAvatarSaveState("saving");
       setAvatarError("");
@@ -690,8 +632,6 @@ export default function SiteProjectLayout() {
       try {
         if (removeUploadedSiteAvatar) {
           await saveSiteAvatar("", "Фото удалено");
-        } else if (dismissAutoFavicon) {
-          await saveSiteShellHideExternalFavicon(true, "Авто-иконка скрыта");
         } else {
           await saveAvatar("", "Фото удалено");
         }
@@ -710,10 +650,6 @@ export default function SiteProjectLayout() {
       routeSitePublicId,
       saveAvatar,
       saveSiteAvatar,
-      saveSiteShellHideExternalFavicon,
-      shellHidesExternalFavicon,
-      siteShellFaviconBroken,
-      siteShellFaviconUrl,
     ],
   );
 
@@ -1042,7 +978,7 @@ export default function SiteProjectLayout() {
                   {isSiteRouteShell ? (
                     <label
                       className={`owner-programs__shell-avatar owner-programs__shell-avatar_action${
-                        avatarDataUrl || siteShellShowsFavicon ? " owner-programs__shell-avatar_has-media" : ""
+                        siteShellVisualSrc ? " owner-programs__shell-avatar_has-media" : ""
                       }${avatarSaveState === "saving" ? " owner-programs__shell-avatar_loading" : ""}`}
                     >
                       <input
@@ -1052,44 +988,28 @@ export default function SiteProjectLayout() {
                         onChange={handleAvatarChange}
                         disabled={avatarSaveState === "saving" || !hasProjectId || !routeSitePublicId}
                       />
-                      {avatarDataUrl ? (
-                        <>
-                          <img className="owner-programs__shell-avatar-image" src={avatarDataUrl} alt="Фото сайта" />
-                          <button
-                            type="button"
-                            className="owner-programs__shell-avatar-remove"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                            }}
-                            onClick={handleAvatarRemove}
-                            disabled={avatarSaveState === "saving"}
-                            aria-label="Удалить фото сайта"
-                          >
-                            <ProjectAvatarRemoveIcon />
-                          </button>
-                        </>
-                      ) : siteShellShowsFavicon ? (
+                      {siteShellVisualSrc ? (
                         <>
                           <img
                             className="owner-programs__shell-avatar-image"
-                            src={siteShellFaviconUrl}
-                            alt=""
-                            onError={() => setSiteShellFaviconBroken(true)}
+                            src={siteShellVisualSrc}
+                            alt={avatarDataUrl ? "Фото сайта" : "Фото профиля"}
                           />
-                          <button
-                            type="button"
-                            className="owner-programs__shell-avatar-remove"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                            }}
-                            onClick={handleAvatarRemove}
-                            disabled={avatarSaveState === "saving"}
-                            aria-label="Скрыть авто-иконку сайта"
-                          >
-                            <ProjectAvatarRemoveIcon />
-                          </button>
+                          {avatarDataUrl ? (
+                            <button
+                              type="button"
+                              className="owner-programs__shell-avatar-remove"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onClick={handleAvatarRemove}
+                              disabled={avatarSaveState === "saving"}
+                              aria-label="Удалить фото сайта"
+                            >
+                              <ProjectAvatarRemoveIcon />
+                            </button>
+                          ) : null}
                         </>
                       ) : (
                         <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">

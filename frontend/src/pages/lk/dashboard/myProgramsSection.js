@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { LK_PROGRAM_LISTS_REFETCH_EVENT } from "../lkProgramListsSync";
 import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "../owner-programs/domainCountryFlagSvg";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "../owner-programs/owner-programs.css";
@@ -94,41 +95,55 @@ export function MyProgramsSection() {
   const [leavingSiteId, setLeavingSiteId] = useState("");
   const [leaveError, setLeaveError] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchMyPrograms = useCallback(async () => {
     const token = localStorage.getItem("access_token");
     if (!token) {
       setPrograms([]);
-      return () => {
-        cancelled = true;
-      };
+      setProgramsError(null);
+      return;
     }
     setPrograms(null);
     setProgramsError(null);
-
-    fetch(API_ENDPOINTS.myPrograms, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("programs_fetch_failed");
-        return res.json();
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setPrograms(Array.isArray(data.programs) ? data.programs : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setProgramsError(true);
-          setPrograms([]);
-        }
+    try {
+      const res = await fetch(API_ENDPOINTS.myPrograms, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
-
-    return () => {
-      cancelled = true;
-    };
+      if (!res.ok) throw new Error("programs_fetch_failed");
+      const data = await res.json();
+      setPrograms(Array.isArray(data.programs) ? data.programs : []);
+    } catch {
+      setProgramsError(true);
+      setPrograms([]);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchMyPrograms();
+  }, [fetchMyPrograms]);
+
+  useEffect(() => {
+    function onProgramsAvatarSourcesUpdated() {
+      fetchMyPrograms();
+    }
+    window.addEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+    window.addEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
+    window.addEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
+    return () => {
+      window.removeEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+      window.removeEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
+      window.removeEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
+    };
+  }, [fetchMyPrograms]);
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      fetchMyPrograms();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [fetchMyPrograms]);
 
   const openProgram = (sitePublicId) => {
     if (!sitePublicId) return;
@@ -162,6 +177,7 @@ export function MyProgramsSection() {
       }
       const listRes = await fetch(API_ENDPOINTS.myPrograms, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
       if (!listRes.ok) throw new Error("program_leave_list_failed");
       const listData = await listRes.json();
@@ -229,9 +245,11 @@ export function MyProgramsSection() {
                   <div className="owner-programs__service-card-hero">
                     <div className="owner-programs__service-card-avatar">
                       <SiteFaviconAvatar
+                        key={`mine-${p.site_public_id}-${String(p.avatar_data_url || "").slice(0, 48)}-${String(p.avatar_updated_at || "")}`}
                         manualUrl={typeof p.avatar_data_url === "string" ? p.avatar_data_url.trim() : ""}
                         siteLike={p}
                         letter={title.slice(0, 1).toUpperCase() || "P"}
+                        useExternalFavicon={false}
                       />
                     </div>
                   </div>

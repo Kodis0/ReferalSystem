@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from referrals.models import PartnerProfile, Site, SiteMembership
+from referrals.models import PartnerProfile, Project, Site, SiteMembership
 
 User = get_user_model()
 
@@ -116,6 +116,118 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         row = next(x for x in r.data["programs"] if x["site_public_id"] == str(site.public_id))
         self.assertEqual(row["avatar_data_url"], avatar)
+
+    def test_programs_catalog_avatar_falls_back_to_site_owner_account_photo(self):
+        owner_photo = "data:image/png;base64,OWNERFACE"
+        self.owner.avatar_data_url = owner_photo
+        self.owner.save(update_fields=["avatar_data_url"])
+        site = self._site(
+            "catalog_owner_fallback",
+            allowed_origins=["https://owner-fallback.example"],
+            config_json={"site_display_name": "No Shell Avatar"},
+        )
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/programs/")
+        self.assertEqual(r.status_code, 200)
+        row = next(x for x in r.data["programs"] if x["site_public_id"] == str(site.public_id))
+        self.assertEqual(row["avatar_data_url"], owner_photo)
+
+    def test_program_payload_prefers_project_avatar_over_site_avatar(self):
+        project_avatar = "data:image/png;base64,PROJECTICON"
+        site_avatar = "data:image/png;base64,OLDSITEICON"
+        project = Project.objects.create(
+            owner=self.owner,
+            name="Project Icon",
+            description="",
+            avatar_data_url=project_avatar,
+        )
+        site = self._site(
+            "project_avatar",
+            project=project,
+            allowed_origins=["https://project-avatar.example"],
+            config_json={
+                "site_display_name": "Project Avatar",
+                "site_avatar_data_url": site_avatar,
+            },
+        )
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        catalog = self.api.get("/users/programs/")
+        mine = self.api.get("/users/me/programs/")
+        detail = self.api.get(f"/users/programs/{site.public_id}/")
+
+        catalog_row = next(
+            x for x in catalog.data["programs"] if x["site_public_id"] == str(site.public_id)
+        )
+        mine_row = next(
+            x for x in mine.data["programs"] if x["site_public_id"] == str(site.public_id)
+        )
+
+        self.assertEqual(catalog_row["avatar_data_url"], project_avatar)
+        self.assertEqual(mine_row["avatar_data_url"], project_avatar)
+        self.assertEqual(detail.data["program"]["avatar_data_url"], project_avatar)
+        self.assertEqual(catalog_row["avatar_updated_at"], project.updated_at.isoformat())
+
+    def test_program_payload_uses_site_avatar_when_project_avatar_missing(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name="Project Icon",
+            description="",
+            avatar_data_url="",
+        )
+        site = self._site(
+            "site_avatar_updated",
+            project=project,
+            allowed_origins=["https://site-avatar.example"],
+            config_json={
+                "site_display_name": "Site Avatar",
+                "site_avatar_data_url": "data:image/png;base64,SITEICON",
+            },
+        )
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        catalog = self.api.get("/users/programs/")
+        mine = self.api.get("/users/me/programs/")
+        detail = self.api.get(f"/users/programs/{site.public_id}/")
+
+        payloads = [
+            next(x for x in catalog.data["programs"] if x["site_public_id"] == str(site.public_id)),
+            next(x for x in mine.data["programs"] if x["site_public_id"] == str(site.public_id)),
+            detail.data["program"],
+        ]
+        for payload in payloads:
+            self.assertEqual(payload["avatar_data_url"], "data:image/png;base64,SITEICON")
+            self.assertEqual(payload["avatar_updated_at"], site.updated_at.isoformat())
+
+    def test_program_payload_empty_avatar_when_no_avatar_sources(self):
+        project = Project.objects.create(
+            owner=self.owner,
+            name="No Icon",
+            description="",
+            avatar_data_url="",
+        )
+        site = self._site(
+            "no_avatar_sources",
+            project=project,
+            allowed_origins=["https://no-avatar.example"],
+            config_json={"site_display_name": "No Avatar"},
+        )
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        catalog = self.api.get("/users/programs/")
+        mine = self.api.get("/users/me/programs/")
+        detail = self.api.get(f"/users/programs/{site.public_id}/")
+
+        payloads = [
+            next(x for x in catalog.data["programs"] if x["site_public_id"] == str(site.public_id)),
+            next(x for x in mine.data["programs"] if x["site_public_id"] == str(site.public_id)),
+            detail.data["program"],
+        ]
+        for payload in payloads:
+            self.assertEqual(payload["avatar_data_url"], "")
 
     def test_programs_catalog_get_does_not_create_membership(self):
         available_site = self._site(

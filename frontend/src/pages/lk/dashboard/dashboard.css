@@ -808,6 +808,14 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.08),
     0 8px 18px rgba(5, 12, 38, 0.32);
+  overflow: hidden;
+}
+
+.lk-dashboard__program-card-avatar .lk-dashboard__program-card-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .lk-dashboard__program-card-copy {

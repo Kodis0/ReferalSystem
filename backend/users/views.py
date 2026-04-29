@@ -50,6 +50,37 @@ from .serializers import (
 )
 
 
+def _program_avatar_data_url(site: Site) -> str:
+    """Program avatar contract: project/program icon, then site shell icon, then owner account fallback."""
+    project = getattr(site, "project", None)
+    if project is not None:
+        raw_project = getattr(project, "avatar_data_url", None)
+        if isinstance(raw_project, str) and raw_project.strip():
+            return raw_project.strip()
+    shell = site_shell_avatar_data_url(site)
+    if shell:
+        return shell
+    owner = getattr(site, "owner", None)
+    if owner is None:
+        return ""
+    raw = getattr(owner, "avatar_data_url", None)
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _program_avatar_updated_at(site: Site):
+    project = getattr(site, "project", None)
+    if project is not None:
+        raw_project = getattr(project, "avatar_data_url", None)
+        if isinstance(raw_project, str) and raw_project.strip():
+            updated_at = getattr(project, "updated_at", None)
+            return updated_at.isoformat() if updated_at else None
+    if site_shell_avatar_data_url(site):
+        return site.updated_at.isoformat() if site.updated_at else None
+    owner = getattr(site, "owner", None)
+    updated_at = getattr(owner, "updated_at", None) if owner is not None else None
+    return updated_at.isoformat() if updated_at else None
+
+
 def _member_program_payload(site, *, membership=None):
     _, site_origin_label = owner_site_list_origin_display(site)
     participants_count = SiteMembership.objects.filter(site=site).count()
@@ -64,7 +95,8 @@ def _member_program_payload(site, *, membership=None):
         "commission_percent": str(site_commission_percent(site)),
         "referral_lock_days": int(getattr(django_settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)),
         "participants_count": participants_count,
-        "avatar_data_url": site_shell_avatar_data_url(site),
+        "avatar_data_url": _program_avatar_data_url(site),
+        "avatar_updated_at": _program_avatar_updated_at(site),
     }
     if membership is not None:
         payload["joined_at"] = membership.created_at.isoformat() if membership.created_at else None
@@ -391,7 +423,7 @@ class MyProgramsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = request.user.site_memberships.select_related("site").order_by(
+        qs = request.user.site_memberships.select_related("site", "site__project", "site__owner").order_by(
             "-created_at"
         )
         programs = []
@@ -412,7 +444,7 @@ class ProgramsCatalogView(APIView):
             m.site_id: m
             for m in request.user.site_memberships.select_related("site")
         }
-        sites = Site.objects.select_related("project").order_by("-created_at", "-id")
+        sites = Site.objects.select_related("project", "owner").order_by("-created_at", "-id")
         programs = []
         for site in sites:
             if not site_allows_cta_signup_membership(site):
