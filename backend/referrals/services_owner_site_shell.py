@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 from .models import Site
 
 SITE_SHELL_AVATAR_CONFIG_KEY = "site_avatar_data_url"
+# True: в ЛК не подставлять внешний favicon; placeholder, пока владелец не загрузит своё.
+SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY = "site_shell_hide_external_favicon"
 SITE_DISPLAY_NAME_CONFIG_KEY = "site_display_name"
 SITE_SHELL_DESCRIPTION_CONFIG_KEY = "site_description"
 # Owner-only draft for LK «Блок для сайта» (visual import + inserted builder blocks). Not used by the embed widget.
@@ -18,6 +20,11 @@ def site_shell_avatar_data_url(site: Site) -> str:
     cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
     raw = cfg.get(SITE_SHELL_AVATAR_CONFIG_KEY)
     return raw.strip() if isinstance(raw, str) else ""
+
+
+def site_shell_hide_external_favicon(site: Site) -> bool:
+    cfg = site.config_json if isinstance(site.config_json, Mapping) else {}
+    return cfg.get(SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY) is True
 
 
 def owner_project_metadata_from_site(site: Site) -> dict[str, str]:

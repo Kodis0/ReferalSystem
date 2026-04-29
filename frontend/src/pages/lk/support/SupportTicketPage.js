@@ -41,37 +41,39 @@ function supportServiceIcon(iconType) {
   return undefined;
 }
 
-function ownerProjectListLabel(project) {
-  const primarySite = Array.isArray(project?.sites) ? project.sites[0] : null;
+function ownerSiteListLabel(site) {
+  const publicId = String(site?.public_id || "").trim();
   return formatSiteCardTitle(
-    project?.primary_site_public_id || primarySite?.public_id || "",
-    primarySite?.primary_origin || "",
-    project?.project?.name || "",
+    publicId,
+    typeof site?.primary_origin === "string" ? site.primary_origin : "",
+    typeof site?.display_name === "string" ? site.display_name : "",
   );
 }
 
-function buildSupportTargetOptionRows(projects, programs) {
+function dedupeOwnerSitesByPublicId(sites) {
+  const seen = new Set();
+  const out = [];
+  for (const s of sites || []) {
+    const id = String(s?.public_id || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(s);
+  }
+  return out;
+}
+
+function buildSupportTargetOptionRows(ownerSites, programs) {
   const rows = [];
-  for (const p of projects) {
-    const label = ownerProjectListLabel(p);
-    if (typeof p?.id === "number") {
-      rows.push({
-        value: `owner-project:${p.id}`,
-        label,
-        submissionLabel: `Проект (кабинет владельца): ${label} (project_id: ${p.id})`,
-        iconType: "site",
-      });
-      continue;
-    }
-    const sid = String(p?.primary_site_public_id || "").trim();
-    if (sid) {
-      rows.push({
-        value: `owner-site:${sid}`,
-        label,
-        submissionLabel: `Проект (кабинет владельца): ${label} (site_public_id: ${sid})`,
-        iconType: "site",
-      });
-    }
+  for (const site of dedupeOwnerSitesByPublicId(ownerSites)) {
+    const sid = String(site?.public_id || "").trim();
+    if (!sid) continue;
+    const label = ownerSiteListLabel(site);
+    rows.push({
+      value: `owner-site:${sid}`,
+      label,
+      submissionLabel: `Сайт (кабинет владельца): ${label} (site_public_id: ${sid})`,
+      iconType: "site",
+    });
   }
   for (const pr of programs) {
     const sid = String(pr?.site_public_id || "").trim();
@@ -90,8 +92,8 @@ function buildSupportTargetOptionRows(projects, programs) {
   if (rows.length === 0) {
     rows.push({
       value: "unlinked",
-      label: "Без привязки к проекту или программе",
-      submissionLabel: "Без привязки к конкретному проекту или реферальной программе",
+      label: "Без привязки к сайту или программе",
+      submissionLabel: "Без привязки к конкретному сайту или реферальной программе",
       iconType: null,
     });
   }
@@ -228,8 +230,8 @@ export default function SupportTicketPage() {
           }
         }
         if (cancelled) return;
-        const projects = ownerRes.ok ? ownerRes.projects || [] : [];
-        const rows = buildSupportTargetOptionRows(projects, programs);
+        const ownerSites = ownerRes.ok ? ownerRes.sites || [] : [];
+        const rows = buildSupportTargetOptionRows(ownerSites, programs);
         setSupportTargetRows(rows);
         setSupportTargetKey((prev) => (rows.some((r) => r.value === prev) ? prev : rows[0].value));
       } catch {
@@ -474,13 +476,13 @@ export default function SupportTicketPage() {
         targetRow?.label ||
         (supportTargetKey === SUPPORT_TARGET_LOADING_VALUE ? "" : String(supportTargetKey));
       if (!targetLine.trim()) {
-        setStatusLine("Подождите, пока загрузится список проектов и программ.");
+        setStatusLine("Подождите, пока загрузится список сайтов и программ.");
         return;
       }
       const names = files.map((f) => f.name).join(", ");
       const body = [
         `Тип: ${tab.title}`,
-        `Проект / программа: ${targetLine}`,
+        `Сайт / программа: ${targetLine}`,
         "",
         trimmed,
         names ? `\n\nВложения (имена файлов): ${names}` : "",
@@ -493,6 +495,7 @@ export default function SupportTicketPage() {
         target_label: targetLine.trim(),
         body,
         attachment_names: names,
+        ...(files.length > 0 ? { files } : {}),
       });
 
       if (!save.ok) {
@@ -605,7 +608,7 @@ export default function SupportTicketPage() {
           <form className="lk-support-ticket__form" onSubmit={onSubmit}>
             <div className="lk-support-ticket__field">
               <div className="lk-support-ticket__label" id="lk-support-target-label">
-                Проект или реферальная программа
+                Сайт или реферальная программа
               </div>
               <div className="lk-support-ticket__listbox-scope">
                 <LkListboxSelect

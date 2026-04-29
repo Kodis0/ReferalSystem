@@ -3,6 +3,8 @@
   /* Совпадают со 2–4 дорожками сетки шапки / макета (fallback без subgrid) */
   --lk-shell-sidebar: 256px;
   --lk-shell-gutter: 40px;
+  /* Как неактивный текст nav сайдбара (.lk-sidebar — то же имя токена) */
+  --lk-sb-text: rgb(127, 145, 164);
   /* 0: контент и шапка на одной ширине дорожки 920px без бокового «зазора» (раньше 24px сдвигал относительно полосы шапки).
      При смене значения верните горизонтальную компенсацию в owner-programs.css / CreateOwnerProjectPage.css (full-bleed). */
   --lk-content-padding-x: 0px;
@@ -716,6 +718,13 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   text-align: left;
 }
 
+.lk-header__support-btn .lk-header__support-icon,
+.lk-header__support-btn > .lk-header__chevron,
+.lk-header__account-btn > .lk-header__chevron {
+  color: var(--lk-sb-text);
+  opacity: 1;
+}
+
 .lk-header__support-icon,
 .lk-header__avatar {
   width: 24px;
@@ -732,11 +741,45 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   display: block;
 }
 
+@keyframes lk-header-support-icon-idle {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(1.5deg);
+  }
+}
+
 .lk-header__support-icon-svg,
 .lk-header__support-chevron-svg {
   display: block;
   width: 24px;
   height: 24px;
+}
+
+.lk-header__support-icon-svg {
+  transform-origin: 50% 45%;
+  animation: lk-header-support-icon-idle 2.8s ease-in-out infinite;
+  transition: transform 0.35s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.lk-header__support-btn:hover .lk-header__support-icon-svg,
+.lk-header__support-btn:focus-visible .lk-header__support-icon-svg {
+  animation: none;
+  transform: scale(1.12) rotate(-5deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-header__support-icon-svg {
+    animation: none;
+    transition: none;
+  }
+
+  .lk-header__support-btn:hover .lk-header__support-icon-svg,
+  .lk-header__support-btn:focus-visible .lk-header__support-icon-svg {
+    transform: none;
+  }
 }
 
 .lk-header__avatar {

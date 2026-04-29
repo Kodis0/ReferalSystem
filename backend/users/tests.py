@@ -575,6 +575,34 @@ class SupportTicketApiTests(TestCase):
         self.assertEqual(lst.data["tickets"][0]["is_closed"], False)
         self.assertTrue(SupportTicket.objects.filter(id=tid, user=self.user).exists())
 
+    def test_support_ticket_post_multipart_create_saves_attachment_file(self):
+        """Создание тикета с голосом: файлы должны сохраняться при POST (ЛК раньше слал только JSON)."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from users.support_attachments import attachment_disk_path
+
+        blob = b"\x1acreate_post_webm"
+        audio = SimpleUploadedFile("voice-create.webm", blob, content_type="audio/webm")
+        r = self.api.post(
+            "/users/me/support-tickets/",
+            {
+                "type_slug": "help-question",
+                "target_label": "X",
+                "body": "Текст\n\nВложения (имена файлов): voice-create.webm",
+                "attachment_names": "voice-create.webm",
+                "files": audio,
+            },
+            format="multipart",
+        )
+        self.assertEqual(r.status_code, 201, getattr(r, "data", None))
+        tid = r.data["id"]
+        path = attachment_disk_path(tid, "voice-create.webm")
+        self.assertTrue(path.is_file())
+        self.assertEqual(path.read_bytes(), blob)
+        g = self.api.get(f"/users/me/support-tickets/{tid}/attachments/voice-create.webm/")
+        self.assertEqual(g.status_code, 200)
+        self.assertEqual(b"".join(g.streaming_content), blob)
+
     def test_support_ticket_patch_close(self):
         r = self.api.post(
             "/users/me/support-tickets/",

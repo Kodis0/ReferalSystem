@@ -98,6 +98,20 @@ function stripEmbeddedAttachmentLines(text) {
   return t.trim();
 }
 
+/** Убирает служебные пометки цели обращения из текста в ленте (не трогаем хранимое тело на сервере). */
+function sanitizeSupportTicketThreadDisplay(text) {
+  let t = normalizeThreadNewlines(String(text || ""));
+  t = t.replace(/\s*\(project_id:\s*\d+\)/gi, "");
+  t = t.replace(
+    /\s*\(site_public_id:\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi,
+    "",
+  );
+  t = t.replace(/Проект\s*\(\s*кабинет\s+владельца\s*\)\s*:\s*/gi, "");
+  t = t.replace(/Сайт\s*\(\s*кабинет\s+владельца\s*\)\s*:\s*/gi, "");
+  t = t.replace(/\n{3,}/g, "\n\n");
+  return t.trim();
+}
+
 function parseTicketAttachmentNames(raw) {
   return String(raw || "")
     .split(",")
@@ -411,7 +425,7 @@ export default function SupportTicketDetailPage() {
 
             {ticketBodyToThreadSegments(ticket.body)
               .map((seg, idx) => {
-                const segmentText = stripEmbeddedAttachmentLines(seg.text);
+                const segmentText = sanitizeSupportTicketThreadDisplay(stripEmbeddedAttachmentLines(seg.text));
                 return { seg, idx, segmentText };
               })
               .filter((x) => x.segmentText.trim())

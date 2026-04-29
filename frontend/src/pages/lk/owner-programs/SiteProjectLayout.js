@@ -565,6 +565,66 @@ export default function SiteProjectLayout() {
     [routeSitePublicId, loadHead],
   );
 
+  const saveSiteShellHideExternalFavicon = useCallback(
+    async (hide, successMessage) => {
+      if (!routeSitePublicId) {
+        throw new Error("Не удалось определить сайт");
+      }
+      const res = await fetch(withSitePublicIdQuery(API_ENDPOINTS.siteIntegration, routeSitePublicId), {
+        method: "PATCH",
+        headers: authHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ site_shell_hide_external_favicon: hide }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = payload?.code ?? payload?.detail;
+        const detailMsg =
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? detail.join("\n")
+              : detail != null
+                ? String(detail)
+                : "";
+        throw new Error(detailMsg || `Не удалось сохранить (${res.status})`);
+      }
+      await loadHead();
+      setAvatarSaveState("success");
+      setAvatarSuccessMessage(successMessage);
+      window.dispatchEvent(
+        new CustomEvent("lk-site-avatar-updated", { detail: { sitePublicId: routeSitePublicId } }),
+      );
+      emitSiteOwnerActivity(routeSitePublicId);
+      window.setTimeout(() => {
+        setAvatarSaveState("idle");
+        setAvatarSuccessMessage("");
+      }, 1800);
+    },
+    [routeSitePublicId, loadHead],
+  );
+
+  const siteRowForShell = useMemo(() => {
+    if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
+    return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
+  }, [projectEntry, routeSitePublicId]);
+  const shellHidesExternalFavicon = Boolean(siteRowForShell?.site_shell_hide_external_favicon);
+  const siteShellFaviconUrl = useMemo(
+    () => (isSiteRouteShell ? siteExternalFaviconUrl(siteFaviconHostname(siteRowForShell)) : ""),
+    [isSiteRouteShell, siteRowForShell],
+  );
+  const siteShellShowsFavicon = Boolean(siteShellFaviconUrl && !siteShellFaviconBroken && !shellHidesExternalFavicon);
+
+  useEffect(() => {
+    setSiteShellFaviconBroken(false);
+  }, [siteShellFaviconUrl]);
+
+  useEffect(() => {
+    if (!avatarDataUrl) {
+      setSiteShellFaviconBroken(false);
+    }
+  }, [avatarDataUrl]);
+
   const handleAvatarChange = useCallback(
     async (event) => {
       const file = event.target.files && event.target.files[0];
@@ -609,15 +669,29 @@ export default function SiteProjectLayout() {
     async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (!hasProjectId || !avatarDataUrl || avatarSaveState === "saving") return;
+      if (!hasProjectId || avatarSaveState === "saving") return;
+      if (isSiteRouteShell && !routeSitePublicId) return;
+
+      const removeUploadedSiteAvatar = Boolean(isSiteRouteShell && avatarDataUrl);
+      const dismissAutoFavicon =
+        isSiteRouteShell &&
+        !avatarDataUrl &&
+        Boolean(siteShellFaviconUrl) &&
+        !siteShellFaviconBroken &&
+        !shellHidesExternalFavicon;
+      const removeUploadedProjectAvatar = !isSiteRouteShell && Boolean(avatarDataUrl);
+
+      if (!removeUploadedSiteAvatar && !dismissAutoFavicon && !removeUploadedProjectAvatar) return;
 
       setAvatarSaveState("saving");
       setAvatarError("");
       setAvatarSuccessMessage("");
 
       try {
-        if (isSiteRouteShell) {
+        if (removeUploadedSiteAvatar) {
           await saveSiteAvatar("", "Фото удалено");
+        } else if (dismissAutoFavicon) {
+          await saveSiteShellHideExternalFavicon(true, "Авто-иконка скрыта");
         } else {
           await saveAvatar("", "Фото удалено");
         }
@@ -628,7 +702,19 @@ export default function SiteProjectLayout() {
         setAvatarError(err instanceof Error && err.message ? err.message : "Не удалось удалить фото");
       }
     },
-    [avatarDataUrl, avatarSaveState, hasProjectId, isSiteRouteShell, saveAvatar, saveSiteAvatar],
+    [
+      avatarDataUrl,
+      avatarSaveState,
+      hasProjectId,
+      isSiteRouteShell,
+      routeSitePublicId,
+      saveAvatar,
+      saveSiteAvatar,
+      saveSiteShellHideExternalFavicon,
+      shellHidesExternalFavicon,
+      siteShellFaviconBroken,
+      siteShellFaviconUrl,
+    ],
   );
 
   const toggleAddSiteForm = useCallback(() => {
@@ -753,25 +839,6 @@ export default function SiteProjectLayout() {
 
   const projectComment =
     (typeof projectEntry?.project?.description === "string" ? projectEntry.project.description.trim() : "") || headComment;
-  const siteRowForShell = useMemo(() => {
-    if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
-    return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
-  }, [projectEntry, routeSitePublicId]);
-  const siteShellFaviconUrl = useMemo(
-    () => (isSiteRouteShell ? siteExternalFaviconUrl(siteFaviconHostname(siteRowForShell)) : ""),
-    [isSiteRouteShell, siteRowForShell],
-  );
-  const siteShellShowsFavicon = Boolean(siteShellFaviconUrl && !siteShellFaviconBroken);
-
-  useEffect(() => {
-    setSiteShellFaviconBroken(false);
-  }, [siteShellFaviconUrl]);
-
-  useEffect(() => {
-    if (!avatarDataUrl) {
-      setSiteShellFaviconBroken(false);
-    }
-  }, [avatarDataUrl]);
 
   const shellTitleText = isSiteRouteShell
     ? headLoading && !siteRowForShell
@@ -1003,12 +1070,27 @@ export default function SiteProjectLayout() {
                           </button>
                         </>
                       ) : siteShellShowsFavicon ? (
-                        <img
-                          className="owner-programs__shell-avatar-image"
-                          src={siteShellFaviconUrl}
-                          alt=""
-                          onError={() => setSiteShellFaviconBroken(true)}
-                        />
+                        <>
+                          <img
+                            className="owner-programs__shell-avatar-image"
+                            src={siteShellFaviconUrl}
+                            alt=""
+                            onError={() => setSiteShellFaviconBroken(true)}
+                          />
+                          <button
+                            type="button"
+                            className="owner-programs__shell-avatar-remove"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={handleAvatarRemove}
+                            disabled={avatarSaveState === "saving"}
+                            aria-label="Скрыть авто-иконку сайта"
+                          >
+                            <ProjectAvatarRemoveIcon />
+                          </button>
+                        </>
                       ) : (
                         <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
                           <ProjectShellAvatarIcon />

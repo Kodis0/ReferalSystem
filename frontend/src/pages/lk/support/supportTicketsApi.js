@@ -121,12 +121,33 @@ export async function createSupportTicket(payload) {
   if (!token) {
     return { ok: false, status: 401 };
   }
+  const files = payload.files;
+  const rest = { ...payload };
+  delete rest.files;
+  const hasFiles = Array.isArray(files) && files.length > 0;
+
   try {
-    const res = await fetch(API_ENDPOINTS.supportTickets, {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(payload),
-    });
+    let res;
+    if (hasFiles) {
+      const fd = new FormData();
+      if (rest.type_slug != null) fd.append("type_slug", String(rest.type_slug));
+      if (rest.body != null) fd.append("body", String(rest.body));
+      if (rest.target_key != null) fd.append("target_key", String(rest.target_key));
+      if (rest.target_label != null) fd.append("target_label", String(rest.target_label));
+      if (rest.attachment_names != null) fd.append("attachment_names", String(rest.attachment_names));
+      files.forEach((f) => fd.append("files", f));
+      res = await fetch(API_ENDPOINTS.supportTickets, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+    } else {
+      res = await fetch(API_ENDPOINTS.supportTickets, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify(rest),
+      });
+    }
     const ticket = await res.json().catch(() => ({}));
     if (!res.ok) {
       return { ok: false, status: res.status, ticket };

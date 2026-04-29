@@ -91,29 +91,34 @@ export function SupportTicketVoiceBubble({
   const [authLoading, setAuthLoading] = useState(() => Boolean(audioAuthUrl));
   const [authError, setAuthError] = useState(false);
   const [playError, setPlayError] = useState(false);
-
-  useEffect(() => {
-    setAuthLoading(Boolean(audioAuthUrl));
-    setAuthError(false);
-  }, [audioAuthUrl]);
+  /** Blob URL после авторизованного fetch — привязка к audio в отдельном layout-effect (после async ref уже есть). */
+  const [attachmentBlobUrl, setAttachmentBlobUrl] = useState(null);
 
   useEffect(() => {
     if (!audioAuthUrl) {
+      setAttachmentBlobUrl(null);
+      setAuthLoading(false);
+      setAuthError(false);
       return undefined;
     }
     let cancelled = false;
-    let blobUrl = null;
     setAuthLoading(true);
     setAuthError(false);
+    setAttachmentBlobUrl(null);
+    setPlayError(false);
+
     (async () => {
       try {
         const token = typeof localStorage !== "undefined" ? localStorage.getItem("access_token") : null;
         const res = await fetch(audioAuthUrl, {
+          credentials: "include",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!res.ok) throw new Error("fetch_failed");
+        if (!res.ok) throw new Error(`fetch_${res.status}`);
         const blob = await res.blob();
         if (cancelled) return;
+        if (!blob || blob.size === 0) throw new Error("empty_blob");
+
         const decFile = new File([blob], file.name, { type: blob.type || file.type });
         try {
           const next = await decodeWaveformBars(decFile, VOICE_WAVE_BARS);
@@ -123,28 +128,45 @@ export function SupportTicketVoiceBubble({
             setBars(fakeWaveformBars(hashStringToSeed(`${file.name}-${blob.size}`), VOICE_WAVE_BARS));
           }
         }
-        blobUrl = URL.createObjectURL(blob);
-        const audio = audioRef.current;
-        if (audio && !cancelled) {
-          audio.src = blobUrl;
-          audio.preload = "metadata";
-          audio.load();
-          setPlayError(false);
+
+        const url = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
         }
-        if (!cancelled) setAuthLoading(false);
+        setAttachmentBlobUrl(url);
       } catch {
         if (!cancelled) {
           setAuthError(true);
-          setAuthLoading(false);
           setBars(fakeWaveformBars(hashStringToSeed(file.name), VOICE_WAVE_BARS));
         }
+      } finally {
+        if (!cancelled) setAuthLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      setAttachmentBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
     };
   }, [audioAuthUrl, file.name, file.type]);
+
+  useLayoutEffect(() => {
+    if (!attachmentBlobUrl) return undefined;
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+    audio.src = attachmentBlobUrl;
+    audio.preload = "metadata";
+    audio.load();
+    setPlayError(false);
+    return () => {
+      audio.removeAttribute("src");
+      audio.load();
+    };
+  }, [attachmentBlobUrl]);
 
   useEffect(() => {
     if (audioAuthUrl) {
@@ -194,7 +216,7 @@ export function SupportTicketVoiceBubble({
 
   const playDisabled =
     playbackUnavailable ||
-    (audioAuthUrl ? authLoading || authError : file.size === 0);
+    (audioAuthUrl ? authLoading || authError || !attachmentBlobUrl : file.size === 0);
 
   useLayoutEffect(() => {
     const el = waveTrackRef.current;

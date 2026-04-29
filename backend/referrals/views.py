@@ -55,6 +55,7 @@ from .services import (
     REFERRAL_BUILDER_WORKSPACE_KEY,
     SITE_COMMISSION_PERCENT_CONFIG_KEY,
     SITE_SHELL_AVATAR_CONFIG_KEY,
+    SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY,
     SITE_CAPTURE_CONFIG_KEY,
     SITE_DISPLAY_NAME_CONFIG_KEY,
     SITE_SHELL_DESCRIPTION_CONFIG_KEY,
@@ -73,6 +74,7 @@ from .services import (
     normalize_site_commission_percent,
     site_owner_display_name,
     site_shell_avatar_data_url,
+    site_shell_hide_external_favicon,
 )
 
 
@@ -166,6 +168,7 @@ def _owner_site_option_payload(site: Site) -> dict:
         "display_name": site_owner_display_name(site),
         "description": project_meta["description"],
         "avatar_data_url": site_shell_avatar_data_url(site),
+        "site_shell_hide_external_favicon": site_shell_hide_external_favicon(site),
         "project": project_meta,
     }
 
@@ -581,8 +584,18 @@ class SiteOwnerIntegrationView(APIView):
             site_avatar = (data.get("site_avatar_data_url") or "").strip()
             if site_avatar:
                 cfg[SITE_SHELL_AVATAR_CONFIG_KEY] = site_avatar
+                cfg.pop(SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY, None)
             else:
                 cfg.pop(SITE_SHELL_AVATAR_CONFIG_KEY, None)
+                # Пустое фото сайта — заглушка в ЛК, без автоматической подстановки favicon (как AccountSettingsAvatar).
+                cfg[SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY] = True
+        if "site_shell_hide_external_favicon" in data:
+            just_set_custom_avatar = "site_avatar_data_url" in data and (data.get("site_avatar_data_url") or "").strip()
+            if not just_set_custom_avatar:
+                if bool(data.get("site_shell_hide_external_favicon")):
+                    cfg[SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY] = True
+                else:
+                    cfg.pop(SITE_SHELL_HIDE_EXTERNAL_FAVICON_CONFIG_KEY, None)
         if "site_description" in data:
             site_desc = (data.get("site_description") or "").strip()
             if site_desc:
@@ -641,7 +654,7 @@ class SiteOwnerIntegrationView(APIView):
                 avatar_data_url=project_avatar_data_url,
             )
             site.config_json = cfg
-        elif "site_avatar_data_url" in data:
+        elif "site_avatar_data_url" in data or "site_shell_hide_external_favicon" in data:
             site.config_json = cfg
         if "widget_enabled" in data:
             site.widget_enabled = data["widget_enabled"]

@@ -120,12 +120,22 @@ class SupportTicketListCreateView(APIView):
         return Response({"tickets": [_ticket_list_item(t) for t in qs]}, status=status.HTTP_200_OK)
 
     def post(self, request):
-        data = request.data
-        type_slug = (data.get("type_slug") or "").strip()
-        body = (data.get("body") or "").strip()
-        target_key = (data.get("target_key") or "").strip()[:512]
-        target_label = (data.get("target_label") or "").strip()[:512]
-        attachment_names = (data.get("attachment_names") or "").strip()
+        is_multipart = request.content_type and "multipart/form-data" in request.content_type
+        if is_multipart:
+            type_slug = (request.POST.get("type_slug") or "").strip()
+            body = (request.POST.get("body") or "").strip()
+            target_key = (request.POST.get("target_key") or "").strip()[:512]
+            target_label = (request.POST.get("target_label") or "").strip()[:512]
+            attachment_names = (request.POST.get("attachment_names") or "").strip()
+            upload_list = request.FILES.getlist("files")
+        else:
+            data = request.data
+            type_slug = (data.get("type_slug") or "").strip()
+            body = (data.get("body") or "").strip()
+            target_key = (data.get("target_key") or "").strip()[:512]
+            target_label = (data.get("target_label") or "").strip()[:512]
+            attachment_names = (data.get("attachment_names") or "").strip()
+            upload_list = []
 
         if type_slug not in ALLOWED_SUPPORT_TYPE_SLUGS:
             return Response(
@@ -138,6 +148,24 @@ class SupportTicketListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        names_split = split_attachment_names(attachment_names)
+        if upload_list:
+            if not names_split:
+                return Response(
+                    {"detail": "Укажите имена вложений вместе с файлами.", "code": "attachment_names_required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if len(upload_list) != len(names_split):
+                return Response(
+                    {"detail": "Число файлов не совпадает с именами вложений.", "code": "files_mismatch"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif names_split and is_multipart:
+            return Response(
+                {"detail": "Добавьте файлы вложений.", "code": "files_missing"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         ticket = SupportTicket.objects.create(
             user=request.user,
             type_slug=type_slug,
@@ -146,6 +174,21 @@ class SupportTicketListCreateView(APIView):
             body=body,
             attachment_names=attachment_names,
         )
+        if upload_list:
+            try:
+                save_new_attachments(ticket.id, names_split, upload_list)
+            except ValueError as e:
+                code = str(e)
+                ticket.delete()
+                detail = {
+                    "FILES_MISMATCH": "Число файлов не совпадает с новыми именами вложений.",
+                    "FILE_TOO_LARGE": "Файл слишком большой (максимум 50 МБ).",
+                    "invalid_filename": "Недопустимое имя файла.",
+                }.get(code, "Не удалось сохранить вложения.")
+                return Response(
+                    {"detail": detail, "code": code.lower()},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         return Response(_ticket_detail(ticket), status=status.HTTP_201_CREATED)
 
 

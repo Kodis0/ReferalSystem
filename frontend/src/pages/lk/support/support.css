@@ -2227,6 +2227,18 @@
   color: #4f56d4;
 }
 
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-play:disabled {
+  background: rgba(255, 255, 255, 0.35);
+  color: rgba(92, 99, 230, 0.65);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.lk-support-ticket__voice_thread-user .lk-support-ticket__voice-play:disabled:hover {
+  background: rgba(255, 255, 255, 0.35);
+  color: rgba(92, 99, 230, 0.65);
+}
+
 [data-theme="light"] .lk-support-ticket__voice_thread-user .lk-support-ticket__voice-bubble {
   background: #7177f8;
   border-color: rgba(255, 255, 255, 0.25);

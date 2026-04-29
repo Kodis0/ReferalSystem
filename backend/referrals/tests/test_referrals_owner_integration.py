@@ -137,6 +137,42 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row.get("avatar_data_url"), "data:image/png;base64,SITE")
 
+    def test_patch_site_shell_hide_external_favicon_and_clear_on_custom_avatar(self):
+        project = Project.objects.create(owner=self.owner, name="P", description="")
+        site = Site.objects.create(
+            owner=self.owner,
+            project=project,
+            publishable_key="pk_hide_fv_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+
+        r_hide = self.api.patch(url, {"site_shell_hide_external_favicon": True}, format="json")
+        self.assertEqual(r_hide.status_code, 200)
+        self.assertTrue(r_hide.data.get("site_shell_hide_external_favicon"))
+        site.refresh_from_db()
+        self.assertTrue(site.config_json.get("site_shell_hide_external_favicon"))
+
+        r_owner = self.api.get("/referrals/site/owner-sites/")
+        flat = r_owner.data.get("sites") or []
+        row = next((s for s in flat if s["public_id"] == str(site.public_id)), None)
+        self.assertIsNotNone(row)
+        self.assertTrue(row.get("site_shell_hide_external_favicon"))
+
+        r_avatar = self.api.patch(url, {"site_avatar_data_url": "data:image/png;base64,X"}, format="json")
+        self.assertEqual(r_avatar.status_code, 200)
+        site.refresh_from_db()
+        self.assertNotIn("site_shell_hide_external_favicon", site.config_json)
+        self.assertEqual(site.config_json.get("site_avatar_data_url"), "data:image/png;base64,X")
+
+        r_clear = self.api.patch(url, {"site_avatar_data_url": ""}, format="json")
+        self.assertEqual(r_clear.status_code, 200)
+        site.refresh_from_db()
+        self.assertTrue(site.config_json.get("site_shell_hide_external_favicon"))
+        self.assertNotIn("site_avatar_data_url", site.config_json)
+
     def test_patch_referral_builder_workspace_merges_into_config_json(self):
         project = Project.objects.create(owner=self.owner, name="P", description="")
         site = Site.objects.create(
