@@ -35,10 +35,13 @@ jobs:
             MAIN_BRANCH="${DEPLOY_MAIN_BRANCH:-main}"
             git fetch origin "${MAIN_BRANCH}"
             git checkout "${MAIN_BRANCH}"
-            if sudo -n true 2>/dev/null; then
-              sudo chown -R "$(id -u):$(id -g)" "${DEPLOY_PATH}"
-              chmod -R u+rwX "${DEPLOY_PATH}"
+            if ! sudo -n true 2>/dev/null; then
+              echo "ERROR: deploy user cannot run passwordless sudo to repair repository file ownership." >&2
+              echo "Run once on the server as root/sudo: sudo chown -R $(id -un):$(id -gn) '${DEPLOY_PATH}'" >&2
+              exit 1
             fi
+            sudo chown -R "$(id -u):$(id -g)" "${DEPLOY_PATH}"
+            chmod -R u+rwX "${DEPLOY_PATH}"
             git reset --hard "origin/${MAIN_BRANCH}"
             chmod +x deploy/deploy.sh
             bash deploy/deploy.sh

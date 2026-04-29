@@ -46,10 +46,13 @@ echo "==> Git: sync to origin (discard local edits to tracked files)"
 MAIN_BRANCH="${DEPLOY_MAIN_BRANCH:-main}"
 git fetch origin "${MAIN_BRANCH}"
 git checkout "${MAIN_BRANCH}"
-if [[ "${SUDO_AVAILABLE}" == "1" ]]; then
-  sudo chown -R "$(id -u):$(id -g)" "${APP_ROOT}"
-  chmod -R u+rwX "${APP_ROOT}"
+if [[ "${SUDO_AVAILABLE}" != "1" ]]; then
+  echo "ERROR: deploy user cannot run passwordless sudo to repair repository file ownership." >&2
+  echo "Run once on the server as root/sudo: sudo chown -R $(id -un):$(id -gn) '${APP_ROOT}'" >&2
+  exit 1
 fi
+sudo chown -R "$(id -u):$(id -g)" "${APP_ROOT}"
+chmod -R u+rwX "${APP_ROOT}"
 # Avoid "would be overwritten by merge" when someone edited e.g. deploy.sh on the VPS.
 git reset --hard "origin/${MAIN_BRANCH}"
 
