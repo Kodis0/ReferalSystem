@@ -98,8 +98,80 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(joined["site_origin_label"], "joined.example")
         self.assertFalse(available["joined"])
         self.assertNotIn("joined_at", available)
+        self.assertIn("visible_in_catalog", available)
+        self.assertEqual(available["site_status"], Site.Status.VERIFIED)
+        self.assertFalse(available["program_active"])
         self.assertEqual(joined.get("avatar_data_url"), "")
         self.assertEqual(available.get("avatar_data_url"), "")
+
+    def test_program_payload_separates_visibility_from_active_lifecycle(self):
+        active = self._site(
+            "status_contract_active",
+            allowed_origins=["https://active.example"],
+            config_json={"site_display_name": "Active Program"},
+        )
+        active.status = Site.Status.ACTIVE
+        active.activated_at = timezone.now()
+        active.save(update_fields=["status", "activated_at", "updated_at"])
+
+        active_widget_off = self._site(
+            "status_contract_widget_off",
+            allowed_origins=["https://widget-off.example"],
+            config_json={"site_display_name": "Widget Off Program"},
+        )
+        active_widget_off.status = Site.Status.ACTIVE
+        active_widget_off.activated_at = timezone.now()
+        active_widget_off.widget_enabled = False
+        active_widget_off.save(update_fields=["status", "activated_at", "widget_enabled", "updated_at"])
+
+        verified = self._site(
+            "status_contract_verified",
+            allowed_origins=["https://verified.example"],
+            config_json={"site_display_name": "Verified Program"},
+        )
+        draft = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_prog_status_contract_draft_" + uuid.uuid4().hex,
+            allowed_origins=["https://draft-status.example"],
+            widget_enabled=True,
+            status=Site.Status.DRAFT,
+            config_json={"site_display_name": "Draft Program"},
+        )
+
+        SiteMembership.objects.create(site=active_widget_off, user=self.user_a)
+        SiteMembership.objects.create(site=verified, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        catalog = self.api.get("/users/programs/")
+        mine = self.api.get("/users/me/programs/")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertEqual(mine.status_code, 200)
+
+        catalog_by_id = {row["site_public_id"]: row for row in catalog.data["programs"]}
+        mine_by_id = {row["site_public_id"]: row for row in mine.data["programs"]}
+
+        active_row = catalog_by_id[str(active.public_id)]
+        self.assertTrue(active_row["visible_in_catalog"])
+        self.assertTrue(active_row["program_active"])
+        self.assertEqual(active_row["site_status"], Site.Status.ACTIVE)
+        self.assertTrue(active_row["widget_enabled"])
+        self.assertIsNotNone(active_row["verified_at"])
+        self.assertIsNotNone(active_row["activated_at"])
+
+        widget_off_row = mine_by_id[str(active_widget_off.public_id)]
+        self.assertFalse(widget_off_row["program_active"])
+        self.assertEqual(widget_off_row["site_status"], Site.Status.ACTIVE)
+        self.assertFalse(widget_off_row["widget_enabled"])
+
+        verified_row = mine_by_id[str(verified.public_id)]
+        self.assertFalse(verified_row["program_active"])
+        self.assertEqual(verified_row["site_status"], Site.Status.VERIFIED)
+        self.assertTrue(verified_row["visible_in_catalog"])
+
+        draft_row = catalog_by_id[str(draft.public_id)]
+        self.assertFalse(draft_row["program_active"])
+        self.assertEqual(draft_row["site_status"], Site.Status.DRAFT)
+        self.assertTrue(draft_row["visible_in_catalog"])
 
     def test_programs_catalog_includes_site_shell_avatar_data_url(self):
         avatar = "data:image/png;base64,AAA"
@@ -395,7 +467,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(prog["site_origin_label"], "detail.example")
         self.assertEqual(prog["site_description"], "Public terms")
         self.assertEqual(prog["site_status"], Site.Status.VERIFIED)
-        self.assertTrue(prog["program_active"])
+        self.assertFalse(prog["program_active"])
         self.assertEqual(prog["commission_percent"], "5.00")
         self.assertFalse(prog["joined"])
         self.assertNotIn("joined_at", prog)
@@ -468,7 +540,7 @@ class MyProgramsApiTests(TestCase):
         prog = r.data["program"]
         self.assertEqual(prog["site_public_id"], str(site.public_id))
         self.assertEqual(prog["site_status"], Site.Status.DRAFT)
-        self.assertTrue(prog["program_active"])
+        self.assertFalse(prog["program_active"])
         self.assertFalse(prog["joined"])
 
     @override_settings(FRONTEND_URL="https://app.example.com")
@@ -609,7 +681,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(prog["site_origin_label"], "")
         self.assertEqual(prog["site_description"], "Detail description")
         self.assertEqual(prog["site_status"], Site.Status.VERIFIED)
-        self.assertTrue(prog["program_active"])
+        self.assertFalse(prog["program_active"])
         self.assertEqual(prog["referral_lock_days"], int(getattr(settings, "REFERRAL_ATTRIBUTION_TTL_DAYS", 30)))
         self.assertEqual(prog["participants_count"], 2)
         self.assertEqual(prog["joined_at"], m.created_at.isoformat())

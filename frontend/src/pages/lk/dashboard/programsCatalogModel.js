@@ -44,6 +44,51 @@ export function programCatalogExternalSiteHref(program) {
   return "";
 }
 
+export function programLifecycleStatus(program) {
+  if (program?.widget_enabled === false) {
+    return {
+      tone: "muted",
+      label: "Виджет выключен",
+      description: "Программа временно остановлена.",
+    };
+  }
+  const status = typeof program?.site_status === "string" ? program.site_status.trim().toLowerCase() : "";
+  if (program?.program_active === true || (program?.program_active !== false && status === "active")) {
+    return {
+      tone: "success",
+      label: "Активна",
+      description: "Программа принимает участников и лиды.",
+    };
+  }
+
+  if (status === "verified") {
+    return {
+      tone: "warning",
+      label: "Готова к активации",
+      description: "Сайт проверен, но программа ещё не активирована.",
+    };
+  }
+  if (status === "draft") {
+    return {
+      tone: "muted",
+      label: "Черновик",
+      description: "Программа ещё не активна.",
+    };
+  }
+  if (status === "paused" || status === "disabled" || status === "inactive") {
+    return {
+      tone: "danger",
+      label: "Остановлена",
+      description: "Программа временно недоступна.",
+    };
+  }
+  return {
+    tone: "muted",
+    label: "Не активна",
+    description: "Программа временно недоступна.",
+  };
+}
+
 function programSearchValue(program) {
   return [
     programSiteLabel(program),
@@ -51,6 +96,7 @@ function programSearchValue(program) {
     program?.site_origin_label,
     program?.site_public_id,
     program?.site_status,
+    programLifecycleStatus(program).label,
   ]
     .filter((value) => typeof value === "string" && value.trim())
     .join(" ")

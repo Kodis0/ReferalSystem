@@ -5,7 +5,7 @@
  */
 
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import ProgramsCatalogPage from "../pages/lk/dashboard/ProgramsCatalogPage";
 
@@ -70,6 +70,87 @@ describe("Programs Catalog", () => {
     const links = screen.getAllByTestId("programs-catalog-list-link");
     expect(links[0]).toHaveAttribute("data-nav-target", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     expect(links[1]).toHaveAttribute("data-nav-target", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
+  });
+
+  it("renders inactive program status without green dot", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Stopped Shop",
+                site_origin_label: "stopped.example",
+                joined: false,
+                site_status: "active",
+                widget_enabled: false,
+                program_active: false,
+                commission_percent: "12",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    const row = await screen.findByTestId("programs-catalog-list-link");
+    expect(within(row).getByText("Виджет выключен")).toBeInTheDocument();
+    expect(row.querySelector(".lk-dashboard__programs-status-dot_success")).not.toBeInTheDocument();
+    expect(row.querySelector(".lk-dashboard__programs-status-dot_muted")).toBeInTheDocument();
+  });
+
+  it("refetches catalog on site status change event", async () => {
+    let active = true;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Dynamic Shop",
+                site_origin_label: "dynamic.example",
+                joined: false,
+                site_status: "active",
+                widget_enabled: active,
+                program_active: active,
+                commission_percent: "12",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <ProgramsCatalogPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Активна");
+    active = false;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lumoref:site-status-changed", {
+          detail: { site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+        }),
+      );
+    });
+
+    await screen.findByText("Виджет выключен");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("renders API avatar with stable cache version and falls back to letter without avatar", async () => {

@@ -5,7 +5,7 @@
  */
 
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AgentProgramDetailPage from "../pages/lk/dashboard/AgentProgramDetailPage";
 
@@ -43,7 +43,7 @@ describe("Agent program detail page", () => {
               site_origin_label: "demo.example",
               site_description: "Partner program description",
               joined_at: "2026-01-10T12:00:00+00:00",
-              site_status: "verified",
+              site_status: "active",
               program_active: true,
               commission_percent: "12.50",
               referral_lock_days: 30,
@@ -92,7 +92,7 @@ describe("Agent program detail page", () => {
               site_origin_label: "demo.example",
               avatar_data_url: "https://cdn.example/detail-icon.png",
               avatar_updated_at: "2026-04-29T19:00:00+00:00",
-              site_status: "verified",
+              site_status: "active",
               program_active: true,
               joined: true,
             },
@@ -124,7 +124,7 @@ describe("Agent program detail page", () => {
               site_public_id: SITE_ID,
               site_display_label: "Demo Shop",
               site_origin_label: "demo.example",
-              site_status: "verified",
+              site_status: "active",
               program_active: true,
               joined: true,
             },
@@ -153,7 +153,7 @@ describe("Agent program detail page", () => {
               site_display_label: "Demo Shop",
               site_origin_label: "demo.example",
               site_description: "Partner program description",
-              site_status: "verified",
+              site_status: "active",
               program_active: true,
               commission_percent: "12.50",
               referral_lock_days: 30,
@@ -178,6 +178,74 @@ describe("Agent program detail page", () => {
     );
   });
 
+  it("shows inactive detail and disables join", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "Stopped Shop",
+              site_origin_label: "stopped.example",
+              site_status: "active",
+              widget_enabled: false,
+              program_active: false,
+              joined: false,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    renderDetail();
+
+    const joinButton = await screen.findByTestId("agent-program-join-btn");
+    expect(screen.getByText("Виджет выключен")).toBeInTheDocument();
+    expect(screen.getByText("Программа временно остановлена.")).toBeInTheDocument();
+    expect(joinButton).toBeDisabled();
+    expect(joinButton).toHaveTextContent("Программа временно недоступна");
+  });
+
+  it("refetches detail on site status change event", async () => {
+    let active = true;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "Dynamic Shop",
+              site_origin_label: "dynamic.example",
+              site_status: "active",
+              widget_enabled: active,
+              program_active: active,
+              joined: false,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    renderDetail();
+
+    await screen.findByText("Активна");
+    active = false;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lumoref:site-status-changed", {
+          detail: { site_public_id: SITE_ID },
+        }),
+      );
+    });
+
+    await screen.findByText("Виджет выключен");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("joins only the current program after explicit click", async () => {
     let detailCalls = 0;
     const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
@@ -193,7 +261,7 @@ describe("Agent program detail page", () => {
               site_public_id: SITE_ID,
               site_display_label: "Demo Shop",
               site_origin_label: "demo.example",
-              site_status: "verified",
+              site_status: "active",
               program_active: true,
               joined: detailCalls > 1,
               joined_at: detailCalls > 1 ? "2026-01-10T12:00:00+00:00" : undefined,

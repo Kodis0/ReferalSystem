@@ -543,6 +543,14 @@
   pointer-events: auto;
 }
 
+.lk-dashboard__programs_catalog .lk-dashboard__programs-catalog-status {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #94a3b8;
+}
+
 .lk-dashboard__programs_catalog .lk-dashboard__programs-catalog-commission {
   flex-shrink: 0;
   margin-left: auto;
@@ -620,6 +628,22 @@
   border-radius: 999px;
   flex-shrink: 0;
   background: #70cf98;
+}
+
+.lk-dashboard__programs-status-dot_success {
+  background: #70cf98;
+}
+
+.lk-dashboard__programs-status-dot_warning {
+  background: #f2c94c;
+}
+
+.lk-dashboard__programs-status-dot_muted {
+  background: #94a3b8;
+}
+
+.lk-dashboard__programs-status-dot_danger {
+  background: #ff6270;
 }
 
 .lk-dashboard__programs-item-link {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { isUuidString } from "../../registration/postJoinNavigation";
+import { dispatchLumorefSiteStatusChanged } from "../lkProgramListsSync";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
 const OPTIONAL_CAPTURE_FIELDS = [
@@ -234,6 +235,7 @@ export function useSiteShellIntegrationActions({
         }
         setActivateError("");
         emitSiteOwnerActivity(siteId);
+        dispatchLumorefSiteStatusChanged(siteId);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
           headers: authHeaders(),
@@ -276,6 +278,7 @@ export function useSiteShellIntegrationActions({
           }
           integrationSnapshot = patchPayload;
           emitSiteOwnerActivity(siteId);
+          dispatchLumorefSiteStatusChanged(siteId);
         }
       }
       const res = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationActivate, siteId), {
@@ -288,6 +291,7 @@ export function useSiteShellIntegrationActions({
       if (res.ok) {
         setData(payload);
         emitSiteOwnerActivity(siteId);
+        dispatchLumorefSiteStatusChanged(siteId);
         await load();
         return;
       }
@@ -314,6 +318,7 @@ export function useSiteShellIntegrationActions({
       if (res.ok) {
         setData(payload);
         emitSiteOwnerActivity(siteId);
+        dispatchLumorefSiteStatusChanged(siteId);
         const resDiag = await fetch(withSelectedSite(API_ENDPOINTS.siteIntegrationDiagnostics, siteId), {
           method: "GET",
           headers: authHeaders(),

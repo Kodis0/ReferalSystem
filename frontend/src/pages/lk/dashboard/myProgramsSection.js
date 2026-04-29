@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
-import { LK_PROGRAM_LISTS_REFETCH_EVENT } from "../lkProgramListsSync";
+import { LK_PROGRAM_LISTS_REFETCH_EVENT, LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "../owner-programs/domainCountryFlagSvg";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
+import { programLifecycleStatus } from "./programsCatalogModel";
 import "../owner-programs/owner-programs.css";
 
 function programSiteLabel(program) {
@@ -19,12 +20,6 @@ function programTitle(program) {
   const displayLabel = typeof program?.site_display_label === "string" ? program.site_display_label.trim() : "";
   if (displayLabel) return displayLabel;
   return programSiteLabel(program);
-}
-
-function programStatusLabel(status) {
-  if (status === "active" || status === "verified") return "В сети";
-  if (status === "draft") return "Черновик";
-  return status || "—";
 }
 
 function formatReferralLockDays(value) {
@@ -133,10 +128,12 @@ export function MyProgramsSection() {
       fetchMyPrograms();
     }
     window.addEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+    window.addEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onProgramsAvatarSourcesUpdated);
     window.addEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
     window.addEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
     return () => {
       window.removeEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+      window.removeEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onProgramsAvatarSourcesUpdated);
       window.removeEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
       window.removeEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
     };
@@ -148,7 +145,11 @@ export function MyProgramsSection() {
       fetchMyPrograms();
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", fetchMyPrograms);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", fetchMyPrograms);
+    };
   }, [fetchMyPrograms]);
 
   const openProgram = (sitePublicId) => {
@@ -229,7 +230,7 @@ export function MyProgramsSection() {
           {programs.map((p) => {
             const title = programTitle(p);
             const domain = programSiteLabel(p);
-            const status = programStatusLabel(p.site_status);
+            const status = programLifecycleStatus(p);
             const platform = p.platform_preset || "—";
             const lockDays = `Срок закрепления: ${formatReferralLockDays(p.referral_lock_days)}`;
             const leavingThisProgram = leavingSiteId === p.site_public_id;
@@ -275,12 +276,15 @@ export function MyProgramsSection() {
                   </div>
                 </div>
                 <div className="owner-programs__service-card-headline">
-                  <span className="owner-programs__service-card-status-dot owner-programs__service-card-status-dot_success" aria-hidden="true" />
+                  <span className={`owner-programs__service-card-status-dot owner-programs__service-card-status-dot_${status.tone}`} aria-hidden="true" />
                   <span className="owner-programs__service-card-headline-title">{title}</span>
                 </div>
-                <div className="owner-programs__service-card-specs" title={[domain, status, platform, lockDays].join(" · ")}>
-                  {[domain, status, platform, lockDays].join(" · ")}
+                <div className="owner-programs__service-card-specs" title={[domain, status.label, platform, lockDays].join(" · ")}>
+                  {[domain, status.label, platform, lockDays].join(" · ")}
                 </div>
+                {status.tone !== "success" ? (
+                  <div className="owner-programs__service-card-meta">{status.description}</div>
+                ) : null}
               </div>
             );
           })}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ListFilter, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
-import { LK_PROGRAM_LISTS_REFETCH_EVENT } from "../lkProgramListsSync";
+import { LK_PROGRAM_LISTS_REFETCH_EVENT, LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "../lk.css";
 import "../owner-programs/owner-programs.css";
@@ -15,6 +15,7 @@ import {
 import {
   formatCatalogCommissionPercent,
   getCatalogFilteredSortedPrograms,
+  programLifecycleStatus,
   programCatalogDisplayName,
   programCatalogExternalSiteHref,
   programCatalogSiteOriginLabel,
@@ -165,10 +166,12 @@ export default function ProgramsCatalogPage() {
       refetchPrograms();
     }
     window.addEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+    window.addEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onProgramsAvatarSourcesUpdated);
     window.addEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
     window.addEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
     return () => {
       window.removeEventListener(LK_PROGRAM_LISTS_REFETCH_EVENT, onProgramsAvatarSourcesUpdated);
+      window.removeEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onProgramsAvatarSourcesUpdated);
       window.removeEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
       window.removeEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
     };
@@ -180,7 +183,11 @@ export default function ProgramsCatalogPage() {
       refetchPrograms();
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", refetchPrograms);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", refetchPrograms);
+    };
   }, [refetchPrograms]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -365,6 +372,8 @@ export default function ProgramsCatalogPage() {
               const joined = Boolean(p.joined);
               const busyJoin = joiningSiteId === p.site_public_id;
               const busyLeave = leavingSiteId === p.site_public_id;
+              const status = programLifecycleStatus(p);
+              const canJoin = status.tone === "success";
               return (
                 <li key={p.site_public_id} className="lk-dashboard__programs-item">
                   <div
@@ -394,7 +403,7 @@ export default function ProgramsCatalogPage() {
                       </div>
                     </div>
                     <div className="lk-dashboard__programs-catalog-row-middle">
-                      <span className="lk-dashboard__programs-status-dot" aria-hidden="true" />
+                      <span className={`lk-dashboard__programs-status-dot lk-dashboard__programs-status-dot_${status.tone}`} aria-hidden="true" />
                       <div className="lk-dashboard__programs-catalog-row-text">
                         <span className="lk-dashboard__programs-catalog-title">{rowTitle}</span>
                         {catalogSiteHref ? (
@@ -410,6 +419,7 @@ export default function ProgramsCatalogPage() {
                             {catalogOriginLabel}
                           </a>
                         ) : null}
+                        <span className="lk-dashboard__programs-catalog-status">{status.label}</span>
                         <span className="lk-dashboard__programs-catalog-commission">{commissionLabel}</span>
                       </div>
                     </div>
@@ -452,10 +462,10 @@ export default function ProgramsCatalogPage() {
                                 type="button"
                                 className="owner-programs__service-card-menu-item"
                                 role="menuitem"
-                                disabled={busyJoin}
+                                disabled={busyJoin || !canJoin}
                                 onClick={(event) => handleJoinProgram(event, p.site_public_id)}
                               >
-                                {busyJoin ? "Вступаем…" : "Вступить"}
+                                {busyJoin ? "Вступаем…" : canJoin ? "Вступить" : "Программа временно недоступна"}
                               </button>
                             )}
                           </div>

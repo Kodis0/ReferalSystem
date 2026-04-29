@@ -82,17 +82,26 @@ def _program_avatar_updated_at(site: Site):
     return updated_at.isoformat() if updated_at else None
 
 
+def _program_is_active(site: Site) -> bool:
+    return site.status == Site.Status.ACTIVE and bool(site.widget_enabled)
+
+
 def _member_program_payload(site, *, membership=None):
     _, site_origin_label = owner_site_list_origin_display(site)
     participants_count = SiteMembership.objects.filter(site=site).count()
+    visible_in_catalog = site_allows_cta_signup_membership(site)
     payload = {
         "site_public_id": str(site.public_id),
         "site_display_label": site_cta_display_label(site),
         "site_origin_label": site_origin_label,
         "site_description": site_owner_shell_description(site),
         "site_status": site.status,
+        "widget_enabled": bool(site.widget_enabled),
+        "verified_at": site.verified_at.isoformat() if site.verified_at else None,
+        "activated_at": site.activated_at.isoformat() if site.activated_at else None,
         "platform_preset": site.platform_preset,
-        "program_active": site_allows_cta_signup_membership(site),
+        "visible_in_catalog": visible_in_catalog,
+        "program_active": _program_is_active(site),
         "commission_percent": str(site_commission_percent(site)),
         "referral_lock_days": site_referral_lock_days(site),
         "participants_count": participants_count,

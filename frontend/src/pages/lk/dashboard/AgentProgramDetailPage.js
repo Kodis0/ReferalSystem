@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
+import { programLifecycleStatus } from "./programsCatalogModel";
 import "../owner-programs/owner-programs.css";
 import "./dashboard.css";
 
@@ -62,10 +64,6 @@ function formatParticipantsCount(value) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue) || numberValue < 0) return "—";
   return numberValue.toLocaleString("ru-RU");
-}
-
-function programStatusLabel(program) {
-  return program?.program_active ? "Активна" : "Не активна";
 }
 
 function programAvatarLetter(label) {
@@ -137,9 +135,9 @@ export default function AgentProgramDetailPage() {
     };
   }, [loadProgram]);
 
-  /** Подтягиваем ``program_active`` после действий владельца (виджет вкл/выкл). */
+  /** Подтягиваем program_active после действий владельца (виджет вкл/выкл / activate). */
   useEffect(() => {
-    if (!program?.site_public_id || errorKind === "not_found") return undefined;
+    if (errorKind === "not_found") return undefined;
     let isCancelled = false;
     const tick = () => {
       void loadProgram({ cancelled: () => isCancelled });
@@ -147,16 +145,20 @@ export default function AgentProgramDetailPage() {
     const onVisibility = () => {
       if (document.visibilityState === "visible") tick();
     };
+    const onSiteStatusChanged = (event) => {
+      const changedSiteId = event?.detail?.site_public_id || "";
+      if (!changedSiteId || changedSiteId === sitePublicId) tick();
+    };
     document.addEventListener("visibilitychange", onVisibility);
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === "visible") tick();
-    }, 45000);
+    window.addEventListener("focus", tick);
+    window.addEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onSiteStatusChanged);
     return () => {
       isCancelled = true;
       document.removeEventListener("visibilitychange", onVisibility);
-      window.clearInterval(intervalId);
+      window.removeEventListener("focus", tick);
+      window.removeEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onSiteStatusChanged);
     };
-  }, [loadProgram, program?.site_public_id, errorKind]);
+  }, [loadProgram, sitePublicId, errorKind]);
 
   const onCopyReferralLink = async () => {
     const link = program?.referral_link;
@@ -194,6 +196,8 @@ export default function AgentProgramDetailPage() {
   };
 
   const backTo = location.state?.from === "/lk/my-programs" ? "/lk/my-programs" : "/lk/programs";
+  const lifecycle = programLifecycleStatus(program);
+  const canJoinProgram = lifecycle.tone === "success";
 
   return (
     <div className="lk-dashboard lk-dashboard__program-detail" data-testid="agent-program-detail">
@@ -279,9 +283,14 @@ export default function AgentProgramDetailPage() {
               </div>
               <div className="lk-dashboard__program-metric">
                 <span>Статус программы</span>
-                <strong>{programStatusLabel(program)}</strong>
+                <strong>{lifecycle.label}</strong>
               </div>
             </div>
+            {lifecycle.tone !== "success" ? (
+              <p className="lk-dashboard__program-card-joined" role="status">
+                {lifecycle.description}
+              </p>
+            ) : null}
 
             {program.joined ? (
               <div className="lk-dashboard__program-member" data-testid="agent-program-joined-state">
@@ -314,10 +323,10 @@ export default function AgentProgramDetailPage() {
                   type="button"
                   className="owner-programs__projects-create-btn"
                   onClick={onJoinProgram}
-                  disabled={joining}
+                  disabled={joining || !canJoinProgram}
                   data-testid="agent-program-join-btn"
                 >
-                  {joining ? "Вступаем…" : "Вступить в программу"}
+                  {joining ? "Вступаем…" : canJoinProgram ? "Вступить в программу" : "Программа временно недоступна"}
                 </button>
                 {joinError ? <p className="lk-dashboard__program-card-joined">{joinError}</p> : null}
               </div>

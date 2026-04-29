@@ -5,7 +5,7 @@
  */
 
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LkSidebar from "../pages/lk/LkSidebar";
 import { MyProgramsSection } from "../pages/lk/dashboard/myProgramsSection";
@@ -100,10 +100,90 @@ describe("Dashboard My Programs", () => {
       expect(screen.getByTestId("my-programs-list")).toBeInTheDocument();
     });
     expect(screen.getByText("Demo Shop")).toBeInTheDocument();
-    expect(screen.getByText("demo.example · В сети · tilda · Срок закрепления: 45 дн.")).toBeInTheDocument();
+    expect(screen.getByText("demo.example · Готова к активации · tilda · Срок закрепления: 45 дн.")).toBeInTheDocument();
     const card = screen.getByTestId("agent-program-list-link");
     expect(card).toHaveClass("owner-programs__service-card");
     expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
+  });
+
+  it("renders inactive connected program without success status", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/me/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Stopped Shop",
+                site_origin_label: "stopped.example",
+                site_status: "active",
+                widget_enabled: false,
+                program_active: false,
+                platform_preset: "tilda",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
+
+    const card = await screen.findByTestId("agent-program-list-link");
+    expect(screen.getByText("stopped.example · Виджет выключен · tilda · Срок закрепления: —")).toBeInTheDocument();
+    expect(screen.getByText("Программа временно остановлена.")).toBeInTheDocument();
+    expect(card.querySelector(".owner-programs__service-card-status-dot_success")).not.toBeInTheDocument();
+    expect(card.querySelector(".owner-programs__service-card-status-dot_muted")).toBeInTheDocument();
+  });
+
+  it("refetches my programs on site status change event", async () => {
+    let active = true;
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/users/me/programs/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            programs: [
+              {
+                site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                site_display_label: "Dynamic Shop",
+                site_origin_label: "dynamic.example",
+                site_status: "active",
+                widget_enabled: active,
+                program_active: active,
+                platform_preset: "tilda",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.reject(new Error("unexpected fetch"));
+    });
+
+    render(
+      <MemoryRouter>
+        <MyProgramsSection />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("dynamic.example · Активна · tilda · Срок закрепления: —");
+    active = false;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lumoref:site-status-changed", {
+          detail: { site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
+        }),
+      );
+    });
+
+    await screen.findByText("dynamic.example · Виджет выключен · tilda · Срок закрепления: —");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("renders connected program avatar from API and falls back to letter without avatar", async () => {
