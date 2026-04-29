@@ -318,3 +318,71 @@ describe("Dashboard My Programs", () => {
     expect(calledUrls.some((u) => u.endsWith("/users/me/programs/"))).toBe(true);
   });
 });
+
+const DETAIL_PATH = "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+describe("LkSidebar — каталог / мои программы / карточка (active state)", () => {
+  beforeEach(() => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes("/referrals/site/owner-sites/")) {
+        return Promise.resolve({ ok: true, json: async () => ({ projects: [], sites: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function renderSidebarAt(entry) {
+    const initial = Array.isArray(entry) ? entry : [entry];
+    return render(
+      <MemoryRouter initialEntries={initial}>
+        <Routes>
+          <Route path="*" element={<LkSidebar />} />
+        </Routes>
+      </MemoryRouter>
+    );
+  }
+
+  it("/lk/programs highlights Каталог программ", async () => {
+    renderSidebarAt("/lk/programs");
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /Каталог программ/i })).toHaveClass("lk-sidebar__nav-link_active");
+    });
+    expect(screen.getByRole("link", { name: /Мои программы/i })).not.toHaveClass("lk-sidebar__nav-link_active");
+  });
+
+  it("/lk/my-programs highlights Мои программы", async () => {
+    renderSidebarAt("/lk/my-programs");
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /Мои программы/i })).toHaveClass("lk-sidebar__nav-link_active");
+    });
+    expect(screen.getByRole("link", { name: /Каталог программ/i })).not.toHaveClass("lk-sidebar__nav-link_active");
+  });
+
+  it("detail with state from=/lk/programs highlights Каталог программ", async () => {
+    renderSidebarAt({ pathname: DETAIL_PATH, state: { from: "/lk/programs" } });
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /Каталог программ/i })).toHaveClass("lk-sidebar__nav-link_active");
+    });
+    expect(screen.getByRole("link", { name: /Мои программы/i })).not.toHaveClass("lk-sidebar__nav-link_active");
+  });
+
+  it("detail with state from=/lk/my-programs highlights Мои программы", async () => {
+    renderSidebarAt({ pathname: DETAIL_PATH, state: { from: "/lk/my-programs" } });
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /Мои программы/i })).toHaveClass("lk-sidebar__nav-link_active");
+    });
+    expect(screen.getByRole("link", { name: /Каталог программ/i })).not.toHaveClass("lk-sidebar__nav-link_active");
+  });
+
+  it("detail without state defaults to Каталог программ", async () => {
+    renderSidebarAt({ pathname: DETAIL_PATH });
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /Каталог программ/i })).toHaveClass("lk-sidebar__nav-link_active");
+    });
+    expect(screen.getByRole("link", { name: /Мои программы/i })).not.toHaveClass("lk-sidebar__nav-link_active");
+  });
+});

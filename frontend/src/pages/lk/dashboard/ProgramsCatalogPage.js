@@ -71,8 +71,6 @@ export default function ProgramsCatalogPage() {
   const [programs, setPrograms] = useState(null);
   const [error, setError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [joiningSiteId, setJoiningSiteId] = useState("");
-  const [joinError, setJoinError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -113,38 +111,6 @@ export default function ProgramsCatalogPage() {
   const filteredPrograms = Array.isArray(programs)
     ? programs.filter((program) => !normalizedSearchQuery || programSearchValue(program).includes(normalizedSearchQuery))
     : [];
-
-  const onJoinProgram = async (program) => {
-    const token = localStorage.getItem("access_token");
-    if (!token || !program?.site_public_id || joiningSiteId) return;
-    setJoiningSiteId(program.site_public_id);
-    setJoinError("");
-    try {
-      const res = await fetch(API_ENDPOINTS.siteCtaJoin, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ site_public_id: program.site_public_id }),
-      });
-      if (!res.ok) throw new Error("program_join_failed");
-      const joinedAt = new Date().toISOString();
-      setPrograms((current) =>
-        Array.isArray(current)
-          ? current.map((item) =>
-              item.site_public_id === program.site_public_id
-                ? { ...item, joined: true, joined_at: item.joined_at || joinedAt }
-                : item
-            )
-          : current
-      );
-    } catch {
-      setJoinError("Не удалось присоединиться к программе. Попробуйте позже.");
-    } finally {
-      setJoiningSiteId("");
-    }
-  };
 
   return (
     <div className="lk-dashboard">
@@ -193,7 +159,6 @@ export default function ProgramsCatalogPage() {
             {filteredPrograms.map((p) => {
               const joinedAt = formatJoinedAt(p.joined_at);
               const label = programSiteLabel(p);
-              const joiningThisProgram = joiningSiteId === p.site_public_id;
               const commission = formatCommissionPercent(p.commission_percent);
               const lockDays = formatReferralLockDays(p.referral_lock_days);
               const participants = formatParticipantsCount(p.participants_count);
@@ -227,7 +192,7 @@ export default function ProgramsCatalogPage() {
                         <span className="lk-dashboard__programs-status">Вознаграждение: {commission}</span>
                       ) : null}
                       {lockDays ? (
-                        <span className="lk-dashboard__programs-status">Закрепление клиента: {lockDays}</span>
+                        <span className="lk-dashboard__programs-status">Срок закрепления: {lockDays}</span>
                       ) : null}
                       {participants ? (
                         <span className="lk-dashboard__programs-status">Участников: {participants}</span>
@@ -236,17 +201,15 @@ export default function ProgramsCatalogPage() {
                         <span className="lk-dashboard__programs-joined">
                           {joinedAt ? `Дата вступления: ${joinedAt}` : "Вы участвуете"}
                         </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="lk-dashboard__programs-join-btn"
-                          onClick={() => onJoinProgram(p)}
-                          disabled={joiningThisProgram || Boolean(joiningSiteId)}
-                          data-testid={`programs-catalog-join-${p.site_public_id}`}
-                        >
-                          {joiningThisProgram ? "Присоединяем…" : "Присоединиться"}
-                        </button>
-                      )}
+                      ) : null}
+                      <Link
+                        to={`/lk/referral-program/${p.site_public_id}`}
+                        state={{ from: "/lk/programs" }}
+                        className="lk-dashboard__programs-join-btn"
+                        data-testid={`programs-catalog-open-${p.site_public_id}`}
+                      >
+                        Открыть программу
+                      </Link>
                     </div>
                   </div>
                 </li>
@@ -254,7 +217,6 @@ export default function ProgramsCatalogPage() {
             })}
           </ul>
         ) : null}
-        {joinError ? <p className="lk-dashboard__programs-muted">{joinError}</p> : null}
       </section>
     </div>
   );

@@ -68,16 +68,13 @@ describe("Programs Catalog", () => {
     const links = screen.getAllByTestId("programs-catalog-list-link");
     expect(links[0]).toHaveAttribute("href", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     expect(links[1]).toHaveAttribute("href", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
-    expect(screen.getByRole("button", { name: "Присоединиться" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Открыть программу" })).toHaveLength(2);
   });
 
-  it("joins a program only after clicking join", async () => {
+  it("mount loads catalog via GET /users/programs/ only and never POST /users/site/join/", async () => {
     const siteId = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
-    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options) => {
-      if (String(url).includes("/users/site/join/") && options?.method === "POST") {
-        return Promise.resolve({ ok: true, json: async () => ({ status: "joined" }) });
-      }
-      if (String(url).includes("/users/programs/")) {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).endsWith("/users/programs/")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -102,26 +99,16 @@ describe("Programs Catalog", () => {
       </MemoryRouter>
     );
 
-    const button = await screen.findByRole("button", { name: "Присоединиться" });
+    await screen.findByText("other.example");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      expect.stringContaining("/users/site/join/"),
-      expect.objectContaining({ method: "POST" })
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/users/programs/");
+    expect(String(fetchMock.mock.calls[0][0])).not.toMatch(
+      /\/users\/programs\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i
     );
-
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(screen.getByText("Ваш статус: Вы участвуете")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/users/site/join/"),
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ site_public_id: siteId }),
-      })
+    const joinPosts = fetchMock.mock.calls.filter(
+      ([u, opts]) => String(u).includes("/users/site/join/") && opts?.method === "POST"
     );
+    expect(joinPosts).toHaveLength(0);
   });
 
   it("opens a program card without joining", async () => {

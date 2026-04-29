@@ -132,9 +132,9 @@ describe("Agent program detail page", () => {
     renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByTestId("agent-program-unjoined-state")).toHaveTextContent("Вы ещё не участвуете в программе");
+      expect(screen.getByTestId("agent-program-unjoined-state")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Стать участником" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Вступить в программу" })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       expect.stringContaining("/users/site/join/"),
       expect.objectContaining({ method: "POST" })
@@ -169,7 +169,7 @@ describe("Agent program detail page", () => {
 
     renderDetail();
 
-    const joinButton = await screen.findByRole("button", { name: "Стать участником" });
+    const joinButton = await screen.findByRole("button", { name: "Вступить в программу" });
     fireEvent.click(joinButton);
 
     await waitFor(() => {
@@ -185,44 +185,6 @@ describe("Agent program detail page", () => {
     expect(
       fetchMock.mock.calls.filter(([url, options]) => String(url).includes("/users/site/join/") && options?.method === "POST")
     ).toHaveLength(1);
-  });
-
-  it("opens unjoined catalog program when detail endpoint returns 404", async () => {
-    jest.spyOn(global, "fetch").mockImplementation((url) => {
-      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
-        return Promise.resolve({ ok: false, status: 404 });
-      }
-      if (String(url).endsWith("/users/programs/")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            programs: [
-              {
-                site_public_id: SITE_ID,
-                site_display_label: "Demo Shop",
-                site_origin_label: "demo.example",
-                site_description: "Catalog description",
-                site_status: "verified",
-                program_active: true,
-                commission_percent: "12.50",
-                referral_lock_days: 30,
-                participants_count: 7,
-                joined: false,
-              },
-            ],
-          }),
-        });
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`));
-    });
-
-    renderDetail();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
-    });
-    expect(screen.getByText("Catalog description")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-program-unjoined-state")).toHaveTextContent("Вы ещё не участвуете в программе");
   });
 
   it("shows not found on 404", async () => {

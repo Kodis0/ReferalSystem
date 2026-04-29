@@ -142,7 +142,7 @@ function ProgramsCatalogNavIcon() {
 
 export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0, onHeaderNavNavigate }) {
   const projectAvatarClipId = useId().replace(/:/g, "");
-  const { pathname, search } = useLocation();
+  const { pathname, search, state: locationState } = useLocation();
   const navigate = useNavigate();
   const currentPath = pathname.toLowerCase();
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -158,8 +158,25 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   const projectNodeRefs = useRef(new Map());
   const previousProjectPositionsRef = useRef(new Map());
 
-  const programsListActive = currentPath === "/lk/programs";
-  const connectedProgramsActive = currentPath === "/lk/my-programs" || currentPath.startsWith("/lk/referral-program/");
+  const referralProgramDetailMatch = pathname.match(/^\/lk\/referral-program\/[^/]+\/?$/i);
+  const isReferralProgramDetail = Boolean(referralProgramDetailMatch);
+  const navFrom =
+    locationState && typeof locationState === "object" && typeof locationState.from === "string"
+      ? locationState.from
+      : null;
+
+  let programsListActive = currentPath === "/lk/programs";
+  let connectedProgramsActive = currentPath === "/lk/my-programs";
+
+  if (isReferralProgramDetail) {
+    if (navFrom === "/lk/my-programs") {
+      programsListActive = false;
+      connectedProgramsActive = true;
+    } else {
+      programsListActive = true;
+      connectedProgramsActive = false;
+    }
+  }
 
   const onPartnerList = pathname === "/lk/partner";
   const onCreateProject = pathname === "/lk/partner/new";

@@ -59,16 +59,6 @@ function programAvatarLetter(label) {
   return value.slice(0, 1).toUpperCase() || "P";
 }
 
-async function fetchCatalogProgram(sitePublicId, token) {
-  const res = await fetch(API_ENDPOINTS.programsCatalog, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("catalog_fetch_failed");
-  const data = await res.json();
-  const programs = Array.isArray(data?.programs) ? data.programs : [];
-  return programs.find((item) => item?.site_public_id === sitePublicId) || null;
-}
-
 /**
  * Member-facing detail for one agent program (SiteMembership) by site public_id.
  */
@@ -102,18 +92,8 @@ export default function AgentProgramDetailPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.status === 404) {
-          try {
-            const catalogProgram = await fetchCatalogProgram(sitePublicId, token);
-            if (cancelled?.()) return;
-            if (catalogProgram) {
-              setProgram(catalogProgram);
-            } else {
-              setErrorKind("not_found");
-            }
-          } catch {
-            if (cancelled?.()) return;
-            setErrorKind("not_found");
-          }
+          if (cancelled?.()) return;
+          setErrorKind("not_found");
           return;
         }
         if (!res.ok) throw new Error("fetch_failed");
@@ -237,20 +217,24 @@ export default function AgentProgramDetailPage() {
 
             <div className="lk-dashboard__program-metrics">
               <div className="lk-dashboard__program-metric">
-                <span>Процент с продаж</span>
+                <span>Вознаграждение</span>
                 <strong>{formatCommissionPercent(program.commission_percent)}</strong>
               </div>
               <div className="lk-dashboard__program-metric">
-                <span>Срок закрепления клиента</span>
+                <span>За что начисляется</span>
+                <strong>Процент от оплаченных заказов привлечённых клиентов</strong>
+              </div>
+              <div className="lk-dashboard__program-metric">
+                <span>Срок закрепления</span>
                 <strong>{formatReferralLockDays(program.referral_lock_days)}</strong>
+              </div>
+              <div className="lk-dashboard__program-metric">
+                <span>Количество участников</span>
+                <strong>{formatParticipantsCount(program.participants_count)}</strong>
               </div>
               <div className="lk-dashboard__program-metric">
                 <span>Статус программы</span>
                 <strong>{programStatusLabel(program)}</strong>
-              </div>
-              <div className="lk-dashboard__program-metric">
-                <span>Кол-во участников</span>
-                <strong>{formatParticipantsCount(program.participants_count)}</strong>
               </div>
             </div>
 
@@ -281,16 +265,14 @@ export default function AgentProgramDetailPage() {
               </div>
             ) : (
               <div className="lk-dashboard__program-member" data-testid="agent-program-unjoined-state">
-                <p className="lk-dashboard__program-card-joined">
-                  Вы ещё не участвуете в программе.
-                </p>
                 <button
                   type="button"
-                  className="lk-dashboard__programs-join-btn"
+                  className="lk-dashboard__programs-join-btn lk-dashboard__programs-join-btn_primary"
                   onClick={onJoinProgram}
                   disabled={joining}
+                  data-testid="agent-program-join-btn"
                 >
-                  {joining ? "Присоединяем…" : "Стать участником"}
+                  {joining ? "Вступаем…" : "Вступить в программу"}
                 </button>
                 {joinError ? <p className="lk-dashboard__program-card-joined">{joinError}</p> : null}
               </div>
