@@ -131,7 +131,7 @@ describe("LkSidebar owner IA", () => {
     expect(screen.getByText("Проекты")).toBeInTheDocument();
     expect(screen.queryByText("Партнёрские программы")).not.toBeInTheDocument();
     expect(screen.queryByText("Реферальная программа")).not.toBeInTheDocument();
-    expect(screen.getByText("Агентские программы")).toBeInTheDocument();
+    expect(screen.getByText("Мои программы")).toBeInTheDocument();
     expect(screen.queryByText("Виджет")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(

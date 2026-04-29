@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, MessageCircle, Palette, Send, Settings as SettingsGearIcon, UserPlus, UserRound } from "lucide-react";
 import { LkHeaderBrandMark } from "./LkHeaderBrandMark";
 import Dashboard from "./dashboard/dashboard"; // импорт компонента Dashboard
+import ProgramsCatalogPage from "./dashboard/ProgramsCatalogPage";
 import AgentProgramDetailPage from "./dashboard/AgentProgramDetailPage";
 import Settings from "./settings/settings"; // импорт компонента Settings
 import AccountPersonalDataPage from "./settings/AccountPersonalDataPage";
@@ -766,6 +767,7 @@ function LK() {
           <Routes>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="programs" element={<ProgramsCatalogPage />} />
             <Route path="settings/users/create" element={<AccountAdditionalUsersCreatePage />} />
             <Route
               path="settings/personal"

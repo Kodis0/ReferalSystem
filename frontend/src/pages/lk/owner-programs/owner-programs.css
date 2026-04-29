@@ -1800,7 +1800,6 @@
 .owner-programs__shell-reachability-dot_online {
   background: #22c55e;
   box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.28);
-  animation: owner-programs-shell-reachability-online-pulse 1.8s ease-in-out infinite;
 }
 
 .owner-programs__shell-reachability-dot_offline {
@@ -1811,37 +1810,6 @@
 .owner-programs__shell-reachability-dot_pending {
   background: #94a3b8;
   box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.25);
-  animation: owner-programs-shell-reachability-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes owner-programs-shell-reachability-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-@keyframes owner-programs-shell-reachability-online-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.45);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .owner-programs__shell-reachability-dot_online {
-    animation: none;
-    opacity: 1;
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.28);
-  }
 }
 
 .owner-programs__shell-reachability-text {

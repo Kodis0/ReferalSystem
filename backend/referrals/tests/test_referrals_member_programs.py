@@ -47,6 +47,57 @@ class MyProgramsApiTests(TestCase):
         r = self.api.get("/users/me/programs/")
         self.assertEqual(r.status_code, 401)
 
+    def test_programs_catalog_requires_auth(self):
+        r = self.api.get("/users/programs/")
+        self.assertEqual(r.status_code, 401)
+
+    def test_programs_catalog_lists_joinable_sites_with_joined_flag(self):
+        joined_site = self._site(
+            "catalog_joined",
+            allowed_origins=["https://joined.example"],
+            config_json={"site_display_name": "Joined Site"},
+        )
+        available_site = self._site(
+            "catalog_available",
+            allowed_origins=["https://available.example"],
+            config_json={"site_display_name": "Available Site"},
+        )
+        draft_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_prog_catalog_draft_" + uuid.uuid4().hex,
+            allowed_origins=["https://draft.example"],
+            widget_enabled=False,
+            status=Site.Status.DRAFT,
+            config_json={"site_display_name": "Draft Site"},
+        )
+        empty_draft_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="",
+            allowed_origins=[],
+            widget_enabled=False,
+            status=Site.Status.DRAFT,
+            config_json={"site_display_name": "Empty Draft Site"},
+        )
+        membership = SiteMembership.objects.create(site=joined_site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/programs/")
+        self.assertEqual(r.status_code, 200)
+        programs = r.data["programs"]
+        ids = [x["site_public_id"] for x in programs]
+        self.assertIn(str(joined_site.public_id), ids)
+        self.assertIn(str(available_site.public_id), ids)
+        self.assertIn(str(draft_site.public_id), ids)
+        self.assertNotIn(str(empty_draft_site.public_id), ids)
+
+        joined = next(x for x in programs if x["site_public_id"] == str(joined_site.public_id))
+        available = next(x for x in programs if x["site_public_id"] == str(available_site.public_id))
+        self.assertTrue(joined["joined"])
+        self.assertEqual(joined["joined_at"], membership.created_at.isoformat())
+        self.assertEqual(joined["site_origin_label"], "joined.example")
+        self.assertFalse(available["joined"])
+        self.assertNotIn("joined_at", available)
+
     def test_returns_only_current_user_memberships_newest_first(self):
         site_a = self._site("a", config_json={"site_display_name": "Shop Alpha"})
         site_b = self._site("b", config_json={"site_display_name": "Shop Beta"})

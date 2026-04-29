@@ -23,7 +23,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from referrals.models import SiteMembership
+from referrals.models import Site, SiteMembership
 from referrals.services import (
     create_site_membership_from_signup,
     get_site_by_public_id,
@@ -43,6 +43,19 @@ from .serializers import (
     RegisterSerializer,
     SiteCtaJoinSerializer,
 )
+
+
+def _member_program_payload(site, *, membership=None):
+    _, site_origin_label = owner_site_list_origin_display(site)
+    payload = {
+        "site_public_id": str(site.public_id),
+        "site_display_label": site_cta_display_label(site),
+        "site_origin_label": site_origin_label,
+        "site_status": site.status,
+    }
+    if membership is not None:
+        payload["joined_at"] = membership.created_at.isoformat() if membership.created_at else None
+    return payload
 from .telegram_auth import (
     TELEGRAM_OAUTH_AUTH_URL,
     decode_telegram_widget_tg_auth_result,
@@ -349,17 +362,31 @@ class MyProgramsView(APIView):
         )
         programs = []
         for m in qs:
-            site = m.site
-            _, site_origin_label = owner_site_list_origin_display(site)
-            programs.append(
-                {
-                    "site_public_id": str(site.public_id),
-                    "site_display_label": site_cta_display_label(site),
-                    "site_origin_label": site_origin_label,
-                    "joined_at": m.created_at.isoformat() if m.created_at else None,
-                    "site_status": site.status,
-                }
-            )
+            programs.append(_member_program_payload(m.site, membership=m))
+        return Response({"programs": programs}, status=status.HTTP_200_OK)
+
+
+class ProgramsCatalogView(APIView):
+    """
+    Member-facing catalog of all currently joinable Site programs in the system.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        memberships_by_site_id = {
+            m.site_id: m
+            for m in request.user.site_memberships.select_related("site")
+        }
+        sites = Site.objects.select_related("project").order_by("-created_at", "-id")
+        programs = []
+        for site in sites:
+            if not site_allows_cta_signup_membership(site):
+                continue
+            membership = memberships_by_site_id.get(site.id)
+            item = _member_program_payload(site, membership=membership)
+            item["joined"] = membership is not None
+            programs.append(item)
         return Response({"programs": programs}, status=status.HTTP_200_OK)
 
 
@@ -381,15 +408,7 @@ class MyProgramDetailView(APIView):
         )
         if membership is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        site = membership.site
-        _, site_origin_label = owner_site_list_origin_display(site)
-        payload = {
-            "site_public_id": str(site.public_id),
-            "site_display_label": site_cta_display_label(site),
-            "site_origin_label": site_origin_label,
-            "joined_at": membership.created_at.isoformat() if membership.created_at else None,
-            "site_status": site.status,
-        }
+        payload = _member_program_payload(membership.site, membership=membership)
         return Response({"program": payload}, status=status.HTTP_200_OK)
 
 

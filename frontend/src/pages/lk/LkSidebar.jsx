@@ -132,7 +132,9 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   const previousProjectPositionsRef = useRef(new Map());
 
   const onDashboard = pathname === "/lk/dashboard";
-  const programsActive = onDashboard && hash === "#my-programs";
+  const programsListActive = currentPath === "/lk/programs";
+  const connectedProgramsActive =
+    (onDashboard && hash === "#my-programs") || currentPath.startsWith("/lk/referral-program/");
 
   const onPartnerList = pathname === "/lk/partner";
   const onCreateProject = pathname === "/lk/partner/new";
@@ -575,12 +577,21 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
         <div className="lk-sidebar__panel lk-sidebar__panel_section2 lk-sidebar__panel_nav">
         <nav className="lk-sidebar__nav" aria-label="Разделы">
           <Link
-            to="/lk/dashboard#my-programs"
-            className={itemClass(programsActive)}
-            aria-current={programsActive ? "page" : undefined}
+            to="/lk/programs"
+            className={itemClass(programsListActive)}
+            aria-current={programsListActive ? "page" : undefined}
           >
             <ProgramsNavIcon />
-            <span className="lk-sidebar__nav-text">Агентские программы</span>
+            <span className="lk-sidebar__nav-text">Список программ</span>
+          </Link>
+
+          <Link
+            to="/lk/dashboard#my-programs"
+            className={itemClass(connectedProgramsActive)}
+            aria-current={connectedProgramsActive ? "page" : undefined}
+          >
+            <ProgramsNavIcon />
+            <span className="lk-sidebar__nav-text">Мои программы</span>
           </Link>
 
           <button

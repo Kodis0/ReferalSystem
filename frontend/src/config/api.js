@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
   /** GET с заголовком Authorization: Bearer — отдаёт байты вложения (аудио для плеера в ЛК). */
   supportTicketAttachment: (ticketId, fileName) =>
     `${API_BASE}/users/me/support-tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(fileName)}/`,
+  programsCatalog: `${API_BASE}/users/programs/`,
   myPrograms: `${API_BASE}/users/me/programs/`,
   myProgramDetail: (sitePublicId) => `${API_BASE}/users/me/programs/${encodeURIComponent(sitePublicId)}/`,
   referralCapture: `${API_BASE}/referrals/capture/`,
