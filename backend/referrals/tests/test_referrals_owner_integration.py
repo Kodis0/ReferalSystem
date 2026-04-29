@@ -17,8 +17,10 @@ from referrals.models import (
     SiteOwnerActivityLog,
 )
 from referrals.owner_site_activity import normalize_legacy_activity_message
+from referrals.serializers import SiteOwnerIntegrationUpdateSerializer
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME, ensure_partner_profile
 from referrals.widget_install_verify import build_default_verify_page_url
+from users.views import _member_program_payload
 
 User = get_user_model()
 
@@ -142,6 +144,42 @@ class SiteOwnerIntegrationApiTests(TestCase):
         r_get = self.api.get(url)
         self.assertEqual(r_get.status_code, 200)
         self.assertEqual(r_get.data["referral_lock_days"], 45)
+
+    def test_site_owner_integration_update_serializer_save_merges_referral_lock_days(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_ser_rld_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={"site_display_name": "Old"},
+        )
+        ser = SiteOwnerIntegrationUpdateSerializer(site, data={"referral_lock_days": 60}, partial=True)
+        self.assertTrue(ser.is_valid(), ser.errors)
+        self.assertEqual(ser.validated_data.get("referral_lock_days"), 60)
+        obj = ser.save()
+        self.assertEqual(obj.pk, site.pk)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("referral_lock_days"), 60)
+        self.assertEqual(site.config_json.get("site_display_name"), "Old")
+
+    def test_patch_referral_lock_days_reflects_in_program_payload(self):
+        site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_payload_rld_" + uuid.uuid4().hex,
+            allowed_origins=["https://a.example"],
+            config_json={},
+        )
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/?site_public_id={site.public_id}"
+        r = self.api.patch(url, {"referral_lock_days": 60}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["referral_lock_days"], 60)
+        site.refresh_from_db()
+        self.assertEqual(site.config_json.get("referral_lock_days"), 60)
+        r_get = self.api.get(url)
+        self.assertEqual(r_get.status_code, 200)
+        self.assertEqual(r_get.data["referral_lock_days"], 60)
+        payload = _member_program_payload(site)
+        self.assertEqual(payload["referral_lock_days"], 60)
 
     def test_patch_site_avatar_does_not_change_project_avatar(self):
         project = Project.objects.create(

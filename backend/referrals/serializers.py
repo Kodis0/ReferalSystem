@@ -224,6 +224,13 @@ class SiteOwnerIntegrationUpdateSerializer(serializers.Serializer):
             return ""
         return normalize_owner_site_origin(value)
 
+    def update(self, instance: Site, validated_data: dict) -> Site:
+        from .owner_site_integration_update import apply_site_owner_integration_update
+
+        request = self.context.get("request")
+        actor = getattr(request, "user", None) if request else None
+        return apply_site_owner_integration_update(instance, validated_data, log_actor=actor)
+
 
 class SiteOwnerCreateSerializer(serializers.Serializer):
     """Explicit create of a new Site (multi-site); not idempotent like bootstrap."""
