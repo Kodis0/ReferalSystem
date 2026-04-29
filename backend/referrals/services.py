@@ -428,7 +428,20 @@ def site_allows_cta_signup_membership(site: Site) -> bool:
     Semantics: ``verified`` means embed readiness was satisfied and the owner ran verify
     (config/ops milestone), not a third-party browser or Tilda attestation.
     """
-    return site.status in (Site.Status.VERIFIED, Site.Status.ACTIVE)
+    if site.status in (Site.Status.VERIFIED, Site.Status.ACTIVE):
+        return True
+    if site.status != Site.Status.DRAFT:
+        return False
+
+    # A generated referral block can be published before the owner runs the
+    # headless verification step. Keep empty drafts closed, but allow configured
+    # drafts whose public block already points visitors to registration.
+    return bool(
+        site.widget_enabled
+        and (site.publishable_key or "").strip()
+        and site.public_id
+        and site_allowed_origins_list(site)
+    )
 
 
 def resolve_valid_attribution(

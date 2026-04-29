@@ -86,7 +86,7 @@ class SiteSignupJoinTests(TestCase):
         self.assertIsNone(fresh.verified_at)
         self.assertIsNone(fresh.activated_at)
 
-    def test_register_rejects_site_not_verified(self):
+    def test_register_rejects_unconfigured_draft_site(self):
         draft_site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_join_draft_" + uuid.uuid4().hex,
@@ -107,6 +107,28 @@ class SiteSignupJoinTests(TestCase):
         self.assertEqual(r.data.get("site_status"), Site.Status.DRAFT)
         self.assertFalse(User.objects.filter(email=email).exists())
         self.assertEqual(SiteMembership.objects.filter(site=draft_site).count(), 0)
+
+    def test_register_allows_configured_draft_site(self):
+        draft_site = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_draft_ready_" + uuid.uuid4().hex,
+            allowed_origins=["https://lumoref.ru"],
+        )
+        self.assertEqual(draft_site.status, Site.Status.DRAFT)
+        email = "draft-ready-member@example.com"
+        r = self.client.post(
+            "/users/register/",
+            data={
+                "email": email,
+                "password": "joinpw123456",
+                "site_public_id": str(draft_site.public_id),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201)
+        user = User.objects.get(email=email)
+        membership = SiteMembership.objects.get(site=draft_site, user=user)
+        self.assertEqual(membership.joined_via, SiteMembership.JoinedVia.CTA_SIGNUP)
 
     def test_register_with_site_public_id_creates_site_membership(self):
         email = "site-member@example.com"
@@ -355,7 +377,7 @@ class LoggedInSiteCtaJoinTests(TestCase):
         self.assertEqual(r2.data["status"], "already_joined")
         self.assertEqual(SiteMembership.objects.filter(site=self.site).count(), 1)
 
-    def test_join_rejects_draft_site(self):
+    def test_join_rejects_unconfigured_draft_site(self):
         draft = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_join_draft_api_" + uuid.uuid4().hex,
@@ -364,6 +386,17 @@ class LoggedInSiteCtaJoinTests(TestCase):
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.data.get("detail"), "site_not_joinable")
         self.assertEqual(r.data.get("site_status"), Site.Status.DRAFT)
+
+    def test_join_allows_configured_draft_site(self):
+        draft = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_join_draft_api_ready_" + uuid.uuid4().hex,
+            allowed_origins=["https://lumoref.ru"],
+        )
+        r = self._post_join(self.member_user, site_public_id=str(draft.public_id))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["status"], "joined")
+        SiteMembership.objects.get(site=draft, user=self.member_user)
 
     def test_join_rejects_unknown_site(self):
         r = self._post_join(
