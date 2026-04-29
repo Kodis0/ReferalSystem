@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from .models import Site
 
 _CTA_SITE_LABEL_CONFIG_KEYS = (
-    "display_name",
+    "site_display_name",
     "site_title",
     "title",
     "brand_name",

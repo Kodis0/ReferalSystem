@@ -40,6 +40,7 @@ describe("Agent program detail page", () => {
             program: {
               site_public_id: SITE_ID,
               site_display_label: "Demo Shop",
+              site_origin_label: "demo.example",
               joined_at: "2026-01-10T12:00:00+00:00",
               site_status: "verified",
             },
@@ -52,7 +53,7 @@ describe("Agent program detail page", () => {
     renderDetail();
 
     await waitFor(() => {
-      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("Demo Shop");
+      expect(screen.getByTestId("agent-program-title")).toHaveTextContent("demo.example");
     });
     expect(screen.getByText(/Дата подключения:/i)).toBeInTheDocument();
     expect(screen.getByText("verified")).toBeInTheDocument();

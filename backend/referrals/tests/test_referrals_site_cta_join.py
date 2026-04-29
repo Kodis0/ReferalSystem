@@ -24,11 +24,11 @@ class SiteCtaDisplayLabelTests(TestCase):
             password="secret12",
         )
 
-    def test_prefers_config_json_display_name(self):
+    def test_prefers_config_json_site_display_name(self):
         site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_cta_lbl_1_" + uuid.uuid4().hex,
-            config_json={"display_name": "  My Shop  "},
+            config_json={"site_display_name": "  My Shop  "},
         )
         self.assertEqual(site_cta_display_label(site), "My Shop")
 
@@ -113,6 +113,7 @@ class SiteSignupJoinTests(TestCase):
             owner=self.owner,
             publishable_key="pk_join_draft_ready_" + uuid.uuid4().hex,
             allowed_origins=["https://lumoref.ru"],
+            widget_enabled=False,
         )
         self.assertEqual(draft_site.status, Site.Status.DRAFT)
         email = "draft-ready-member@example.com"
@@ -172,7 +173,7 @@ class SiteSignupJoinTests(TestCase):
         self.assertTrue(project.avatar_data_url.startswith("data:image/svg+xml;base64,"))
 
     def test_register_cta_join_includes_site_display_label_from_config(self):
-        self.site.config_json = {"display_name": "Магазин Омега"}
+        self.site.config_json = {"site_display_name": "Магазин Омега"}
         self.site.save(update_fields=["config_json", "updated_at"])
         email = "site-member-labelled@example.com"
         r = self.client.post(
@@ -392,6 +393,7 @@ class LoggedInSiteCtaJoinTests(TestCase):
             owner=self.owner,
             publishable_key="pk_join_draft_api_ready_" + uuid.uuid4().hex,
             allowed_origins=["https://lumoref.ru"],
+            widget_enabled=False,
         )
         r = self._post_join(self.member_user, site_public_id=str(draft.public_id))
         self.assertEqual(r.status_code, 200)

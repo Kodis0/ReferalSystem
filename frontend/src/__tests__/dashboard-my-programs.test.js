@@ -55,6 +55,7 @@ describe("Dashboard My Programs", () => {
               {
                 site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
                 site_display_label: "Demo Shop",
+                site_origin_label: "demo.example",
                 joined_at: "2026-01-10T12:00:00+00:00",
                 site_status: "verified",
               },
@@ -72,8 +73,9 @@ describe("Dashboard My Programs", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Demo Shop")).toBeInTheDocument();
+      expect(screen.getByText("demo.example")).toBeInTheDocument();
     });
+    expect(screen.queryByText("Demo Shop")).not.toBeInTheDocument();
     expect(screen.getByText(/Дата подключения:/)).toBeInTheDocument();
     expect(screen.getByText("verified")).toBeInTheDocument();
     const link = screen.getByTestId("agent-program-list-link");

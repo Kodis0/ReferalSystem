@@ -29,6 +29,7 @@ from referrals.services import (
     get_site_by_public_id,
     join_site_membership_cta_logged_in,
     link_session_attributions_to_user,
+    owner_site_list_origin_display,
     site_allows_cta_signup_membership,
     site_cta_display_label,
 )
@@ -349,10 +350,12 @@ class MyProgramsView(APIView):
         programs = []
         for m in qs:
             site = m.site
+            _, site_origin_label = owner_site_list_origin_display(site)
             programs.append(
                 {
                     "site_public_id": str(site.public_id),
                     "site_display_label": site_cta_display_label(site),
+                    "site_origin_label": site_origin_label,
                     "joined_at": m.created_at.isoformat() if m.created_at else None,
                     "site_status": site.status,
                 }
@@ -379,9 +382,11 @@ class MyProgramDetailView(APIView):
         if membership is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         site = membership.site
+        _, site_origin_label = owner_site_list_origin_display(site)
         payload = {
             "site_public_id": str(site.public_id),
             "site_display_label": site_cta_display_label(site),
+            "site_origin_label": site_origin_label,
             "joined_at": membership.created_at.isoformat() if membership.created_at else None,
             "site_status": site.status,
         }

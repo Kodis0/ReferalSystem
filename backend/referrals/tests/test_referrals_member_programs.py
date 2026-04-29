@@ -48,8 +48,8 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r.status_code, 401)
 
     def test_returns_only_current_user_memberships_newest_first(self):
-        site_a = self._site("a", config_json={"display_name": "Shop Alpha"})
-        site_b = self._site("b", config_json={"display_name": "Shop Beta"})
+        site_a = self._site("a", config_json={"site_display_name": "Shop Alpha"})
+        site_b = self._site("b", config_json={"site_display_name": "Shop Beta"})
         m_a = SiteMembership.objects.create(site=site_a, user=self.user_a)
         m_b = SiteMembership.objects.create(site=site_b, user=self.user_a)
         SiteMembership.objects.filter(pk=m_a.pk).update(
@@ -69,6 +69,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(len(programs), 2)
         self.assertEqual(programs[0]["site_public_id"], str(site_b.public_id))
         self.assertEqual(programs[0]["site_display_label"], "Shop Beta")
+        self.assertEqual(programs[0]["site_origin_label"], "")
         self.assertEqual(programs[0]["site_status"], Site.Status.VERIFIED)
         self.assertEqual(programs[1]["site_public_id"], str(site_a.public_id))
         self.assertEqual(programs[1]["site_display_label"], "Shop Alpha")
@@ -83,13 +84,27 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["programs"], [])
 
+    def test_member_label_uses_site_not_project_display_name(self):
+        site = self._site(
+            "site_label",
+            allowed_origins=["https://site-only.example"],
+            config_json={"display_name": "Общий проект"},
+        )
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get("/users/me/programs/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["programs"][0]["site_display_label"], "site-only.example")
+        self.assertEqual(r.data["programs"][0]["site_origin_label"], "site-only.example")
+
     def test_program_detail_requires_auth(self):
-        site = self._site("detail_auth", config_json={"display_name": "Detail Shop"})
+        site = self._site("detail_auth", config_json={"site_display_name": "Detail Shop"})
         r = self.api.get(f"/users/me/programs/{site.public_id}/")
         self.assertEqual(r.status_code, 401)
 
     def test_program_detail_own_membership(self):
-        site = self._site("detail_own", config_json={"display_name": "Detail Own"})
+        site = self._site("detail_own", config_json={"site_display_name": "Detail Own"})
         m = SiteMembership.objects.create(site=site, user=self.user_a)
         SiteMembership.objects.filter(pk=m.pk).update(
             created_at=timezone.now() - timedelta(days=3)
@@ -102,11 +117,12 @@ class MyProgramsApiTests(TestCase):
         prog = r.data["program"]
         self.assertEqual(prog["site_public_id"], str(site.public_id))
         self.assertEqual(prog["site_display_label"], "Detail Own")
+        self.assertEqual(prog["site_origin_label"], "")
         self.assertEqual(prog["site_status"], Site.Status.VERIFIED)
         self.assertEqual(prog["joined_at"], m.created_at.isoformat())
 
     def test_program_detail_other_user_forbidden(self):
-        site = self._site("detail_other", config_json={"display_name": "Other Only"})
+        site = self._site("detail_other", config_json={"site_display_name": "Other Only"})
         SiteMembership.objects.create(site=site, user=self.user_b)
 
         self.api.force_authenticate(user=self.user_a)

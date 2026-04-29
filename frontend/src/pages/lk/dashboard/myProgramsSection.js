@@ -12,6 +12,14 @@ function formatJoinedAt(iso) {
   });
 }
 
+function programSiteLabel(program) {
+  const originLabel = typeof program?.site_origin_label === "string" ? program.site_origin_label.trim() : "";
+  if (originLabel) return originLabel;
+  const displayLabel = typeof program?.site_display_label === "string" ? program.site_display_label.trim() : "";
+  if (displayLabel) return displayLabel;
+  return `Программа · ${program?.site_public_id || "—"}`;
+}
+
 /**
  * Member-facing list of referral programs (SiteMembership) for the logged-in user.
  */
@@ -92,7 +100,7 @@ export function MyProgramsSection() {
               >
                 <div className="lk-dashboard__programs-item-main">
                   <span className="lk-dashboard__programs-label">
-                    {p.site_display_label || `Программа · ${p.site_public_id}`}
+                    {programSiteLabel(p)}
                   </span>
                   {p.site_status ? (
                     <span className="lk-dashboard__programs-status">{p.site_status}</span>

@@ -13,6 +13,14 @@ function formatJoinedAt(iso) {
   });
 }
 
+function programSiteLabel(program) {
+  const originLabel = typeof program?.site_origin_label === "string" ? program.site_origin_label.trim() : "";
+  if (originLabel) return originLabel;
+  const displayLabel = typeof program?.site_display_label === "string" ? program.site_display_label.trim() : "";
+  if (displayLabel) return displayLabel;
+  return `Программа · ${program?.site_public_id || "—"}`;
+}
+
 /**
  * Member-facing detail for one agent program (SiteMembership) by site public_id.
  */
@@ -99,7 +107,7 @@ export default function AgentProgramDetailPage() {
       {!loading && program && (
         <>
           <h1 className="lk-dashboard__title" data-testid="agent-program-title">
-            {program.site_display_label || `Программа · ${program.site_public_id}`}
+            {programSiteLabel(program)}
           </h1>
           <p className="lk-dashboard__subtitle">
             Вы участвуете в агентской программе. Подробности и акции смотрите на сайте организатора.
