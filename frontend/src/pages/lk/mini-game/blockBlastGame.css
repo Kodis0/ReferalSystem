@@ -1377,7 +1377,7 @@
 }
 
 /* Область выбора фигур: скругление и фон без обводки */
-/* Высота слота: max фигура в SHAPE_POOL — 4×cell (22px) + паддинги слота 6px×2 */
+/* Высота слота: max фигура в SHAPE_POOL — до 4×cell по стороне (22px) + паддинги слота 6px×2 */
 .block-blast-game__pieces {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

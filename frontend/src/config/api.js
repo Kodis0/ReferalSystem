@@ -1,4 +1,21 @@
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+/**
+ * База URL для fetch к Django API.
+ * В `npm start` (NODE_ENV=development) используем пустую строку: запросы идут на тот же origin,
+ * что и SPA, а `package.json` → `"proxy"` пересылает их на бэкенд — без CORS и без привязки к списку origins в Django.
+ * Production-сборка задаёт `REACT_APP_API_URL` при `npm run build` (см. deploy/deploy.sh).
+ */
+function resolveApiBase() {
+  if (process.env.NODE_ENV === "development") {
+    return "";
+  }
+  const explicit = process.env.REACT_APP_API_URL;
+  if (explicit != null && String(explicit).trim() !== "") {
+    return String(explicit).replace(/\/$/, "");
+  }
+  return "http://localhost:8000";
+}
+
+const API_BASE = resolveApiBase();
 
 export const API_ENDPOINTS = {
   platformServiceStatus: `${API_BASE}/referrals/platform-service-status/`,

@@ -46,6 +46,9 @@ backend/.env
 frontend/.env
 frontend/.env.production
 
+# Accidental exports from Cursor workspace storage into static/images (long paths break Git on Windows).
+frontend/src/static/images/c__Users_*
+
 # --- OS & editors ---
 .DS_Store
 Thumbs.db

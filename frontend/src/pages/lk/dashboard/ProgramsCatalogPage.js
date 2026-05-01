@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { LK_PROGRAM_LISTS_REFETCH_EVENT, LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
+import programsCatalogHeroArt from "../../../static/images/programs-catalog-hero-megaphone.png";
 import "../lk.css";
 import "../owner-programs/owner-programs.css";
 import "./dashboard.css";
@@ -449,6 +450,9 @@ export default function ProgramsCatalogPage() {
                 Выберите подходящую программу, вступите в неё и получите персональную ссылку. Делитесь ссылкой с
                 аудиторией — все привлечённые клиенты будут закрепляться за вами.
               </p>
+            </div>
+            <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">
+              <img src={programsCatalogHeroArt} alt="" decoding="async" />
             </div>
           </div>
         </div>

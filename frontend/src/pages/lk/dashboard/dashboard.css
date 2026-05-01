@@ -101,17 +101,6 @@
   font-size: clamp(15px, 2.35vw, 24px);
 }
 
-/* Та же вертикальная «дорожка», что у баннера с иллюстрацией: max-height картинки 220px + align-items:center у inner */
-.lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-inner {
-  min-height: 220px;
-}
-
-@media (max-width: 640px) {
-  .lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-inner {
-    min-height: 0;
-  }
-}
-
 .lk-dashboard_my-programs-page .lk-dashboard__programs {
   margin-top: 0;
 }
