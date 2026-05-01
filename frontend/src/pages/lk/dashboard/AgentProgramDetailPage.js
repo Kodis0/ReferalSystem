@@ -42,6 +42,24 @@ function programSiteHref(program) {
   return "";
 }
 
+/** Ссылка для распространения: тот же origin, что у сайта в шапке карточки, + ?ref= */
+function memberReferralShareUrl(program) {
+  const ref = typeof program?.ref_code === "string" ? program.ref_code.trim() : "";
+  if (!ref) {
+    return typeof program?.referral_link === "string" ? program.referral_link.trim() : "";
+  }
+  const cardHref = programSiteHref(program);
+  if (cardHref) {
+    try {
+      const u = new URL(cardHref);
+      return `${u.origin}/?ref=${encodeURIComponent(ref)}`;
+    } catch {
+      /* fall through */
+    }
+  }
+  return typeof program?.referral_link === "string" ? program.referral_link.trim() : "";
+}
+
 function programDescription(program) {
   const value = typeof program?.site_description === "string" ? program.site_description.trim() : "";
   return value || "Описание программы пока не добавлено.";
@@ -66,6 +84,14 @@ function formatParticipantsCount(value) {
   return numberValue.toLocaleString("ru-RU");
 }
 
+/** API may send decimal as string or number. */
+function formatReferrerMoneyRub(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  if (!Number.isFinite(n)) return String(value);
+  return `${n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
+}
+
 function programAvatarLetter(label) {
   const value = typeof label === "string" ? label.trim() : "";
   return value.slice(0, 1).toUpperCase() || "P";
@@ -85,7 +111,7 @@ export default function AgentProgramDetailPage() {
   const [joinError, setJoinError] = useState("");
 
   const loadProgram = useCallback(
-    async ({ cancelled } = {}) => {
+    async ({ cancelled, softRefresh } = {}) => {
       const token = localStorage.getItem("access_token");
       if (!token || !sitePublicId) {
         setProgram(null);
@@ -93,11 +119,14 @@ export default function AgentProgramDetailPage() {
         setErrorKind(!token ? "auth" : "not_found");
         return;
       }
-      setLoading(true);
-      setErrorKind(null);
-      setProgram(null);
-      setCopyHint("");
-      setJoinError("");
+      const soft = Boolean(softRefresh);
+      if (!soft) {
+        setLoading(true);
+        setErrorKind(null);
+        setProgram(null);
+        setCopyHint("");
+        setJoinError("");
+      }
 
       try {
         const res = await fetch(API_ENDPOINTS.programDetail(sitePublicId), {
@@ -107,6 +136,7 @@ export default function AgentProgramDetailPage() {
         if (res.status === 404) {
           if (cancelled?.()) return;
           setErrorKind("not_found");
+          setProgram(null);
           return;
         }
         if (!res.ok) throw new Error("fetch_failed");
@@ -115,11 +145,13 @@ export default function AgentProgramDetailPage() {
         const p = data && data.program;
         if (!p || !p.site_public_id) {
           setErrorKind("not_found");
+          setProgram(null);
           return;
         }
         setProgram(p);
+        if (soft) setErrorKind(null);
       } catch {
-        if (!cancelled?.()) setErrorKind("network");
+        if (!cancelled?.() && !soft) setErrorKind("network");
       } finally {
         if (!cancelled?.()) setLoading(false);
       }
@@ -129,7 +161,7 @@ export default function AgentProgramDetailPage() {
 
   useEffect(() => {
     let isCancelled = false;
-    loadProgram({ cancelled: () => isCancelled });
+    loadProgram({ cancelled: () => isCancelled, softRefresh: false });
     return () => {
       isCancelled = true;
     };
@@ -140,7 +172,7 @@ export default function AgentProgramDetailPage() {
     if (errorKind === "not_found") return undefined;
     let isCancelled = false;
     const tick = () => {
-      void loadProgram({ cancelled: () => isCancelled });
+      void loadProgram({ cancelled: () => isCancelled, softRefresh: true });
     };
     const onVisibility = () => {
       if (document.visibilityState === "visible") tick();
@@ -160,11 +192,12 @@ export default function AgentProgramDetailPage() {
     };
   }, [loadProgram, sitePublicId, errorKind]);
 
+  const referralShareUrl = program ? memberReferralShareUrl(program) : "";
+
   const onCopyReferralLink = async () => {
-    const link = program?.referral_link;
-    if (!link) return;
+    if (!referralShareUrl) return;
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(referralShareUrl);
       setCopyHint("Скопировано");
       setTimeout(() => setCopyHint(""), 2000);
     } catch {
@@ -187,7 +220,7 @@ export default function AgentProgramDetailPage() {
         body: JSON.stringify({ site_public_id: sitePublicId }),
       });
       if (!res.ok) throw new Error("program_join_failed");
-      await loadProgram();
+      await loadProgram({ softRefresh: true });
     } catch {
       setJoinError("Не удалось присоединиться к программе. Попробуйте позже.");
     } finally {
@@ -198,9 +231,13 @@ export default function AgentProgramDetailPage() {
   const backTo = location.state?.from === "/lk/my-programs" ? "/lk/my-programs" : "/lk/programs";
   const lifecycle = programLifecycleStatus(program);
   const canJoinProgram = lifecycle.tone === "success";
+  const joined = Boolean(program?.joined);
 
   return (
-    <div className="lk-dashboard lk-dashboard__program-detail" data-testid="agent-program-detail">
+    <div
+      className={`lk-dashboard lk-dashboard__program-detail${joined ? " lk-dashboard__program-detail_joined lk-partner" : ""}`}
+      data-testid="agent-program-detail"
+    >
       <div className="page__returnButton lk-dashboard__program-detail-back">
         <Link to={backTo} className="tw-link link_primary link_s">
           <svg xmlns="http://www.w3.org/2000/svg" width="7" height="13" fill="none" viewBox="0 0 7 13" aria-hidden="true">
@@ -268,6 +305,34 @@ export default function AgentProgramDetailPage() {
               <p>{programDescription(program)}</p>
             </div>
 
+            {program.joined ? (
+              <nav
+                className="owner-programs__tabs lk-dashboard__program-detail-shell-tabs"
+                aria-label="Дашборд программы"
+                role="tablist"
+                data-testid="agent-program-shell-tabs"
+              >
+                <span className="owner-programs__tab owner-programs__tab_active" role="tab" aria-selected="true">
+                  Дашборд
+                </span>
+              </nav>
+            ) : null}
+
+            {program.joined ? (
+              <div className="lk-dashboard__program-earnings" data-testid="agent-program-referrer-money">
+                <span className="lk-dashboard__program-earnings-label">Доход по вашей ссылке</span>
+                <div className="lk-dashboard__program-earnings-row">
+                  <strong className="lk-dashboard__program-earnings-commission">
+                    {formatReferrerMoneyRub(program.referrer_commission_total)}
+                  </strong>
+                  <span className="lk-dashboard__program-earnings-sales" title="Сумма оплаченных заказов клиентов по вашей ссылке">
+                    <span className="lk-dashboard__program-earnings-sales-prefix">Продажи </span>
+                    {formatReferrerMoneyRub(program.referrer_sales_total)}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
             <div className="lk-dashboard__program-metrics">
               <div className="lk-dashboard__program-metric">
                 <span>Вознаграждение</span>
@@ -286,6 +351,7 @@ export default function AgentProgramDetailPage() {
                 <strong>{lifecycle.label}</strong>
               </div>
             </div>
+
             {lifecycle.tone !== "success" ? (
               <p className="lk-dashboard__program-card-joined" role="status">
                 {lifecycle.description}
@@ -302,12 +368,12 @@ export default function AgentProgramDetailPage() {
                 {program.ref_code ? (
                   <p className="lk-dashboard__program-card-joined">Реферальный код: {program.ref_code}</p>
                 ) : null}
-                {program.referral_link ? (
+                {referralShareUrl ? (
                   <div className="lk-dashboard__program-referral-link">
                     <input
                       className="lk-dashboard__program-referral-input"
                       readOnly
-                      value={program.referral_link}
+                      value={referralShareUrl}
                       aria-label="Реферальная ссылка"
                     />
                     <button type="button" className="lk-dashboard__program-copy-btn" onClick={onCopyReferralLink}>

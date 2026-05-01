@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ListFilter, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
@@ -34,6 +35,48 @@ function programAvatarLetter(label) {
   return (value.slice(0, 1).toUpperCase() || "P");
 }
 
+const PROGRAMS_CATALOG_SKEL_ROW_KEYS = [0, 1, 2, 3, 4];
+
+function ProgramsCatalogLoadingSkeleton() {
+  return (
+    <div
+      className="lk-dashboard__programs-catalog-skel"
+      role="status"
+      aria-busy="true"
+      aria-label="Загрузка каталога программ"
+      data-testid="programs-catalog-loading"
+    >
+      <div className="lk-dashboard__programs-catalog-skel-toolbar">
+        <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-search" aria-hidden />
+        <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-filters-btn" aria-hidden />
+      </div>
+      <div className="lk-dashboard__programs-catalog-skel-section">
+        <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-section-title" aria-hidden />
+      </div>
+      <ul className="lk-dashboard__programs-list lk-dashboard__programs-catalog-skel-list">
+        {PROGRAMS_CATALOG_SKEL_ROW_KEYS.map((key) => (
+          <li key={key} className="lk-dashboard__programs-item">
+            <div className="lk-dashboard__programs-catalog-skel-row">
+              <div className="lk-dashboard__programs-catalog-skel-avatar-wrap">
+                <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-avatar" aria-hidden />
+              </div>
+              <div className="lk-dashboard__programs-catalog-skel-middle">
+                <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-dot" aria-hidden />
+                <div className="lk-dashboard__programs-catalog-skel-text" aria-hidden>
+                  <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-chip lk-dashboard__programs-catalog-skel-chip_title" />
+                  <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-chip lk-dashboard__programs-catalog-skel-chip_status" />
+                  <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-chip lk-dashboard__programs-catalog-skel-chip_pct" />
+                </div>
+              </div>
+              <span className="owner-programs__skel lk-dashboard__programs-catalog-skel-menu" aria-hidden />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function ProgramsCatalogPage() {
   const navigate = useNavigate();
   const [programs, setPrograms] = useState(null);
@@ -48,6 +91,8 @@ export default function ProgramsCatalogPage() {
   const [activeMenuSiteId, setActiveMenuSiteId] = useState("");
   const [joiningSiteId, setJoiningSiteId] = useState("");
   const [leavingSiteId, setLeavingSiteId] = useState("");
+  const menuDropdownPortalRef = useRef(null);
+  const [menuAnchorRect, setMenuAnchorRect] = useState(null);
 
   useEffect(() => {
     if (!filtersPanelOpen) return undefined;
@@ -95,6 +140,7 @@ export default function ProgramsCatalogPage() {
     function onPointerDown(event) {
       const t = event.target;
       if (!(t instanceof Element)) return;
+      if (menuDropdownPortalRef.current?.contains(t)) return;
       if (t.closest("[data-catalog-program-menu]")) return;
       setActiveMenuSiteId("");
     }
@@ -168,14 +214,35 @@ export default function ProgramsCatalogPage() {
     };
   }, [catalogListFetchInit]);
 
+  const applyProgramStatusEvent = useCallback((detail) => {
+    const changedSiteId = String(detail?.site_public_id || "").trim();
+    if (!changedSiteId) return;
+    const hasStatus = typeof detail.site_status === "string" && detail.site_status.trim();
+    const hasWidgetEnabled = typeof detail.widget_enabled === "boolean";
+    const hasProgramActive = typeof detail.program_active === "boolean";
+    if (!hasStatus && !hasWidgetEnabled && !hasProgramActive) return;
+    setPrograms((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      let changed = false;
+      const next = prev.map((program) => {
+        if (String(program?.site_public_id || "").trim() !== changedSiteId) return program;
+        changed = true;
+        return {
+          ...program,
+          ...(hasStatus ? { site_status: detail.site_status.trim() } : {}),
+          ...(hasWidgetEnabled ? { widget_enabled: detail.widget_enabled } : {}),
+          ...(hasProgramActive ? { program_active: detail.program_active } : {}),
+        };
+      });
+      if (changed) programsRef.current = next;
+      return changed ? next : prev;
+    });
+  }, []);
+
   useEffect(() => {
     function onProgramsAvatarSourcesUpdated(event) {
-      const changedSiteId = String(event?.detail?.site_public_id || "").trim();
-      if (
-        changedSiteId &&
-        !programsRef.current.some((program) => String(program?.site_public_id || "").trim() === changedSiteId)
-      ) {
-        return;
+      if (event?.type === LUMOREF_SITE_STATUS_CHANGED_EVENT) {
+        applyProgramStatusEvent(event.detail);
       }
       refetchPrograms();
     }
@@ -189,7 +256,7 @@ export default function ProgramsCatalogPage() {
       window.removeEventListener("lk-account-avatar-updated", onProgramsAvatarSourcesUpdated);
       window.removeEventListener("lk-site-avatar-updated", onProgramsAvatarSourcesUpdated);
     };
-  }, [refetchPrograms]);
+  }, [applyProgramStatusEvent, refetchPrograms]);
 
   useEffect(() => {
     function onVisibilityChange() {
@@ -205,8 +272,15 @@ export default function ProgramsCatalogPage() {
   }, [refetchPrograms]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
+  /** Уже подключённые программы показываются только в «Мои программы». */
+  const programsExcludingJoined = useMemo(() => {
+    if (!Array.isArray(programs)) return null;
+    return programs.filter((p) => !p.joined);
+  }, [programs]);
+
   const { filteredPrograms, sortedFilteredPrograms } = getCatalogFilteredSortedPrograms(
-    programs,
+    programsExcludingJoined ?? [],
     normalizedSearchQuery,
     commissionFilter,
     participantsFilter,
@@ -241,6 +315,33 @@ export default function ProgramsCatalogPage() {
     }
   };
 
+  useLayoutEffect(() => {
+    if (!activeMenuSiteId) {
+      setMenuAnchorRect(null);
+      return undefined;
+    }
+    const sync = () => {
+      const el = document.querySelector(`[data-testid="programs-catalog-menu-trigger-${activeMenuSiteId}"]`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setMenuAnchorRect({
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+        left: r.left,
+        width: r.width,
+        height: r.height,
+      });
+    };
+    sync();
+    window.addEventListener("scroll", sync, true);
+    window.addEventListener("resize", sync);
+    return () => {
+      window.removeEventListener("scroll", sync, true);
+      window.removeEventListener("resize", sync);
+    };
+  }, [activeMenuSiteId]);
+
   const handleLeaveProgram = async (event, sitePublicId) => {
     event.stopPropagation();
     const token = localStorage.getItem("access_token");
@@ -271,9 +372,73 @@ export default function ProgramsCatalogPage() {
     }
   };
 
+  const portalProgram = useMemo(() => {
+    if (!activeMenuSiteId || !Array.isArray(programs)) return null;
+    return sortedFilteredPrograms.find((p) => p.site_public_id === activeMenuSiteId) || null;
+  }, [activeMenuSiteId, sortedFilteredPrograms, programs]);
+
+  useEffect(() => {
+    if (!activeMenuSiteId) return;
+    if (!sortedFilteredPrograms.some((p) => p.site_public_id === activeMenuSiteId)) {
+      setActiveMenuSiteId("");
+    }
+  }, [sortedFilteredPrograms, activeMenuSiteId]);
+
+  const menuPortal =
+    activeMenuSiteId && menuAnchorRect && portalProgram && typeof window !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuDropdownPortalRef}
+            className="owner-programs__service-card-menu-dropdown owner-programs__service-card-menu-dropdown_portal"
+            style={{
+              position: "fixed",
+              top: menuAnchorRect.bottom + 8,
+              right: window.innerWidth - menuAnchorRect.right,
+              zIndex: 6000,
+            }}
+            role="menu"
+          >
+            {Boolean(portalProgram.joined) ? (
+              <button
+                type="button"
+                className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_danger"
+                role="menuitem"
+                disabled={leavingSiteId === portalProgram.site_public_id}
+                onClick={(event) => handleLeaveProgram(event, portalProgram.site_public_id)}
+              >
+                {leavingSiteId === portalProgram.site_public_id ? "Выходим…" : "Выйти"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="owner-programs__service-card-menu-item"
+                role="menuitem"
+                disabled={
+                  joiningSiteId === portalProgram.site_public_id ||
+                  programLifecycleStatus(portalProgram).tone !== "success"
+                }
+                onClick={(event) => handleJoinProgram(event, portalProgram.site_public_id)}
+              >
+                {joiningSiteId === portalProgram.site_public_id
+                  ? "Вступаем…"
+                  : programLifecycleStatus(portalProgram).tone === "success"
+                    ? "Вступить"
+                    : "Программа временно недоступна"}
+              </button>
+            )}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
+    <>
     <div className="lk-dashboard">
-      <section className="lk-dashboard__programs lk-dashboard__programs_catalog" aria-labelledby="programs-catalog-heading">
+      <section
+        className="lk-dashboard__programs lk-dashboard__programs_catalog"
+        aria-labelledby="programs-catalog-heading"
+        aria-busy={programs === null && !error ? true : undefined}
+      >
         <h1 id="programs-catalog-heading" className="lk-dashboard__programs-title">
           Каталог реферальных программ
         </h1>
@@ -281,7 +446,7 @@ export default function ProgramsCatalogPage() {
           Выберите программу, вступите в неё и получите персональную ссылку для привлечения клиентов.
         </p>
 
-        {programs !== null && !error && programs.length > 0 ? (
+        {programs !== null && !error && programsExcludingJoined && programsExcludingJoined.length > 0 ? (
           <>
             <div className="lk-dashboard__programs-toolbar">
               <label className="lk-dashboard__programs-search" aria-label="Поиск программ">
@@ -353,13 +518,13 @@ export default function ProgramsCatalogPage() {
             </div>
             <div className="lk-dashboard__programs-catalog-section-title" data-testid="programs-catalog-section-title">
               <h2 className="lk-dashboard__programs-catalog-section-heading">
-                Программы <span className="lk-dashboard__programs-catalog-section-count">{programs.length}</span>
+                Программы <span className="lk-dashboard__programs-catalog-section-count">{programsExcludingJoined.length}</span>
               </h2>
             </div>
           </>
         ) : null}
 
-        {programs === null && !error ? <p className="lk-dashboard__programs-muted">Загрузка…</p> : null}
+        {programs === null && !error ? <ProgramsCatalogLoadingSkeleton /> : null}
         {error ? (
           <p className="lk-dashboard__programs-muted">
             Не удалось загрузить список программ. Обновите страницу или попробуйте позже.
@@ -371,7 +536,16 @@ export default function ProgramsCatalogPage() {
             <p>Когда владельцы сайтов опубликуют реферальные программы, они появятся здесь.</p>
           </div>
         ) : null}
-        {programs !== null && !error && programs.length > 0 && filteredPrograms.length === 0 ? (
+        {programs !== null && !error && programs.length > 0 && programsExcludingJoined && programsExcludingJoined.length === 0 ? (
+          <div className="lk-dashboard__programs-muted">
+            <p>В каталоге нет программ для подключения — вы уже участвуете во всех доступных.</p>
+          </div>
+        ) : null}
+        {programs !== null &&
+        !error &&
+        programsExcludingJoined &&
+        programsExcludingJoined.length > 0 &&
+        filteredPrograms.length === 0 ? (
           <p className="lk-dashboard__programs-muted">По вашему запросу программ не найдено.</p>
         ) : null}
 
@@ -383,11 +557,9 @@ export default function ProgramsCatalogPage() {
               const catalogOriginLabel = programCatalogSiteOriginLabel(p);
               const catalogSiteHref = programCatalogExternalSiteHref(p);
               const menuOpen = activeMenuSiteId === p.site_public_id;
-              const joined = Boolean(p.joined);
               const busyJoin = joiningSiteId === p.site_public_id;
               const busyLeave = leavingSiteId === p.site_public_id;
               const status = programLifecycleStatus(p);
-              const canJoin = status.tone === "success";
               return (
                 <li key={p.site_public_id} className="lk-dashboard__programs-item">
                   <div
@@ -459,31 +631,6 @@ export default function ProgramsCatalogPage() {
                         >
                           <ServiceActionsIcon />
                         </button>
-                        {menuOpen ? (
-                          <div className="owner-programs__service-card-menu-dropdown" role="menu">
-                            {joined ? (
-                              <button
-                                type="button"
-                                className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_danger"
-                                role="menuitem"
-                                disabled={busyLeave}
-                                onClick={(event) => handleLeaveProgram(event, p.site_public_id)}
-                              >
-                                {busyLeave ? "Выходим…" : "Выйти"}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="owner-programs__service-card-menu-item"
-                                role="menuitem"
-                                disabled={busyJoin || !canJoin}
-                                onClick={(event) => handleJoinProgram(event, p.site_public_id)}
-                              >
-                                {busyJoin ? "Вступаем…" : canJoin ? "Вступить" : "Программа временно недоступна"}
-                              </button>
-                            )}
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -494,5 +641,7 @@ export default function ProgramsCatalogPage() {
         ) : null}
       </section>
     </div>
+    {menuPortal}
+    </>
   );
 }

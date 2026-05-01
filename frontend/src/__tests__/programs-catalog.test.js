@@ -19,7 +19,7 @@ describe("Programs Catalog", () => {
     jest.restoreAllMocks();
   });
 
-  it("renders all programs and joined state", async () => {
+  it("hides joined programs from catalog list", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes("/users/programs/")) {
         return Promise.resolve({
@@ -61,15 +61,15 @@ describe("Programs Catalog", () => {
     expect(screen.getByRole("heading", { name: "Каталог реферальных программ" })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("Demo Shop")).toBeInTheDocument();
       expect(screen.getByText("Other Shop")).toBeInTheDocument();
     });
+    expect(screen.queryByText("Demo Shop")).not.toBeInTheDocument();
     expect(screen.queryByText("Подключена")).not.toBeInTheDocument();
     expect(screen.queryByText(/Срок закрепления:/i)).not.toBeInTheDocument();
 
     const links = screen.getAllByTestId("programs-catalog-list-link");
-    expect(links[0]).toHaveAttribute("data-nav-target", "/lk/referral-program/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-    expect(links[1]).toHaveAttribute("data-nav-target", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("data-nav-target", "/lk/referral-program/bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
   });
 
   it("renders inactive program status without green dot", async () => {
@@ -190,13 +190,14 @@ describe("Programs Catalog", () => {
         }),
       );
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    /* Initial fetch + list refetch on event (rows unchanged for unrelated site_public_id). */
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     unmount();
     act(() => {
       window.dispatchEvent(new CustomEvent("lumoref:site-status-changed"));
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("refetches catalog on visibilitychange visible", async () => {
@@ -420,8 +421,7 @@ describe("Programs Catalog", () => {
                 site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
                 site_display_label: "Demo Shop",
                 site_origin_label: "demo.example",
-                joined: true,
-                joined_at: "2026-01-10T12:00:00+00:00",
+                joined: false,
                 site_status: "verified",
                 commission_percent: "8",
                 participants_count: 3,

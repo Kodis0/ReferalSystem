@@ -94,6 +94,228 @@
   margin-top: 0;
 }
 
+.lk-dashboard_my-programs-page .lk-dashboard__programs {
+  margin-top: 0;
+}
+
+/* Баннер «каталог» на странице агентских программ */
+.lk-dashboard__my-programs-catalog-banner {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 33px;
+  border-radius: 12px;
+  background: #242f3d;
+}
+
+.lk-dashboard__my-programs-catalog-banner-inner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px 32px;
+}
+
+.lk-dashboard__my-programs-catalog-banner-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: min(480px, 100%);
+}
+
+.lk-dashboard__my-programs-catalog-banner-title {
+  margin: 0 0 10px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #ffffff;
+}
+
+.lk-dashboard__my-programs-catalog-banner-sub {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #7f91a4;
+}
+
+.lk-dashboard__my-programs-catalog-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 152px;
+  height: 37px;
+  margin-top: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: none;
+  background: #7177f8;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lk-dashboard__my-programs-catalog-banner-cta:hover,
+.lk-dashboard__my-programs-catalog-banner-cta:focus-visible {
+  background: #6268e8;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.lk-dashboard__my-programs-catalog-banner-cta:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.45);
+  outline-offset: 2px;
+}
+
+.lk-dashboard__my-programs-catalog-banner-art {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: min(352px, 44vw);
+}
+
+.lk-dashboard__my-programs-catalog-banner-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: contain;
+  /* Чёрный фон в PNG: на тёмном #242f3d через lighten чёрное даёт цвет подложки */
+  mix-blend-mode: lighten;
+}
+
+/* Мини-игра: иконка крупнее высоты баннера, края режутся контейнером */
+.lk-dashboard__my-programs-catalog-banner--mini-game {
+  overflow: hidden;
+}
+
+.lk-dashboard__my-programs-catalog-banner--mini-game .lk-dashboard__my-programs-catalog-banner-art {
+  flex: 0 0 clamp(220px, 26vw, 300px);
+  max-width: none;
+  position: relative;
+  overflow: hidden;
+  align-self: stretch;
+  min-height: 200px;
+  margin: -33px -33px -33px 0;
+}
+
+.lk-dashboard__my-programs-catalog-banner--mini-game .lk-dashboard__my-programs-catalog-banner-art img {
+  position: absolute;
+  width: auto;
+  height: min(132%, 340px);
+  max-height: none;
+  max-width: none;
+  right: -14%;
+  top: 50%;
+  left: auto;
+  transform: translateY(-50%);
+  object-fit: contain;
+  mix-blend-mode: lighten;
+}
+
+/* Три карточки под баннером каталога — та же палитра */
+.lk-dashboard__my-programs-catalog-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  margin: 0 0 48px;
+  box-sizing: border-box;
+}
+
+.lk-dashboard__my-programs-catalog-card {
+  height: 240px;
+  border-radius: 12px;
+  background: #242f3d;
+  box-sizing: border-box;
+}
+
+.lk-dashboard__my-programs-catalog-card_has-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 28px 24px;
+}
+
+.lk-dashboard__my-programs-catalog-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.lk-dashboard__my-programs-catalog-card-title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #ffffff;
+}
+
+.lk-dashboard__my-programs-catalog-card-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #7f91a4;
+}
+
+@media (max-width: 640px) {
+  .lk-dashboard__my-programs-catalog-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .lk-dashboard__my-programs-catalog-banner-inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lk-dashboard__my-programs-catalog-banner-art {
+    align-self: flex-end;
+    max-width: 260px;
+  }
+
+  .lk-dashboard__my-programs-catalog-banner--mini-game .lk-dashboard__my-programs-catalog-banner-art {
+    align-self: stretch;
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+    min-height: 220px;
+    margin: 12px -33px -33px -33px;
+  }
+
+  .lk-dashboard__my-programs-catalog-banner--mini-game .lk-dashboard__my-programs-catalog-banner-art img {
+    height: min(128%, 320px);
+    right: -10%;
+  }
+}
+
+.lk-dashboard_my-programs-page .lk-dashboard__my-programs-toolbar {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.lk-dashboard_my-programs-page .lk-dashboard__my-programs-toolbar .lk-dashboard__programs-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+}
+
 .lk-dashboard__programs-title {
   margin: 0 0 8px;
   font-size: 18px;
@@ -845,6 +1067,12 @@
   margin-bottom: 16px;
 }
 
+/* Вкладка «Дашборд» под шапкой и описанием карточки, над метриками */
+.lk-dashboard__program-detail_joined .lk-dashboard__program-detail-shell-tabs {
+  margin-top: 4px;
+  margin-bottom: 24px;
+}
+
 .lk-dashboard__program-detail-back .tw-link.link_primary.link_s {
   display: inline-flex;
   align-items: center;
@@ -982,6 +1210,50 @@ a.lk-dashboard__program-card-name:hover {
   line-height: 1.2;
 }
 
+.lk-dashboard__program-earnings {
+  box-sizing: border-box;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #242f3d;
+}
+
+.lk-dashboard__program-earnings-label {
+  display: block;
+  color: #7f91a4;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.lk-dashboard__program-earnings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+
+.lk-dashboard__program-earnings-commission {
+  margin: 0;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.lk-dashboard__program-earnings-sales {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.lk-dashboard__program-earnings-sales-prefix {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .lk-dashboard__program-join-btn {
   display: inline-flex;
   align-items: center;
@@ -1099,6 +1371,26 @@ a.lk-dashboard__program-card-name:hover {
   background: rgba(36, 47, 61, 0.04);
 }
 
+[data-theme="light"] .lk-dashboard__program-earnings {
+  background: rgba(36, 47, 61, 0.04);
+}
+
+[data-theme="light"] .lk-dashboard__program-earnings-label {
+  color: #83899f;
+}
+
+[data-theme="light"] .lk-dashboard__program-earnings-commission {
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-dashboard__program-earnings-sales {
+  color: rgba(38, 50, 92, 0.45);
+}
+
+[data-theme="light"] .lk-dashboard__program-earnings-sales-prefix {
+  color: rgba(38, 50, 92, 0.38);
+}
+
 [data-theme="light"] .lk-dashboard__program-referral-input {
   border-color: rgba(15, 23, 42, 0.15);
   background: #ffffff;
@@ -1117,5 +1409,149 @@ a.lk-dashboard__program-card-name:hover {
 
   .lk-dashboard__program-metrics {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Каталог программ — скелетон при первой загрузке списка */
+.lk-dashboard__programs-catalog-skel {
+  width: 100%;
+  pointer-events: none;
+}
+
+.lk-dashboard__programs-catalog-skel-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.lk-dashboard__programs-catalog-skel-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  border-radius: 8px;
+}
+
+.lk-dashboard__programs-catalog-skel-filters-btn {
+  flex-shrink: 0;
+  width: 112px;
+  height: 44px;
+  border-radius: 8px;
+}
+
+.lk-dashboard__programs-catalog-skel-section {
+  padding-bottom: 12px;
+  margin-bottom: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lk-dashboard__programs-catalog-skel-section-title {
+  display: block;
+  width: min(220px, 52vw);
+  height: 24px;
+  border-radius: 8px;
+}
+
+[data-theme="light"] .lk-dashboard__programs-catalog-skel-section {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+.lk-dashboard__programs-catalog-skel-list {
+  margin-top: 0;
+}
+
+.lk-dashboard__programs-catalog-skel-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-areas: "avatar middle actions";
+  column-gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+}
+
+.lk-dashboard__programs-catalog-skel-avatar-wrap {
+  grid-area: avatar;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+}
+
+.lk-dashboard__programs-catalog-skel-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.lk-dashboard__programs-catalog-skel-middle {
+  grid-area: middle;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lk-dashboard__programs-catalog-skel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.lk-dashboard__programs-catalog-skel-text {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.lk-dashboard__programs-catalog-skel-chip_title {
+  flex: 1 1 0;
+  min-width: 48px;
+  height: 15px;
+  border-radius: 6px;
+}
+
+.lk-dashboard__programs-catalog-skel-chip_status {
+  flex-shrink: 0;
+  width: 56px;
+  height: 13px;
+  border-radius: 6px;
+}
+
+.lk-dashboard__programs-catalog-skel-chip_pct {
+  flex-shrink: 0;
+  width: 40px;
+  height: 15px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+
+.lk-dashboard__programs-catalog-skel-menu {
+  grid-area: actions;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  align-self: center;
+}
+
+[data-theme="light"] .lk-dashboard__programs-catalog-skel-row {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 900px) {
+  .lk-dashboard__programs-catalog-skel-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    column-gap: 10px;
   }
 }

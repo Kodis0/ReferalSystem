@@ -51,6 +51,8 @@ describe("Agent program detail page", () => {
               joined: true,
               ref_code: "ABC123",
               referral_link: "https://app.example.com/?ref=ABC123",
+              referrer_commission_total: "42.50",
+              referrer_sales_total: "850.00",
             },
           }),
         });
@@ -63,6 +65,8 @@ describe("Agent program detail page", () => {
     await waitFor(() => {
       expect(screen.getByTestId("agent-program-title")).toHaveTextContent("Demo Shop");
     });
+    expect(screen.getByRole("tablist", { name: "Дашборд программы" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Дашборд" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText("Название домена")).not.toBeInTheDocument();
     expect(screen.queryByText("Название сайта")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "demo.example" })).toHaveAttribute("href", "https://demo.example/");
@@ -76,8 +80,11 @@ describe("Agent program detail page", () => {
     expect(screen.getByRole("link", { name: "Назад" })).toHaveAttribute("href", "/lk/programs");
     expect(screen.getByTestId("agent-program-joined-state")).toHaveTextContent("Вы участвуете в программе");
     expect(screen.getByText("Реферальный код: ABC123")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("https://app.example.com/?ref=ABC123")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://demo.example/?ref=ABC123")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Скопировать ссылку" })).toBeInTheDocument();
+    expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("Доход по вашей ссылке");
+    expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("42,50 ₽");
+    expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("850,00 ₽");
   });
 
   it("renders detail avatar from API with stable cache version", async () => {
@@ -171,6 +178,7 @@ describe("Agent program detail page", () => {
     await waitFor(() => {
       expect(screen.getByTestId("agent-program-unjoined-state")).toBeInTheDocument();
     });
+    expect(screen.queryByRole("tablist", { name: "Дашборд программы" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Вступить в программу" })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       expect.stringContaining("/users/site/join/"),

@@ -109,7 +109,7 @@ export default function ProjectMembersPage() {
           <div className="owner-programs__actions">
             <button
               type="button"
-              className="baseButton button button_size_medium baseButton__size_medium baseButton__color_primary"
+              className="owner-programs__projects-create-btn owner-programs__create-menu-trigger"
               data-testid="project-access-add-member"
             >
               Добавить
@@ -147,6 +147,15 @@ export default function ProjectMembersPage() {
               <p className="owner-programs__muted" style={{ margin: 0, color: "#ffffff", opacity: 1 }}>
                 Пока никто не присоединился к реферальной программе.
               </p>
+              <div className="owner-programs__actions">
+                <button
+                  type="button"
+                  className="owner-programs__projects-create-btn owner-programs__create-menu-trigger"
+                  data-testid="referral-members-add-member"
+                >
+                  Добавить
+                </button>
+              </div>
             </div>
           ) : (
             <ul className="owner-programs__members-list" data-testid="members-list">

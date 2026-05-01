@@ -1918,6 +1918,7 @@ describe("ProjectMembersPage", () => {
     });
     expect(screen.getByRole("heading", { name: "Участники" })).toBeInTheDocument();
     expect(screen.getByText(/Пока никто не присоединился к реферальной программе/i)).toBeInTheDocument();
+    expect(screen.getByTestId("referral-members-add-member")).toBeInTheDocument();
   });
 
   it("site-scoped route renders member rows from API", async () => {

@@ -1,0 +1,72 @@
+.mini-game-rating__note {
+  margin: 12px 0 20px;
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.mini-game-rating__panel {
+  max-width: 520px;
+}
+
+/* Встроенное меню как в шапке ЛК; без обводки как у таблицы в игре */
+.mini-game-rating__menu.lk-header__menu {
+  position: static;
+  width: 100%;
+  max-width: none;
+  border: none;
+  box-shadow: none;
+}
+
+.mini-game-rating__row.lk-header__menu-item {
+  cursor: default;
+}
+
+.mini-game-rating__rank {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7f91a4;
+}
+
+.mini-game-rating__diamond--1 {
+  color: #fbbf24;
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.35));
+}
+
+.mini-game-rating__diamond--2 {
+  color: #cbd5e1;
+  filter: drop-shadow(0 0 4px rgba(203, 213, 225, 0.35));
+}
+
+.mini-game-rating__diamond--3 {
+  color: #ea580c;
+  filter: drop-shadow(0 0 4px rgba(234, 88, 12, 0.32));
+}
+
+.mini-game-rating__score {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.mini-game-rating__panel .lk-header__menu-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="light"] .mini-game-rating__menu.lk-header__menu {
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="light"] .mini-game-rating__note {
+  color: rgba(38, 50, 92, 0.65);
+}

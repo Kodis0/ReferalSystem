@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from referrals.models import PartnerProfile, Project, Site, SiteMembership
+from referrals.services import ensure_partner_profile, upsert_order_from_tilda_payload
 
 User = get_user_model()
 
@@ -472,6 +473,8 @@ class MyProgramsApiTests(TestCase):
         self.assertFalse(prog["joined"])
         self.assertNotIn("joined_at", prog)
         self.assertNotIn("ref_code", prog)
+        self.assertNotIn("referrer_sales_total", prog)
+        self.assertNotIn("referrer_commission_total", prog)
         self.assertFalse(
             SiteMembership.objects.filter(site=site, user=self.user_a).exists()
         )
@@ -545,7 +548,11 @@ class MyProgramsApiTests(TestCase):
 
     @override_settings(FRONTEND_URL="https://app.example.com")
     def test_program_catalog_detail_returns_joined_member_fields(self):
-        site = self._site("catalog_detail_joined", config_json={"site_display_name": "Joined Detail"})
+        site = self._site(
+            "catalog_detail_joined",
+            allowed_origins=["https://partner-shop.example"],
+            config_json={"site_display_name": "Joined Detail"},
+        )
         PartnerProfile.objects.create(user=self.user_a, ref_code="ABC123")
         m = SiteMembership.objects.create(site=site, user=self.user_a)
         SiteMembership.objects.filter(pk=m.pk).update(
@@ -560,7 +567,61 @@ class MyProgramsApiTests(TestCase):
         self.assertTrue(prog["joined"])
         self.assertEqual(prog["joined_at"], m.created_at.isoformat())
         self.assertEqual(prog["ref_code"], "ABC123")
-        self.assertEqual(prog["referral_link"], "https://app.example.com/?ref=ABC123")
+        self.assertEqual(prog["referral_link"], "https://partner-shop.example/?ref=ABC123")
+
+    def test_program_catalog_detail_joined_includes_referrer_money_totals(self):
+        site = self._site(
+            "catalog_detail_money",
+            allowed_origins=["https://money-shop.example"],
+            config_json={"site_display_name": "Money Detail"},
+        )
+        partner, _ = ensure_partner_profile(self.user_a)
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        buyer = User.objects.create_user(
+            username="buyer_money_cat",
+            email="buyer-money-cat@example.com",
+            password="secret12",
+        )
+        upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-member-money-cat",
+                "Email": buyer.email,
+                "sum": "100.00",
+                "ref": partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 200)
+        prog = r.data["program"]
+        self.assertTrue(prog["joined"])
+        self.assertEqual(prog["referrer_sales_total"], "100.00")
+        self.assertEqual(prog["referrer_commission_total"], "10.00")
+
+        r2 = self.api.get(f"/users/me/programs/{site.public_id}/")
+        self.assertEqual(r2.status_code, 200)
+        prog2 = r2.data["program"]
+        self.assertEqual(prog2["referrer_sales_total"], "100.00")
+        self.assertEqual(prog2["referrer_commission_total"], "10.00")
+
+    @override_settings(FRONTEND_URL="https://app.example.com")
+    def test_program_catalog_detail_joined_referral_link_falls_back_to_frontend_without_site_origin(self):
+        site = self._site(
+            "catalog_detail_joined_fb",
+            config_json={"site_display_name": "Joined No Origin"},
+        )
+        PartnerProfile.objects.create(user=self.user_a, ref_code="XYZ9")
+        SiteMembership.objects.create(site=site, user=self.user_a)
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 200)
+        prog = r.data["program"]
+        self.assertTrue(prog["joined"])
+        self.assertEqual(prog["referral_link"], "https://app.example.com/?ref=XYZ9")
 
     def test_program_catalog_detail_unavailable_site_returns_404(self):
         site = Site.objects.create(

@@ -48,6 +48,9 @@ export const API_ENDPOINTS = {
   siteIntegrationActivity: `${API_BASE}/referrals/site/integration/activity/`,
   /** Журнал действий аккаунта (проекты, сайты, интеграция). */
   accountOwnerActivity: `${API_BASE}/referrals/account/activity/`,
+  gamificationSummary: `${API_BASE}/referrals/gamification/summary/`,
+  gamificationDailyChallengeStart: `${API_BASE}/referrals/gamification/daily-challenge/start/`,
+  gamificationDailyChallengeFinish: `${API_BASE}/referrals/gamification/daily-challenge/finish/`,
 };
 
 export { API_BASE };

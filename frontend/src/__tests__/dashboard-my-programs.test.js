@@ -49,7 +49,7 @@ describe("Dashboard My Programs", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Агентские программы" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("Dashboard My Programs", () => {
     );
   });
 
-  it("renders connected programs as owner-style cards", async () => {
+  it("renders connected programs as catalog-style rows", async () => {
     jest.spyOn(global, "fetch").mockImplementation((url) => {
       if (String(url).includes("/users/me/programs/")) {
         return Promise.resolve({
@@ -82,6 +82,7 @@ describe("Dashboard My Programs", () => {
                 site_status: "verified",
                 platform_preset: "tilda",
                 referral_lock_days: 45,
+                commission_percent: "12",
               },
             ],
           }),
@@ -100,10 +101,12 @@ describe("Dashboard My Programs", () => {
       expect(screen.getByTestId("my-programs-list")).toBeInTheDocument();
     });
     expect(screen.getByText("Demo Shop")).toBeInTheDocument();
-    expect(screen.getByText("demo.example · Готова к активации · tilda · Срок закрепления: 45 дн.")).toBeInTheDocument();
-    const card = screen.getByTestId("agent-program-list-link");
-    expect(card).toHaveClass("owner-programs__service-card");
-    expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
+    expect(screen.getByText("Готова к активации")).toBeInTheDocument();
+    expect(screen.getByText("12%")).toBeInTheDocument();
+    const row = screen.getByTestId("agent-program-list-link");
+    expect(row).toHaveClass("lk-dashboard__programs-catalog-row");
+    fireEvent.click(screen.getByTestId("programs-catalog-menu-trigger-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+    expect(screen.getByRole("menuitem", { name: "Выйти" })).toBeInTheDocument();
   });
 
   it("renders inactive connected program without success status", async () => {
@@ -135,11 +138,10 @@ describe("Dashboard My Programs", () => {
       </MemoryRouter>
     );
 
-    const card = await screen.findByTestId("agent-program-list-link");
-    expect(screen.getByText("stopped.example · Виджет выключен · tilda · Срок закрепления: —")).toBeInTheDocument();
-    expect(screen.getByText("Программа временно остановлена.")).toBeInTheDocument();
-    expect(card.querySelector(".owner-programs__service-card-status-dot_success")).not.toBeInTheDocument();
-    expect(card.querySelector(".owner-programs__service-card-status-dot_muted")).toBeInTheDocument();
+    const row = await screen.findByTestId("agent-program-list-link");
+    expect(screen.getByText("Виджет выключен")).toBeInTheDocument();
+    expect(row.querySelector(".lk-dashboard__programs-status-dot_success")).not.toBeInTheDocument();
+    expect(row.querySelector(".lk-dashboard__programs-status-dot_muted")).toBeInTheDocument();
   });
 
   it("refetches my programs on site status change event", async () => {
@@ -158,6 +160,7 @@ describe("Dashboard My Programs", () => {
                 widget_enabled: active,
                 program_active: active,
                 platform_preset: "tilda",
+                commission_percent: "10",
               },
             ],
           }),
@@ -172,7 +175,7 @@ describe("Dashboard My Programs", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("dynamic.example · Активна · tilda · Срок закрепления: —");
+    await screen.findByText("Активна");
     active = false;
     act(() => {
       window.dispatchEvent(
@@ -182,7 +185,7 @@ describe("Dashboard My Programs", () => {
       );
     });
 
-    await screen.findByText("dynamic.example · Виджет выключен · tilda · Срок закрепления: —");
+    await screen.findByText("Виджет выключен");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -269,7 +272,7 @@ describe("Dashboard My Programs", () => {
     );
 
     await screen.findByText("Demo Shop");
-    const img = container.querySelector(".owner-programs__service-card-avatar-img");
+    const img = container.querySelector(".lk-dashboard__programs-avatar-img");
     expect(img).toHaveAttribute(
       "src",
       "https://cdn.example/my-icon.png?v=2026-04-29T18%3A30%3A00%2B00%3A00"
@@ -309,8 +312,8 @@ describe("Dashboard My Programs", () => {
       </MemoryRouter>
     );
 
-    const leaveButton = await screen.findByRole("button", { name: "Выйти" });
-    fireEvent.click(leaveButton);
+    fireEvent.click(await screen.findByTestId(`programs-catalog-menu-trigger-${siteId}`));
+    fireEvent.click(screen.getByTestId(`agent-program-leave-${siteId}`));
 
     await waitFor(() => {
       expect(screen.queryByText("Demo Shop")).not.toBeInTheDocument();
@@ -400,7 +403,7 @@ describe("Dashboard My Programs", () => {
     await waitFor(() => {
       expect(screen.getByText("Вы пока не участвуете ни в одной программе.")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Агентские программы" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Каталог реферальных программ" })).not.toBeInTheDocument();
     expect(screen.queryByText("Leaked Catalog A")).not.toBeInTheDocument();
     expect(screen.queryByText("Leaked Catalog B")).not.toBeInTheDocument();
@@ -418,7 +421,7 @@ describe("Dashboard My Programs", () => {
    * `lk.js`, поэтому клик по «Мои программы» отрисовывал ProgramsCatalogPage.
    * Этот тест собирает реальный `<LkSidebar>` + `<Routes>` как в `lk.js` и
    * после клика на ссылку «Мои программы» требует, чтобы отрисовалась именно
-   * `MyProgramsPage` (заголовок «Агентские программы»), а не каталог.
+   * `MyProgramsPage` (секция «Агентские программы»), а не каталог.
    *
    * Должен падать при любой из ошибок: неверный href в сайдбаре, отсутствующий
    * маршрут в `lk.js`, неверный компонент за маршрутом.
@@ -472,7 +475,7 @@ describe("Dashboard My Programs", () => {
     fireEvent.click(myProgramsLink);
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Агентские программы" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Агентские программы" })).toBeInTheDocument();
     });
     expect(
       screen.queryByRole("heading", { name: "Каталог реферальных программ" })

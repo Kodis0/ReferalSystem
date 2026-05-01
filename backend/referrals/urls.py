@@ -1,5 +1,10 @@
 from django.urls import path
 
+from .gamification_views import (
+    DailyChallengeFinishView,
+    DailyChallengeStartView,
+    GamificationSummaryView,
+)
 from .views import (
     PartnerDashboardView,
     PartnerOnboardView,
@@ -24,6 +29,21 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "gamification/summary/",
+        GamificationSummaryView.as_view(),
+        name="gamification-summary",
+    ),
+    path(
+        "gamification/daily-challenge/start/",
+        DailyChallengeStartView.as_view(),
+        name="gamification-daily-challenge-start",
+    ),
+    path(
+        "gamification/daily-challenge/finish/",
+        DailyChallengeFinishView.as_view(),
+        name="gamification-daily-challenge-finish",
+    ),
     path(
         "platform-service-status/",
         PlatformServiceStatusView.as_view(),

@@ -30,6 +30,8 @@ from referrals.services import (
     get_site_by_public_id,
     join_site_membership_cta_logged_in,
     link_session_attributions_to_user,
+    member_referrer_money_totals,
+    member_site_referral_link,
     owner_site_list_origin_display,
     partner_dashboard_payload,
     site_commission_percent,
@@ -113,12 +115,35 @@ def _member_program_payload(site, *, membership=None):
     return payload
 
 
-def _add_personal_referral_fields(payload, user):
+def _add_personal_referral_fields(payload, user, *, site=None):
     partner, _ = ensure_partner_profile(user)
     base = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
     partner_payload = partner_dashboard_payload(partner, app_public_base_url=base)
     payload["ref_code"] = partner_payload["ref_code"]
-    payload["referral_link"] = partner_payload["referral_link"]
+    if site is not None:
+        payload["referral_link"] = member_site_referral_link(
+            site, partner_payload["ref_code"], app_public_base_url=base
+        )
+    else:
+        payload["referral_link"] = partner_payload["referral_link"]
+
+
+def _merge_member_referrer_money(payload, user, membership):
+    """Add ``referrer_commission_total`` / ``referrer_sales_total`` for the member's partner profile."""
+    partner = membership.partner if membership is not None else None
+    if partner is None:
+        partner = getattr(user, "partner_profile", None)
+    if partner is None:
+        payload.update(
+            {
+                "referrer_sales_total": "0.00",
+                "referrer_commission_total": "0.00",
+            }
+        )
+        return
+    payload.update(member_referrer_money_totals(partner))
+
+
 from .telegram_auth import (
     TELEGRAM_OAUTH_AUTH_URL,
     decode_telegram_widget_tg_auth_result,
@@ -510,7 +535,8 @@ class ProgramCatalogDetailView(APIView):
         payload = _member_program_payload(site, membership=membership)
         payload["joined"] = membership is not None
         if membership is not None:
-            _add_personal_referral_fields(payload, request.user)
+            _add_personal_referral_fields(payload, request.user, site=site)
+            _merge_member_referrer_money(payload, request.user, membership)
         return Response({"program": payload}, status=status.HTTP_200_OK)
 
 
@@ -533,6 +559,7 @@ class MyProgramDetailView(APIView):
         if membership is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         payload = _member_program_payload(membership.site, membership=membership)
+        _merge_member_referrer_money(payload, request.user, membership)
         return Response({"program": payload}, status=status.HTTP_200_OK)
 
     def delete(self, request, site_public_id):

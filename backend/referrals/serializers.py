@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from rest_framework import serializers
 
+from .gamification import MAX_CHALLENGE_SCORE
 from .models import Site
 from .services import (
     persist_project_avatar_if_empty,
@@ -281,3 +282,18 @@ class ProjectSiteOwnerCreateSerializer(serializers.Serializer):
         if not s:
             return ""
         return normalize_owner_site_origin(value)
+
+
+class DailyChallengeFinishSerializer(serializers.Serializer):
+    attempt_id = serializers.UUIDField()
+    moves = serializers.ListField(
+        child=serializers.JSONField(),
+        max_length=500,
+        allow_empty=True,
+    )
+    client_score = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=0,
+        max_value=MAX_CHALLENGE_SCORE,
+    )

@@ -592,3 +592,112 @@ class Commission(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class GamificationProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="gamification_profile",
+    )
+    xp_total = models.PositiveIntegerField(default=0)
+    streak_days = models.PositiveIntegerField(default=0)
+    last_activity_date = models.DateField(null=True, blank=True)
+    best_challenge_score = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"GamificationProfile(user={self.user_id})"
+
+
+class XPEvent(models.Model):
+    class Source(models.TextChoices):
+        DAILY_CHALLENGE = "daily_challenge", "Daily challenge"
+        LINK_CLICK = "link_click", "Link click"
+        LEAD_CREATED = "lead_created", "Lead created"
+        LEAD_CONFIRMED = "lead_confirmed", "Lead confirmed"
+        PURCHASE_CONFIRMED = "purchase_confirmed", "Purchase confirmed"
+        MANUAL = "manual", "Manual"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="xp_events",
+        db_index=True,
+    )
+    source = models.CharField(max_length=32, choices=Source.choices, db_index=True)
+    amount = models.PositiveIntegerField()
+    base_amount = models.PositiveIntegerField(default=0)
+    multiplier = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        default=Decimal("1.0000"),
+    )
+    idempotency_key = models.CharField(max_length=128, unique=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"XPEvent(user={self.user_id}, source={self.source!r}, amount={self.amount})"
+
+
+class DailyChallengeAttempt(models.Model):
+    class Status(models.TextChoices):
+        STARTED = "started", "Started"
+        COMPLETED = "completed", "Completed"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="daily_challenge_attempts",
+        db_index=True,
+    )
+    challenge_date = models.DateField(db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.STARTED,
+        db_index=True,
+    )
+    score = models.PositiveIntegerField(default=0)
+    base_xp = models.PositiveIntegerField(default=0)
+    multiplier = models.DecimalField(
+        max_digits=7,
+        decimal_places=4,
+        default=Decimal("1.0000"),
+    )
+    awarded_xp = models.PositiveIntegerField(default=0)
+    rng_seed = models.BigIntegerField(default=0)
+    move_log = models.JSONField(default=list, blank=True)
+    client_reported_score = models.PositiveIntegerField(null=True, blank=True)
+    validation_error = models.CharField(max_length=128, blank=True, default="")
+    started_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-challenge_date", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "challenge_date"],
+                name="uniq_daily_challenge_attempt_user_date",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"DailyChallengeAttempt(user={self.user_id}, date={self.challenge_date}, "
+            f"status={self.status!r})"
+        )

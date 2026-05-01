@@ -1,4 +1,29 @@
-import { CirclePause, CirclePlay, RefreshCw, Trash2, Zap } from "lucide-react";
+import { CirclePause, CirclePlay, RefreshCw, Trash2 } from "lucide-react";
+
+/** Иконка «Проверить подключение» — Vector.svg (блискавка), высота = size, ширина по пропорции 14×19. */
+function SiteShellVerifyIcon({ size = 22 }) {
+  const height = size;
+  const width = (size * 14) / 19;
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={width}
+      height={height}
+      viewBox="0 0 14 19"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M7.417 8.25L8.667 0.75L0.75 10.75H5.75L4.5 18.25L12.417 8.25H7.417Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeMiterlimit="10"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 /**
  * Кнопки в шапке сайта (удалить / вкл-выкл сбор / проверить / обновить).
@@ -31,7 +56,6 @@ export default function SiteShellWidgetActionsBar({
     return toggleBusy ? "Сохраняем…" : "Выключить сбор заявок";
   })();
   const ToggleIcon = captureRunning ? CirclePause : CirclePlay;
-  const actionBusy = verifyLoading || refreshBusy || deleteSiteBusy || toggleBusy;
   const iconSize = variant === "menu" ? 18 : 22;
 
   if (variant === "menu") {
@@ -46,7 +70,7 @@ export default function SiteShellWidgetActionsBar({
           type="button"
           className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row owner-programs__service-card-menu-item_danger"
           onClick={() => actionsRef.current.onDeleteSite?.(deleteConfirmTitle)}
-          disabled={actionBusy}
+          disabled={deleteSiteBusy}
           role="menuitem"
           aria-label="Удалить сайт"
           data-testid={deleteMenuTestId || "site-shell-action-delete"}
@@ -60,7 +84,7 @@ export default function SiteShellWidgetActionsBar({
           type="button"
           className={`owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row${captureRunning ? " owner-programs__service-card-menu-item_active" : ""}`}
           onClick={() => actionsRef.current.onUnifiedToggle?.()}
-          disabled={actionBusy || toggleDisabledUntilReady}
+          disabled={toggleBusy || toggleDisabledUntilReady}
           role="menuitem"
           aria-label={toggleLabel}
           data-testid="site-shell-action-toggle-capture"
@@ -74,13 +98,13 @@ export default function SiteShellWidgetActionsBar({
           type="button"
           className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row"
           onClick={() => actionsRef.current.onVerify?.()}
-          disabled={actionBusy}
+          disabled={verifyLoading}
           role="menuitem"
           aria-label={verifyLoading ? "Проверяем подключение…" : "Проверить подключение"}
           data-testid="site-shell-action-verify"
         >
           <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
-            <Zap size={iconSize} strokeWidth={2} />
+            <SiteShellVerifyIcon size={iconSize} />
           </span>
           <span>{verifyLoading ? "Проверка…" : "Проверить подключение"}</span>
         </button>
@@ -88,7 +112,7 @@ export default function SiteShellWidgetActionsBar({
           type="button"
           className="owner-programs__service-card-menu-item owner-programs__service-card-menu-item_row"
           onClick={() => actionsRef.current.onRefreshStatus?.()}
-          disabled={actionBusy}
+          disabled={refreshBusy}
           role="menuitem"
           aria-label={refreshBusy ? "Обновление статуса…" : "Обновить статус"}
           data-testid="site-shell-action-refresh"
@@ -108,7 +132,7 @@ export default function SiteShellWidgetActionsBar({
         type="button"
         className="owner-programs__icon-action owner-programs__icon-action_danger"
         onClick={() => actionsRef.current.onDeleteSite?.(deleteConfirmTitle)}
-        disabled={actionBusy}
+        disabled={deleteSiteBusy}
         aria-label="Удалить сайт"
         data-testid="site-shell-action-delete"
       >
@@ -118,7 +142,7 @@ export default function SiteShellWidgetActionsBar({
         type="button"
         className={`owner-programs__icon-action${captureRunning ? " owner-programs__icon-action_on" : ""}`}
         onClick={() => actionsRef.current.onUnifiedToggle?.()}
-        disabled={actionBusy || toggleDisabledUntilReady}
+        disabled={toggleBusy || toggleDisabledUntilReady}
         aria-label={toggleLabel}
         title={toggleLabel}
         data-testid="site-shell-action-toggle-capture"
@@ -129,18 +153,18 @@ export default function SiteShellWidgetActionsBar({
         type="button"
         className="owner-programs__icon-action"
         onClick={() => actionsRef.current.onVerify?.()}
-        disabled={actionBusy}
+        disabled={verifyLoading}
         aria-label={verifyLoading ? "Проверяем подключение…" : "Проверить подключение"}
         title="Проверить подключение"
         data-testid="site-shell-action-verify"
       >
-        <Zap size={iconSize} strokeWidth={2} aria-hidden />
+        <SiteShellVerifyIcon size={iconSize} />
       </button>
       <button
         type="button"
         className="owner-programs__icon-action"
         onClick={() => actionsRef.current.onRefreshStatus?.()}
-        disabled={actionBusy}
+        disabled={refreshBusy}
         aria-label={refreshBusy ? "Обновление статуса…" : "Обновить статус"}
         title="Обновить статус"
         data-testid="site-shell-action-refresh"

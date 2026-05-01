@@ -1840,9 +1840,9 @@
 }
 
 .owner-programs__shell-reachability {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
   font-size: 13px;
   line-height: 18px;
@@ -1881,6 +1881,14 @@
 
 .owner-programs__shell-reachability-text {
   color: inherit;
+  line-height: 18px;
+}
+
+.owner-programs__shell-reachability > .owner-programs__service-card-status-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 0;
+  align-self: center;
 }
 
 [data-theme="light"] .owner-programs__shell-reachability {

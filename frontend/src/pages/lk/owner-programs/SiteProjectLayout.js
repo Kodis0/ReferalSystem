@@ -3,7 +3,7 @@ import { Globe } from "lucide-react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import useCurrentUser from "../../../hooks/useCurrentUser";
-import { dispatchLkProgramListsRefetch } from "../lkProgramListsSync";
+import { dispatchLkProgramListsRefetch, LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
 import "../lk.css";
@@ -564,6 +564,35 @@ export default function SiteProjectLayout() {
     if (!routeSitePublicId || !Array.isArray(projectEntry?.sites)) return null;
     return projectEntry.sites.find((row) => row.public_id === routeSitePublicId) || null;
   }, [projectEntry, routeSitePublicId]);
+
+  useEffect(() => {
+    if (!routeSitePublicId) return undefined;
+    function onSiteStatusChanged(event) {
+      const detail = event?.detail || {};
+      const changedSiteId = String(detail.site_public_id || "").trim();
+      if (changedSiteId && changedSiteId !== routeSitePublicId) return;
+      const nextStatus = typeof detail.site_status === "string" ? detail.site_status.trim() : "";
+      const hasWidgetEnabled = typeof detail.widget_enabled === "boolean";
+      if (!nextStatus && !hasWidgetEnabled) return;
+      setProjectEntry((prev) => {
+        if (!prev || !Array.isArray(prev.sites)) return prev;
+        let changed = false;
+        const sites = prev.sites.map((site) => {
+          if (site?.public_id !== routeSitePublicId) return site;
+          const nextSite = {
+            ...site,
+            ...(nextStatus ? { status: nextStatus } : {}),
+            ...(hasWidgetEnabled ? { widget_enabled: detail.widget_enabled } : {}),
+          };
+          changed = changed || nextSite.status !== site.status || nextSite.widget_enabled !== site.widget_enabled;
+          return nextSite;
+        });
+        return changed ? { ...prev, sites } : prev;
+      });
+    }
+    window.addEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onSiteStatusChanged);
+    return () => window.removeEventListener(LUMOREF_SITE_STATUS_CHANGED_EVENT, onSiteStatusChanged);
+  }, [routeSitePublicId]);
 
   const handleAvatarChange = useCallback(
     async (event) => {

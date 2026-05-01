@@ -886,6 +886,37 @@ button.lk-sidebar__nav-link {
   color: #fff;
 }
 
+.lk-sidebar__nav-icon-svg_mini-game {
+  overflow: hidden;
+  border-radius: 3px;
+}
+
+.lk-sidebar__mini-game-dice {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+
+@keyframes lk-mini-game-dice-tumble {
+  0%,
+  100% {
+    transform: rotate(0deg) translate(0, 0);
+  }
+  28% {
+    transform: rotate(20deg) translate(0.5px, -0.5px);
+  }
+  52% {
+    transform: rotate(-16deg) translate(-0.5px, 0.5px);
+  }
+  76% {
+    transform: rotate(7deg) translate(0, 0);
+  }
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__mini-game-dice,
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-dice {
+  animation: lk-mini-game-dice-tumble 0.58s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
+}
+
 .lk-sidebar__nav-icon-svg_programs-catalog {
   overflow: hidden;
   border-radius: 3px;
@@ -988,6 +1019,11 @@ button.lk-sidebar__nav-link {
 
   .lk-sidebar__nav-link:hover .lk-sidebar__ideas-bulb,
   .lk-sidebar__nav-link:focus-visible .lk-sidebar__ideas-bulb {
+    animation: none;
+  }
+
+  .lk-sidebar__nav-link:hover .lk-sidebar__mini-game-dice,
+  .lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-dice {
     animation: none;
   }
 }

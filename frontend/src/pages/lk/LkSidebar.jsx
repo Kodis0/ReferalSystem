@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./LkSidebar.css";
+import { DiamondIcon } from "./mini-game/DiamondIcon";
 import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
 import { formatSiteCardTitle } from "./owner-programs/siteDisplay";
 
@@ -118,6 +119,39 @@ function ProgramsNavIcon() {
   );
 }
 
+function MiniGameRatingNavIcon() {
+  return (
+    <DiamondIcon
+      className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_mini-game-rating"
+      size={24}
+      strokeWidth={2}
+    />
+  );
+}
+
+function MiniGameNavIcon() {
+  return (
+    <svg
+      className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_mini-game"
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <g className="lk-sidebar__mini-game-dice">
+        <rect x="5" y="5" width="14" height="14" rx="2.5" stroke="currentColor" strokeWidth="2" />
+        <circle cx="9" cy="9" r="1.25" fill="currentColor" />
+        <circle cx="15" cy="9" r="1.25" fill="currentColor" />
+        <circle cx="12" cy="12" r="1.25" fill="currentColor" />
+        <circle cx="9" cy="15" r="1.25" fill="currentColor" />
+        <circle cx="15" cy="15" r="1.25" fill="currentColor" />
+      </g>
+    </svg>
+  );
+}
+
 function ProgramsCatalogNavIcon() {
   const catalogClipId = useId().replace(/:/g, "");
   return (
@@ -185,6 +219,8 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
 
   let programsListActive = currentPath === "/lk/programs";
   let connectedProgramsActive = currentPath === "/lk/my-programs";
+  const miniGamePlayActive = currentPath === "/lk/mini-game";
+  const miniGameRatingActive = currentPath === "/lk/mini-game/rating";
 
   if (isReferralProgramDetail) {
     if (navFrom === "/lk/my-programs") {
@@ -843,6 +879,27 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             <span className="lk-sidebar__nav-text">Предложить идею</span>
           </button>
         </nav>
+        </div>
+
+        <div className="lk-sidebar__panel lk-sidebar__panel_mini-game lk-sidebar__panel_nav">
+          <nav className="lk-sidebar__nav" aria-label="Мини игра">
+            <Link
+              to="/lk/mini-game"
+              className={itemClass(miniGamePlayActive)}
+              aria-current={miniGamePlayActive ? "page" : undefined}
+            >
+              <MiniGameNavIcon />
+              <span className="lk-sidebar__nav-text">Мини игра</span>
+            </Link>
+            <Link
+              to="/lk/mini-game/rating"
+              className={itemClass(miniGameRatingActive)}
+              aria-current={miniGameRatingActive ? "page" : undefined}
+            >
+              <MiniGameRatingNavIcon />
+              <span className="lk-sidebar__nav-text">Рейтинг</span>
+            </Link>
+          </nav>
         </div>
       </div>
     </aside>

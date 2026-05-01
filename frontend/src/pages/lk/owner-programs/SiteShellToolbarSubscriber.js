@@ -15,7 +15,6 @@ export default function SiteShellToolbarSubscriber({
   projectEntry,
 }) {
   const {
-    loading,
     data,
     diag,
     widgetEnabled,
@@ -37,11 +36,11 @@ export default function SiteShellToolbarSubscriber({
 
   useEffect(() => {
     if (typeof setSiteShellToolbar !== "function") {
-      return undefined;
+      return;
     }
-    if (loading || !data) {
+    if (!data) {
       setSiteShellToolbar(null);
-      return undefined;
+      return;
     }
     const lifecycleForToolbar = diag?.site_status || data?.status;
     setSiteShellToolbar(
@@ -63,14 +62,12 @@ export default function SiteShellToolbarSubscriber({
         />
       </>,
     );
-    return () => setSiteShellToolbar(null);
   }, [
     activateLoading,
     activateError,
     data,
     deleteSiteBusy,
     diag?.site_status,
-    loading,
     refreshBusy,
     saving,
     setSiteShellToolbar,
@@ -78,6 +75,14 @@ export default function SiteShellToolbarSubscriber({
     widgetEnabled,
     actionsRef,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof setSiteShellToolbar === "function") {
+        setSiteShellToolbar(null);
+      }
+    };
+  }, [setSiteShellToolbar]);
 
   return null;
 }

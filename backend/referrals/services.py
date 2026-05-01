@@ -1299,6 +1299,27 @@ def upsert_order_from_tilda_payload(
     return order, created
 
 
+def member_referrer_money_totals(partner: PartnerProfile) -> dict[str, str]:
+    """
+    Sum of paid order amounts and commission rows for this referrer.
+
+    ``Order`` rows are not keyed by ``Site`` in the schema; totals align with the partner
+    dashboard aggregates for this ``PartnerProfile`` (attributed paid orders and commissions).
+    """
+    paid_orders = Order.objects.filter(partner=partner, status=Order.Status.PAID)
+    sales_agg = paid_orders.aggregate(total=Sum("amount"))
+    sales_total = sales_agg["total"] or Decimal("0.00")
+
+    comm_agg = Commission.objects.filter(partner=partner).aggregate(total=Sum("commission_amount"))
+    commission_total = comm_agg["total"] or Decimal("0.00")
+
+    q = Decimal("0.01")
+    return {
+        "referrer_sales_total": str(Decimal(sales_total).quantize(q)),
+        "referrer_commission_total": str(Decimal(commission_total).quantize(q)),
+    }
+
+
 def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: str) -> dict:
     """
     Aggregate partner dashboard fields for API responses.
@@ -1365,6 +1386,22 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
         "total_leads_count": total_leads_count,
         "recent_leads": recent_leads,
     }
+
+
+def member_site_referral_link(site: Site, ref_code: str, *, app_public_base_url: str) -> str:
+    """
+    Ссылка для распространения участником программы: основной origin сайта + ?ref=.
+    Если у сайта нет allowed_origins — как у партнёрского дашборда (FRONTEND_URL).
+    """
+    code = (ref_code or "").strip()
+    if not code:
+        return ""
+    primary_origin, _ = owner_site_list_origin_display(site)
+    base = (primary_origin or "").strip().rstrip("/")
+    if base:
+        return f"{base}/?ref={code}"
+    app_base = (app_public_base_url or "").rstrip("/")
+    return f"{app_base}/?ref={code}" if app_base else f"/?ref={code}"
 
 
 # --- Public widget / multi-site integration (v1) ---

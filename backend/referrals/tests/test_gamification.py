@@ -1,0 +1,276 @@
+import uuid
+from datetime import date, timedelta
+from decimal import Decimal
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework.test import APIClient
+
+from referrals.gamification import (
+    calculate_daily_challenge_base_xp,
+    get_streak_multiplier,
+    local_today,
+)
+from referrals.gamification_game import replay_daily_challenge
+from referrals.models import DailyChallengeAttempt, GamificationProfile, XPEvent
+from referrals.tests.gamification_autoplay import greedy_moves_until_game_over
+
+User = get_user_model()
+
+
+class GamificationApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="gamer",
+            email="gamer@example.com",
+            password="secret12",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _start_and_autoplay_payload(self, *, client_score=None, moves_override=None):
+        self.client.post("/referrals/gamification/daily-challenge/start/")
+        summ = self.client.get("/referrals/gamification/summary/").json()
+        ta = summ["today_attempt"]
+        aid = ta["attempt_public_id"]
+        seed = int(ta["rng_seed"])
+        moves = greedy_moves_until_game_over(seed) if moves_override is None else moves_override
+        server_score, err = replay_daily_challenge(seed, moves)
+        self.assertEqual(err, "")
+        cs = server_score if client_score is None else client_score
+        return (
+            {
+                "attempt_id": aid,
+                "moves": moves,
+                "client_score": cs,
+            },
+            server_score,
+        )
+
+    def test_summary_creates_profile(self):
+        self.assertFalse(GamificationProfile.objects.filter(user=self.user).exists())
+        r = self.client.get("/referrals/gamification/summary/")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(GamificationProfile.objects.filter(user=self.user).exists())
+        body = r.json()
+        self.assertEqual(body["xp_total"], 0)
+        self.assertEqual(body["streak_days"], 0)
+        self.assertIn("daily_challenge_xp_tiers", body)
+        self.assertIn("streak_multiplier_tiers", body)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 5, 10))
+    def test_start_creates_one_attempt_per_day(self, _mock):
+        r1 = self.client.post("/referrals/gamification/daily-challenge/start/")
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(DailyChallengeAttempt.objects.filter(user=self.user).count(), 1)
+        ta = r1.json()["today_attempt"]
+        self.assertIn("attempt_public_id", ta)
+        self.assertIsNotNone(ta.get("rng_seed"))
+        r2 = self.client.post("/referrals/gamification/daily-challenge/start/")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(DailyChallengeAttempt.objects.filter(user=self.user).count(), 1)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 5, 10))
+    def test_finish_awards_xp_once(self, _mock):
+        payload, server_score = self._start_and_autoplay_payload()
+        r = self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertFalse(data["already_completed"])
+        base_xp = calculate_daily_challenge_base_xp(server_score)
+        self.assertEqual(data["reward"]["base_xp"], base_xp)
+        self.assertEqual(data["reward"]["awarded_xp"], base_xp)
+        self.assertEqual(data["reward"]["score"], server_score)
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.xp_total, base_xp)
+        self.assertEqual(XPEvent.objects.filter(user=self.user).count(), 1)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 5, 10))
+    def test_second_finish_does_not_award_again(self, _mock):
+        payload, server_score = self._start_and_autoplay_payload()
+        self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            payload,
+            format="json",
+        )
+        r2 = self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            {
+                "attempt_id": payload["attempt_id"],
+                "moves": [],
+                "client_score": 99_999,
+            },
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertTrue(r2.json()["already_completed"])
+        profile = GamificationProfile.objects.get(user=self.user)
+        base_xp = calculate_daily_challenge_base_xp(server_score)
+        self.assertEqual(profile.xp_total, base_xp)
+        self.assertEqual(XPEvent.objects.filter(user=self.user).count(), 1)
+
+    @patch("referrals.gamification.local_today")
+    def test_streak_increments_next_day(self, mock_today):
+        d0 = date(2026, 6, 1)
+        mock_today.return_value = d0
+        payload, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.streak_days, 1)
+
+        mock_today.return_value = d0 + timedelta(days=1)
+        payload2, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload2, format="json")
+        profile.refresh_from_db()
+        self.assertEqual(profile.streak_days, 2)
+
+    @patch("referrals.gamification.local_today")
+    def test_streak_resets_after_skip(self, mock_today):
+        d0 = date(2026, 6, 10)
+        mock_today.return_value = d0
+        payload, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+
+        mock_today.return_value = d0 + timedelta(days=2)
+        payload2, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload2, format="json")
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.streak_days, 1)
+
+    def test_streak_multiplier_table(self):
+        self.assertEqual(get_streak_multiplier(1), Decimal("1.0"))
+        self.assertEqual(get_streak_multiplier(2), Decimal("1.1"))
+        self.assertEqual(get_streak_multiplier(3), Decimal("1.2"))
+        self.assertEqual(get_streak_multiplier(5), Decimal("1.3"))
+        self.assertEqual(get_streak_multiplier(7), Decimal("1.5"))
+        self.assertEqual(get_streak_multiplier(14), Decimal("1.7"))
+        self.assertEqual(get_streak_multiplier(30), Decimal("2.0"))
+        self.assertEqual(get_streak_multiplier(100), Decimal("2.0"))
+
+    def test_daily_challenge_base_xp_brackets(self):
+        self.assertEqual(calculate_daily_challenge_base_xp(0), 10)
+        self.assertEqual(calculate_daily_challenge_base_xp(499), 10)
+        self.assertEqual(calculate_daily_challenge_base_xp(500), 20)
+        self.assertEqual(calculate_daily_challenge_base_xp(999), 20)
+        self.assertEqual(calculate_daily_challenge_base_xp(1000), 35)
+        self.assertEqual(calculate_daily_challenge_base_xp(1999), 35)
+        self.assertEqual(calculate_daily_challenge_base_xp(2000), 50)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 7, 1))
+    def test_best_challenge_score_only_increases(self, _mock):
+        payload, server_score = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.best_challenge_score, server_score)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 7, 2))
+    def test_best_challenge_score_next_day_higher_only(self, _mock):
+        GamificationProfile.objects.create(user=self.user, best_challenge_score=800)
+        payload, server_score = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.best_challenge_score, max(800, server_score))
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 8, 1))
+    def test_xpevent_daily_challenge_idempotency_key(self, _mock):
+        payload, server_score = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        ev = XPEvent.objects.get(user=self.user)
+        self.assertEqual(ev.source, XPEvent.Source.DAILY_CHALLENGE)
+        self.assertEqual(ev.idempotency_key, f"daily_challenge:{self.user.pk}:2026-08-01")
+        self.assertEqual(ev.metadata_json.get("score"), server_score)
+
+    def test_finish_without_start_returns_error(self):
+        r = self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            {
+                "attempt_id": str(uuid.uuid4()),
+                "moves": [],
+                "client_score": 100,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "daily_challenge_not_started")
+        self.assertFalse(GamificationProfile.objects.filter(user=self.user).exists())
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 9, 1))
+    def test_invalid_placement_returns_400_no_xpevent(self, _mock):
+        payload, _ = self._start_and_autoplay_payload()
+        bad_moves = list(payload["moves"])
+        if bad_moves:
+            bad_moves[-1] = {**bad_moves[-1], "row": 99}
+        else:
+            bad_moves = [{"piece_slot": 0, "row": 0, "col": 0, "client_time_ms": 0}]
+        r = self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            {"attempt_id": payload["attempt_id"], "moves": bad_moves, "client_score": 0},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(XPEvent.objects.filter(user=self.user).count(), 0)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 9, 2))
+    def test_moves_too_long_rejected(self, _mock):
+        self.client.post("/referrals/gamification/daily-challenge/start/")
+        summ = self.client.get("/referrals/gamification/summary/").json()
+        aid = summ["today_attempt"]["attempt_public_id"]
+        long_moves = [{"piece_slot": 0, "row": 0, "col": 0, "client_time_ms": i} for i in range(501)]
+        r = self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            {"attempt_id": aid, "moves": long_moves, "client_score": 0},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 9, 3))
+    def test_foreign_attempt_rejected(self, _mock):
+        other = User.objects.create_user(
+            username="other",
+            email="other@example.com",
+            password="secret12",
+        )
+        self.client.post("/referrals/gamification/daily-challenge/start/")
+        other_client = APIClient()
+        other_client.force_authenticate(user=other)
+        other_client.post("/referrals/gamification/daily-challenge/start/")
+        other_summ = other_client.get("/referrals/gamification/summary/").json()
+        foreign_id = other_summ["today_attempt"]["attempt_public_id"]
+
+        payload, _ = self._start_and_autoplay_payload()
+        r = self.client.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            {
+                "attempt_id": foreign_id,
+                "moves": payload["moves"],
+                "client_score": 0,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "daily_challenge_not_started")
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 9, 4))
+    def test_client_score_mismatch_sets_warning_awards_server_score(self, _mock):
+        payload, server_score = self._start_and_autoplay_payload()
+        payload = {**payload, "client_score": server_score + 50000}
+        r = self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertTrue(body["reward"].get("score_mismatch_warning"))
+        self.assertEqual(body["reward"]["score"], server_score)
+        base_xp = calculate_daily_challenge_base_xp(server_score)
+        self.assertEqual(body["reward"]["base_xp"], base_xp)
+
+
+class LocalTodayPatchTests(TestCase):
+    """Ensure tests patch the same symbol the app uses."""
+
+    def test_local_today_is_django_localdate(self):
+        with patch("django.utils.timezone.localdate", return_value=date(2099, 1, 1)):
+            self.assertEqual(local_today(), date(2099, 1, 1))
