@@ -94,6 +94,24 @@
   margin-top: 0;
 }
 
+/* Обложка каталога: те же классы/отступы, что у баннера на «Мои программы» (.lk-dashboard__my-programs-catalog-banner) */
+
+.lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-title {
+  white-space: nowrap;
+  font-size: clamp(15px, 2.35vw, 24px);
+}
+
+/* Та же вертикальная «дорожка», что у баннера с иллюстрацией: max-height картинки 220px + align-items:center у inner */
+.lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-inner {
+  min-height: 220px;
+}
+
+@media (max-width: 640px) {
+  .lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-inner {
+    min-height: 0;
+  }
+}
+
 .lk-dashboard_my-programs-page .lk-dashboard__programs {
   margin-top: 0;
 }
@@ -321,6 +339,11 @@
   font-size: 18px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
+}
+
+/* Каталог программ: шаг до строки поиска как у тулбаров разделов (24px, см. owner-programs__services-toolbar) */
+.lk-dashboard__programs_catalog > .lk-dashboard__programs-title {
+  margin-bottom: 24px;
 }
 
 .lk-dashboard__programs-lead {

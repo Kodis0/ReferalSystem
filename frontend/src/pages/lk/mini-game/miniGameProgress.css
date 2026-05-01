@@ -1,0 +1,328 @@
+.mini-game-progress__tab-panel {
+  margin-top: 18px;
+}
+
+/* Кнопки-вкладки: те же классы, что у NavLink в проектах */
+.lk-simple-page .owner-programs__tabs button.owner-programs__tab {
+  font: inherit;
+  cursor: pointer;
+}
+
+.mini-game-progress__hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+  width: 100%;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.mini-game-progress__league-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 148px;
+}
+
+.mini-game-progress__leagues-list-link {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.72);
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.mini-game-progress__leagues-list-link:hover {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-progress__leagues-list-link:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.85);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+[data-theme="light"] .mini-game-progress__leagues-list-link {
+  color: rgba(38, 50, 92, 0.68);
+}
+
+[data-theme="light"] .mini-game-progress__leagues-list-link:hover {
+  color: rgba(38, 50, 92, 0.92);
+}
+
+/* League tier BG assets: 1416×456 — run frontend/scripts/normalize-mini-game-league-bgs.py after art swaps. */
+.mini-game-progress__league-card--start,
+.mini-game-progress__league-card--bronze,
+.mini-game-progress__league-card--silver,
+.mini-game-progress__league-card--gold,
+.mini-game-progress__league-card--platinum,
+.mini-game-progress__league-card--diamond,
+.mini-game-progress__league-card--ultra {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: none;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+.mini-game-progress__league-card--start,
+.mini-game-progress__league-card--bronze,
+.mini-game-progress__league-card--silver,
+.mini-game-progress__league-card--gold,
+.mini-game-progress__league-card--platinum,
+.mini-game-progress__league-card--ultra {
+  background-color: #121a26;
+}
+
+.mini-game-progress__league-card--start {
+  background-image: var(--mini-game-league-start-bg);
+}
+
+.mini-game-progress__league-card--bronze {
+  background-image: var(--mini-game-league-bronze-bg);
+}
+
+.mini-game-progress__league-card--silver {
+  background-image: var(--mini-game-league-silver-bg);
+}
+
+.mini-game-progress__league-card--gold {
+  background-image: var(--mini-game-league-gold-bg);
+}
+
+.mini-game-progress__league-card--platinum {
+  background-image: var(--mini-game-league-platinum-bg);
+}
+
+.mini-game-progress__league-card--diamond {
+  background-color: #b9e6ff;
+  background-image: var(--mini-game-league-diamond-bg);
+}
+
+.mini-game-progress__league-card--ultra {
+  background-image: var(--mini-game-league-ultra-bg);
+}
+
+.mini-game-progress__league-card--start::before,
+.mini-game-progress__league-card--bronze::before,
+.mini-game-progress__league-card--silver::before,
+.mini-game-progress__league-card--gold::before,
+.mini-game-progress__league-card--ultra::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    rgba(18, 26, 38, 0.88) 0%,
+    rgba(18, 26, 38, 0.42) 52%,
+    rgba(18, 26, 38, 0.08) 100%
+  );
+  pointer-events: none;
+}
+
+.mini-game-progress__league-card--platinum::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    rgba(18, 26, 38, 0.92) 0%,
+    rgba(18, 26, 38, 0.52) 52%,
+    rgba(18, 26, 38, 0.16) 100%
+  );
+  pointer-events: none;
+}
+
+.mini-game-progress__league-card--diamond::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    rgba(12, 42, 72, 0.68) 0%,
+    rgba(12, 42, 72, 0.22) 40%,
+    rgba(185, 230, 255, 0.12) 72%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.mini-game-progress__league-card--start > *:not(.mini-game-progress__leagues-list-link),
+.mini-game-progress__league-card--bronze > *:not(.mini-game-progress__leagues-list-link),
+.mini-game-progress__league-card--silver > *:not(.mini-game-progress__leagues-list-link),
+.mini-game-progress__league-card--gold > *:not(.mini-game-progress__leagues-list-link),
+.mini-game-progress__league-card--platinum > *:not(.mini-game-progress__leagues-list-link),
+.mini-game-progress__league-card--diamond > *:not(.mini-game-progress__leagues-list-link),
+.mini-game-progress__league-card--ultra > *:not(.mini-game-progress__leagues-list-link) {
+  position: relative;
+  z-index: 1;
+}
+
+.mini-game-progress__league-card--start .block-blast-game__profile-card-label,
+.mini-game-progress__league-card--bronze .block-blast-game__profile-card-label,
+.mini-game-progress__league-card--silver .block-blast-game__profile-card-label,
+.mini-game-progress__league-card--gold .block-blast-game__profile-card-label,
+.mini-game-progress__league-card--platinum .block-blast-game__profile-card-label,
+.mini-game-progress__league-card--diamond .block-blast-game__profile-card-label,
+.mini-game-progress__league-card--ultra .block-blast-game__profile-card-label {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.mini-game-progress__league-card--start .mini-game-progress__league-caption,
+.mini-game-progress__league-card--bronze .mini-game-progress__league-caption,
+.mini-game-progress__league-card--silver .mini-game-progress__league-caption,
+.mini-game-progress__league-card--gold .mini-game-progress__league-caption,
+.mini-game-progress__league-card--platinum .mini-game-progress__league-caption,
+.mini-game-progress__league-card--diamond .mini-game-progress__league-caption,
+.mini-game-progress__league-card--ultra .mini-game-progress__league-caption {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.mini-game-progress__league-name {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-progress__league-caption {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.mini-game-progress__next-league-card {
+  width: 100%;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.mini-game-progress__next-league-placeholder {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+[data-theme="light"] .mini-game-progress__next-league-placeholder {
+  color: rgba(38, 50, 92, 0.58);
+}
+
+.mini-game-progress__donut-card {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 220px;
+  min-width: 0;
+  justify-self: end;
+  min-height: 168px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+/* Как на странице «Лиги»: заголовок и донат по центру карточки */
+.mini-game-progress__hero-row > .mini-game-progress__donut-card.block-blast-game__profile-card:not(.block-blast-game__profile-card_xp) {
+  align-items: center;
+  text-align: center;
+}
+
+.mini-game-progress__hero-row .mini-game-progress__donut-card .block-blast-game__profile-card-label {
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.mini-game-progress__hero-row .mini-game-progress__donut-card .mini-game-progress__donut-wrap {
+  width: 100%;
+}
+
+.mini-game-progress__donut-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  min-height: 176px;
+}
+
+.mini-game-progress__donut-svg {
+  width: 176px;
+  height: 176px;
+}
+
+.mini-game-progress__donut-track {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.28);
+  stroke-width: 13;
+}
+
+.mini-game-progress__donut-fill {
+  fill: none;
+  stroke: #7177f8;
+  stroke-width: 13;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.35s ease;
+}
+
+.mini-game-progress__donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.mini-game-progress__donut-pct {
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-progress__donut-level {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #7177f8;
+}
+
+@media (max-width: 560px) {
+  .mini-game-progress__hero-row {
+    grid-template-columns: 1fr;
+  }
+
+  .mini-game-progress__donut-card {
+    justify-self: stretch;
+    max-width: none;
+    width: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-game-progress__donut-fill {
+    transition: none;
+  }
+}

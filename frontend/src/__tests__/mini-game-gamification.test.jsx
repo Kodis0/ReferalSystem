@@ -6,6 +6,12 @@ import { API_ENDPOINTS } from "../config/api";
 import BlockBlastGame from "../pages/lk/mini-game/BlockBlastGame";
 import { postGamificationDailyChallengeFinish } from "../pages/lk/mini-game/gamificationApi";
 
+const EMPTY_LEADERBOARD = {
+  rows: [],
+  challenge_date: "2026-05-01",
+  limit: 50,
+};
+
 const BASE_SUMMARY = {
   profile: {
     xp_total: 120,
@@ -40,6 +46,26 @@ function mockJsonResponse(data, ok = true) {
   };
 }
 
+function stubGamificationFetch({
+  summary = BASE_SUMMARY,
+  leaderboard = EMPTY_LEADERBOARD,
+  startResponse,
+} = {}) {
+  global.fetch.mockImplementation((url, options) => {
+    const u = String(url);
+    if (u.includes("/gamification/summary/")) {
+      return Promise.resolve(mockJsonResponse(summary));
+    }
+    if (u.includes("/daily-challenge/leaderboard/")) {
+      return Promise.resolve(mockJsonResponse(leaderboard));
+    }
+    if (u.includes("/daily-challenge/start/") && options?.method === "POST") {
+      return Promise.resolve(mockJsonResponse(startResponse ?? summary));
+    }
+    return Promise.reject(new Error(`unexpected fetch ${url}`));
+  });
+}
+
 describe("BlockBlastGame gamification API", () => {
   const originalFetch = global.fetch;
 
@@ -67,13 +93,21 @@ describe("BlockBlastGame gamification API", () => {
   });
 
   it("loads summary on mount and shows values from API", async () => {
-    global.fetch.mockResolvedValueOnce(mockJsonResponse(BASE_SUMMARY));
+    stubGamificationFetch();
 
     render(<BlockBlastGame />);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         API_ENDPOINTS.gamificationSummary,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: "Bearer test-access-token" }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        API_ENDPOINTS.gamificationDailyChallengeLeaderboard,
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: "Bearer test-access-token" }),
         }),
@@ -96,9 +130,10 @@ describe("BlockBlastGame gamification API", () => {
       },
     };
 
-    global.fetch
-      .mockResolvedValueOnce(mockJsonResponse(BASE_SUMMARY))
-      .mockResolvedValueOnce(mockJsonResponse(afterStart));
+    stubGamificationFetch({
+      summary: BASE_SUMMARY,
+      startResponse: afterStart,
+    });
 
     render(<BlockBlastGame />);
 
@@ -130,7 +165,7 @@ describe("BlockBlastGame gamification API", () => {
         recovery_seconds: 3600,
       },
     };
-    global.fetch.mockResolvedValueOnce(mockJsonResponse(noLives));
+    stubGamificationFetch({ summary: noLives });
 
     render(<BlockBlastGame />);
 

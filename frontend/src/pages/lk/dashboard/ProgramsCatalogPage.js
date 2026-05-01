@@ -433,18 +433,28 @@ export default function ProgramsCatalogPage() {
 
   return (
     <>
-    <div className="lk-dashboard">
+    <div className="lk-dashboard lk-dashboard_my-programs-page">
       <section
         className="lk-dashboard__programs lk-dashboard__programs_catalog"
         aria-labelledby="programs-catalog-heading"
         aria-busy={programs === null && !error ? true : undefined}
       >
+        <div className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero">
+          <div className="lk-dashboard__my-programs-catalog-banner-inner">
+            <div className="lk-dashboard__my-programs-catalog-banner-copy">
+              <p className="lk-dashboard__my-programs-catalog-banner-title">
+                Начните зарабатывать на рекомендациях
+              </p>
+              <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                Выберите подходящую программу, вступите в неё и получите персональную ссылку. Делитесь ссылкой с
+                аудиторией — все привлечённые клиенты будут закрепляться за вами.
+              </p>
+            </div>
+          </div>
+        </div>
         <h1 id="programs-catalog-heading" className="lk-dashboard__programs-title">
           Каталог реферальных программ
         </h1>
-        <p className="lk-dashboard__programs-lead">
-          Выберите программу, вступите в неё и получите персональную ссылку для привлечения клиентов.
-        </p>
 
         {programs !== null && !error && programsExcludingJoined && programsExcludingJoined.length > 0 ? (
           <>

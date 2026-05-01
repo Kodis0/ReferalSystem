@@ -14,6 +14,44 @@ function jsonHeaders(token) {
 }
 
 /**
+ * GET /referrals/gamification/daily-challenge/leaderboard/
+ */
+export async function fetchGamificationDailyChallengeLeaderboard(token) {
+  const res = await fetch(API_ENDPOINTS.gamificationDailyChallengeLeaderboard, {
+    headers: bearerHeaders(token),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data?.detail || data?.code || "gamification_leaderboard_failed");
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * GET /referrals/gamification/leaderboard/?period=week|month|all
+ */
+export async function fetchGamificationReferralLeaderboard(token, period = "month") {
+  const q = new URLSearchParams({ period: String(period || "month") });
+  const url = `${API_ENDPOINTS.gamificationReferralLeaderboard}?${q.toString()}`;
+  const res = await fetch(url, {
+    headers: bearerHeaders(token),
+    cache: "no-store",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data?.detail || data?.code || "referral_leaderboard_failed");
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+/**
  * GET /referrals/gamification/summary/
  */
 export async function fetchGamificationSummary(token) {

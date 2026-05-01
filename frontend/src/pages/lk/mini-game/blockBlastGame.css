@@ -179,25 +179,6 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
-.block-blast-game__finish-reward {
-  margin: 0 0 14px;
-  text-align: center;
-}
-
-.block-blast-game__finish-reward-line {
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 800;
-  color: rgba(167, 243, 208, 0.98);
-}
-
-.block-blast-game__finish-reward-meta {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.72);
-}
-
 .block-blast-game__profile-card-value--streak {
   display: flex;
   flex-wrap: wrap;
@@ -430,8 +411,25 @@
   max-width: none;
   flex: 1 1 auto;
   min-height: 0;
+  max-height: min(55vh, 520px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   border: none;
   box-shadow: none;
+}
+
+.block-blast-game__leaderboard-placeholder {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+}
+
+[data-theme="light"] .block-blast-game__leaderboard-placeholder {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 [data-theme="light"] .block-blast-game__leaderboard-menu.lk-header__menu {

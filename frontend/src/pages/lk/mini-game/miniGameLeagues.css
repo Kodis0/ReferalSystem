@@ -1,0 +1,961 @@
+.mini-game-leagues__back {
+  margin-bottom: 16px;
+}
+
+.mini-game-leagues__back .tw-link.link_primary.link_s {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 24px;
+  text-decoration: none;
+}
+
+.mini-game-leagues__back .tw-link.link_primary.link_s svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.mini-game-leagues__back .tw-link.link_primary.link_s:hover {
+  color: rgba(255, 255, 255, 0.72);
+  text-decoration: none;
+}
+
+[data-theme="light"] .mini-game-leagues__back .tw-link.link_primary.link_s {
+  color: rgba(38, 50, 92, 0.48);
+}
+
+[data-theme="light"] .mini-game-leagues__back .tw-link.link_primary.link_s:hover {
+  color: rgba(38, 50, 92, 0.72);
+}
+
+.mini-game-leagues__intro {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+[data-theme="light"] .mini-game-leagues__intro {
+  color: rgba(38, 50, 92, 0.58);
+}
+
+/* Карточки Start / Bronze — те же классы и размеры, что в hero-row на «Прогресс» (~708×228 рядом с donut) */
+.mini-game-leagues__list-item-tier-card {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mini-game-leagues__list-item-tier-card .mini-game-progress__league-card--bronze,
+.mini-game-leagues__list-item-tier-card .mini-game-progress__league-card--silver,
+.mini-game-leagues__list-item-tier-card .mini-game-progress__league-card--gold,
+.mini-game-leagues__list-item-tier-card .mini-game-progress__league-card--platinum,
+.mini-game-leagues__list-item-tier-card .mini-game-progress__league-card--diamond,
+.mini-game-leagues__list-item-tier-card .mini-game-progress__league-card--ultra {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 228px;
+}
+
+/* Крупнее только карточка Start в первой колонке hero */
+.mini-game-leagues__list-head .mini-game-progress__league-card--start {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 280px;
+}
+
+/* Слайдер «Условия» / «Награда»: одна карточка на ширину bronze-unlock-fullbleed; стрелки по бокам поверх карточки */
+.mini-game-leagues__unlock-pair {
+  --ml-unlock-side-gutter: 14px;
+  --ml-unlock-content-pad-x: 64px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__unlock-pair-stage {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__unlock-pair-viewport {
+  overflow: hidden;
+  width: 100%;
+}
+
+.mini-game-leagues__unlock-pair-track {
+  display: flex;
+  width: 200%;
+  transition: transform 0.28s ease;
+  will-change: transform;
+}
+
+.mini-game-leagues__unlock-pair-sides {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--ml-unlock-side-gutter, 14px);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__unlock-pair-sides .mini-game-leagues__unlock-pair-arrow {
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.mini-game-leagues__unlock-pair-dots-wrap {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__unlock-pair-dots-wrap .mini-game-leagues__unlock-pair-dots {
+  pointer-events: auto;
+}
+
+.mini-game-leagues__unlock-pair-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(30, 30, 40, 0.65);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.mini-game-leagues__unlock-pair-arrow:hover:not(:disabled) {
+  background: rgba(48, 48, 58, 0.88);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.mini-game-leagues__unlock-pair-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mini-game-leagues__unlock-pair-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-game-leagues__unlock-pair-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.mini-game-leagues__unlock-pair-dot--active {
+  background: rgba(113, 119, 248, 0.95);
+  transform: scale(1.15);
+}
+
+[data-theme="light"] .mini-game-leagues__unlock-pair-arrow {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(6px);
+  color: rgba(38, 50, 92, 0.88);
+}
+
+[data-theme="light"] .mini-game-leagues__unlock-pair-arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="light"] .mini-game-leagues__unlock-pair-dot {
+  background: rgba(38, 50, 92, 0.28);
+}
+
+[data-theme="light"] .mini-game-leagues__unlock-pair-dot--active {
+  background: #7177f8;
+}
+
+.block-blast-game__profile-card.mini-game-leagues__bronze-unlock-card:not(.block-blast-game__profile-card_xp) {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.mini-game-leagues__bronze-unlock-card {
+  box-sizing: border-box;
+  padding: 14px 16px;
+  text-align: left;
+  min-height: 280px;
+}
+
+.mini-game-leagues__unlock-pair-track > .mini-game-leagues__bronze-unlock-card {
+  flex: 0 0 50%;
+  width: 50%;
+  max-width: 50%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-left: var(--ml-unlock-content-pad-x, 64px);
+  padding-right: var(--ml-unlock-content-pad-x, 64px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.mini-game-leagues__bronze-unlock-card-title {
+  margin: 0 0 var(--ml-hero-gap, 12px);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.mini-game-leagues__bronze-req-wrap {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ml-hero-gap, 12px);
+}
+
+.mini-game-leagues__bronze-req-headers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px var(--ml-hero-gap, 12px);
+  align-items: end;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding-bottom: var(--ml-hero-gap, 12px);
+  margin-bottom: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.mini-game-leagues__bronze-req-headers span:last-child {
+  text-align: right;
+}
+
+.mini-game-leagues__bronze-req-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ml-hero-gap, 12px);
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__bronze-req {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px var(--ml-hero-gap, 12px);
+  align-items: start;
+}
+
+.mini-game-leagues__bronze-req-head {
+  display: contents;
+}
+
+.mini-game-leagues__bronze-req-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.72);
+  min-width: 0;
+}
+
+.mini-game-leagues__bronze-req-fraction {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: right;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.mini-game-leagues__bronze-req-bar.block-blast-game__xp-bar {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  height: 6px;
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-req-headers {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+  color: rgba(38, 50, 92, 0.46);
+}
+
+.mini-game-leagues__bronze-reward-table-wrap {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__bronze-reward-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.mini-game-leagues__bronze-reward-table-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mini-game-leagues__bronze-reward-table-corner {
+  width: 28%;
+}
+
+.mini-game-leagues__bronze-reward-table thead th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.48);
+  padding: 0 8px var(--ml-hero-gap, 12px) 0;
+  vertical-align: bottom;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mini-game-leagues__bronze-reward-table thead th:not(.mini-game-leagues__bronze-reward-table-corner) {
+  width: 36%;
+}
+
+.mini-game-leagues__bronze-reward-table tbody th {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.72);
+  padding: var(--ml-hero-gap, 12px) var(--ml-hero-gap, 12px) var(--ml-hero-gap, 12px) 0;
+  vertical-align: top;
+}
+
+.mini-game-leagues__bronze-reward-table tbody td {
+  padding: var(--ml-hero-gap, 12px) 8px;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.mini-game-leagues__bronze-reward-table tbody tr:not(:last-child) th,
+.mini-game-leagues__bronze-reward-table tbody tr:not(:last-child) td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mini-game-leagues__bronze-reward-now {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.mini-game-leagues__bronze-reward-after {
+  font-weight: 700;
+  color: #7177f8;
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-reward-table thead th {
+  color: rgba(38, 50, 92, 0.46);
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-reward-table tbody th {
+  color: rgba(38, 50, 92, 0.78);
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-reward-table tbody tr:not(:last-child) th,
+[data-theme="light"] .mini-game-leagues__bronze-reward-table tbody tr:not(:last-child) td {
+  border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-reward-now {
+  color: rgba(38, 50, 92, 0.48);
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-reward-after {
+  color: #7177f8;
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-req-label {
+  color: rgba(38, 50, 92, 0.78);
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-req-fraction {
+  color: #1e293b;
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-unlock-card-title {
+  color: #1e293b;
+}
+
+.mini-game-leagues__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ml-hero-gap, 12px);
+}
+
+.mini-game-leagues__tier-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ml-hero-gap, 12px);
+  margin-bottom: 32px;
+}
+
+.mini-game-leagues__tier-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Внутренний ритм карточек; --ml-hero-layout-gap — один шаг между колонками/строками hero (ровно тот же px везде) */
+.mini-game-leagues__hero-row.mini-game-progress__hero-row {
+  --ml-hero-gap: 12px;
+  --ml-hero-layout-gap: 16px;
+  --ml-donut-card-outer: 280px;
+  grid-template-rows: repeat(15, auto);
+  align-items: start;
+  column-gap: var(--ml-hero-layout-gap);
+  row-gap: var(--ml-hero-layout-gap);
+  margin-bottom: var(--ml-hero-layout-gap);
+}
+
+.mini-game-leagues__list-head {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card--step-bronze {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.mini-game-leagues__silver-step-head {
+  grid-column: 1;
+  grid-row: 3;
+  min-width: 0;
+  align-self: start;
+}
+
+.mini-game-leagues__silver-step-head .mini-game-progress__league-card--bronze {
+  min-height: 280px;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card--step-silver {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.mini-game-leagues__catalog-section-heading-fullbleed {
+  grid-column: 1 / -1;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__catalog-section-heading-fullbleed--advanced {
+  grid-row: 5;
+}
+
+.mini-game-leagues__catalog-section-heading-fullbleed--elite {
+  grid-row: 10;
+}
+
+.mini-game-leagues__gold-step-head {
+  grid-column: 1;
+  grid-row: 6;
+  min-width: 0;
+  align-self: start;
+}
+
+.mini-game-leagues__gold-step-head .mini-game-progress__league-card--silver {
+  min-height: 280px;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card--step-gold {
+  grid-column: 2;
+  grid-row: 6;
+}
+
+.mini-game-leagues__platinum-step-head {
+  grid-column: 1;
+  grid-row: 8;
+  min-width: 0;
+  align-self: start;
+}
+
+.mini-game-leagues__platinum-step-head .mini-game-progress__league-card--gold {
+  min-height: 280px;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card--step-platinum {
+  grid-column: 2;
+  grid-row: 8;
+}
+
+.mini-game-leagues__diamond-step-head {
+  grid-column: 1;
+  grid-row: 11;
+  min-width: 0;
+  align-self: start;
+}
+
+.mini-game-leagues__diamond-step-head .mini-game-progress__league-card--platinum {
+  min-height: 280px;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card--step-diamond {
+  grid-column: 2;
+  grid-row: 11;
+}
+
+.mini-game-leagues__ultra-step-head {
+  grid-column: 1;
+  grid-row: 13;
+  min-width: 0;
+  align-self: start;
+}
+
+.mini-game-leagues__ultra-step-head .mini-game-progress__league-card--diamond {
+  min-height: 280px;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card--step-ultra {
+  grid-column: 2;
+  grid-row: 13;
+}
+
+.mini-game-leagues__bronze-unlock-fullbleed {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__silver-unlock-fullbleed {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__gold-unlock-fullbleed {
+  grid-column: 1 / -1;
+  grid-row: 7;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__platinum-unlock-fullbleed {
+  grid-column: 1 / -1;
+  grid-row: 9;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__diamond-unlock-fullbleed {
+  grid-column: 1 / -1;
+  grid-row: 12;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__ultra-unlock-fullbleed {
+  grid-column: 1 / -1;
+  grid-row: 14;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__list-tail-ultra {
+  grid-column: 1 / -1;
+  grid-row: 15;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__list-tail-ultra-sr-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mini-game-leagues__donut-placeholder {
+  margin: 0;
+  padding: 32px 12px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+[data-theme="light"] .mini-game-leagues__donut-placeholder {
+  color: rgba(38, 50, 92, 0.58);
+}
+
+/* Шире карточка donut на странице лиг; колонка 2 и спейсер совпадают по ширине (--ml-donut-card-outer) */
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card.mini-game-progress__donut-card {
+  max-width: var(--ml-donut-card-outer);
+  min-width: min(100%, var(--ml-donut-card-outer));
+  padding-left: 16px;
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card.block-blast-game__profile-card:not(.block-blast-game__profile-card_xp) {
+  align-items: center;
+  text-align: center;
+}
+
+.mini-game-leagues__hero-row .mini-game-leagues__donut-card .block-blast-game__profile-card-label {
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.mini-game-leagues__hero-row .mini-game-leagues__donut-card .mini-game-progress__donut-wrap {
+  width: 100%;
+  min-height: 200px;
+}
+
+.mini-game-leagues__hero-row .mini-game-leagues__donut-card .mini-game-progress__donut-svg {
+  width: 200px;
+  height: 200px;
+}
+
+/* Заблокированный donut: те же дочерние узлы, что у открытой карточки — только слой blur + скрим; без лишней оболочки вне article */
+.mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card.mini-game-leagues__donut-card--locked.block-blast-game__profile-card:not(.block-blast-game__profile-card_xp) {
+  justify-content: stretch;
+}
+
+.mini-game-leagues__donut-card--locked {
+  position: relative;
+}
+
+.mini-game-leagues__donut-card--locked .mini-game-leagues__donut-locked-layer {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  filter: blur(18px);
+  -webkit-filter: blur(18px);
+  transform: scale(1.06);
+  opacity: 0.96;
+  pointer-events: none;
+  user-select: none;
+}
+
+.mini-game-leagues__donut-locked-layer .mini-game-leagues__unlock-pair-arrow {
+  visibility: hidden;
+}
+
+.mini-game-leagues__donut-locked-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 14px;
+  text-align: center;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: 12px;
+  background: rgba(5, 7, 12, 0.5);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+}
+
+.mini-game-leagues__donut-locked-icon {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mini-game-leagues__donut-locked-text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.92);
+  max-width: 240px;
+}
+
+[data-theme="light"] .mini-game-leagues__donut-locked-scrim {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+[data-theme="light"] .mini-game-leagues__donut-locked-icon,
+[data-theme="light"] .mini-game-leagues__donut-locked-text {
+  color: rgba(38, 50, 92, 0.88);
+}
+
+/* Заголовок секции (~37px) + gap tier-section (12px) — верх donut = верх первой карточки лиги */
+@media (min-width: 561px) {
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--step-bronze {
+    margin-top: 49px;
+    align-self: start;
+    min-height: 280px;
+    justify-content: center;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--step-silver {
+    margin-top: 0;
+    align-self: start;
+    min-height: 280px;
+    justify-content: center;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--step-gold {
+    margin-top: 0;
+    align-self: start;
+    min-height: 280px;
+    justify-content: center;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--step-platinum {
+    margin-top: 0;
+    align-self: start;
+    min-height: 280px;
+    justify-content: center;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--step-diamond {
+    margin-top: 0;
+    align-self: start;
+    min-height: 280px;
+    justify-content: center;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--step-ultra {
+    margin-top: 0;
+    align-self: start;
+    min-height: 280px;
+    justify-content: center;
+  }
+
+}
+
+@media (max-width: 560px) {
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__list-head,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__silver-step-head,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__bronze-unlock-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__silver-unlock-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__gold-step-head,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__gold-unlock-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__platinum-step-head,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__platinum-unlock-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__diamond-step-head,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__diamond-unlock-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__ultra-step-head,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__ultra-unlock-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row .mini-game-leagues__catalog-section-heading-fullbleed,
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__list-tail-ultra {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card {
+    margin-top: 0;
+    min-height: 0;
+    justify-content: flex-start;
+  }
+
+  .mini-game-leagues__hero-row.mini-game-progress__hero-row > .mini-game-leagues__donut-card.mini-game-progress__donut-card {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card .mini-game-progress__donut-wrap {
+    min-height: 176px;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card .mini-game-progress__donut-svg {
+    width: 176px;
+    height: 176px;
+  }
+
+  .mini-game-leagues__hero-row .mini-game-leagues__donut-card--locked .mini-game-leagues__donut-locked-layer {
+    min-height: 200px;
+  }
+}
+
+/* Заблокированный шаг: тот же React-контент, что и при открытии; размытие = filter по реальной разметке */
+.mini-game-leagues__locked-blur {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mini-game-leagues__locked-blur-source {
+  filter: blur(18px);
+  -webkit-filter: blur(18px);
+  transform: scale(1.07);
+  opacity: 0.96;
+  pointer-events: none;
+  user-select: none;
+  will-change: filter;
+}
+
+.mini-game-leagues__locked-blur-source .mini-game-leagues__unlock-pair-arrow {
+  visibility: hidden;
+}
+
+.mini-game-leagues__locked-blur-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 20px;
+  text-align: center;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: rgba(5, 7, 12, 0.52);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+.mini-game-leagues__locked-blur--unlock {
+  width: 100%;
+  min-height: 220px;
+}
+
+.mini-game-leagues__locked-blur--tier {
+  width: 100%;
+  min-height: 228px;
+}
+
+.mini-game-leagues__silver-step-head .mini-game-leagues__locked-blur--tier,
+.mini-game-leagues__gold-step-head .mini-game-leagues__locked-blur--tier,
+.mini-game-leagues__platinum-step-head .mini-game-leagues__locked-blur--tier,
+.mini-game-leagues__diamond-step-head .mini-game-leagues__locked-blur--tier,
+.mini-game-leagues__ultra-step-head .mini-game-leagues__locked-blur--tier {
+  min-height: 280px;
+}
+
+.mini-game-leagues__list-tail-ultra .mini-game-leagues__locked-blur--tier {
+  min-height: 228px;
+}
+
+.mini-game-leagues__locked-blur-icon {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.mini-game-leagues__locked-blur-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+  max-width: 320px;
+}
+
+[data-theme="light"] .mini-game-leagues__locked-blur {
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="light"] .mini-game-leagues__locked-blur-scrim {
+  background: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+[data-theme="light"] .mini-game-leagues__locked-blur-icon {
+  color: rgba(38, 50, 92, 0.72);
+}
+
+[data-theme="light"] .mini-game-leagues__locked-blur-text {
+  color: rgba(38, 50, 92, 0.82);
+}
+
+.mini-game-leagues__catalog-section-heading-fullbleed--locked .lk-dashboard__programs-catalog-section-heading,
+.mini-game-leagues__catalog-section-heading-fullbleed--locked .lk-dashboard__programs-catalog-section-count {
+  opacity: 0.38;
+  user-select: none;
+  pointer-events: none;
+}

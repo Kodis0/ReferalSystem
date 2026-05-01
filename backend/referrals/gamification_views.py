@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .gamification import (
+    build_daily_challenge_leaderboard,
+    build_gamification_leaderboard,
     build_gamification_summary,
     finish_daily_challenge,
     start_daily_challenge,
@@ -21,6 +23,28 @@ class GamificationSummaryView(APIView):
 
     def get(self, request):
         return Response(build_gamification_summary(request.user))
+
+
+class DailyChallengeLeaderboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(build_daily_challenge_leaderboard())
+
+
+class GamificationReferralLeaderboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        period = (request.query_params.get("period") or "month").strip().lower()
+        try:
+            payload = build_gamification_leaderboard(request.user, period)
+        except ValueError:
+            return Response(
+                {"detail": "invalid_period", "code": "invalid_period"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(payload)
 
 
 class DailyChallengeStartView(APIView):

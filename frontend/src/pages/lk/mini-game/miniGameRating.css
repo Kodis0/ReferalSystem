@@ -1,70 +1,457 @@
+/* Страница «Рейтинг рефералов»: локальные классы + наследование lk-dashboard / каталога */
+
+.mini-game-rating__section {
+  max-width: 100%;
+}
+
+.mini-game-rating__period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.mini-game-rating__period-btn {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+  font: 500 14px/20px "Stem", "Tahoma", "Arial", sans-serif;
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--transition-duration, 0.18s) var(--transition-function, ease);
+}
+
+.mini-game-rating__period-btn:hover,
+.mini-game-rating__period-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mini-game-rating__period-btn--active {
+  background: rgba(113, 119, 248, 0.22);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(113, 119, 248, 0.45);
+}
+
+.mini-game-rating__me-card {
+  box-sizing: border-box;
+  margin: 0 0 20px;
+  padding: 18px 18px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mini-game-rating__me-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.mini-game-rating__me-rank {
+  margin: 0 0 12px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-rating__me-stats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: baseline;
+  font-size: 15px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mini-game-rating__me-stat-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.mini-game-rating__me-stat-label {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.mini-game-rating__me-stats-league {
+  flex-basis: 100%;
+  margin-top: 2px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.mini-game-rating__me-league {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mini-game-rating__me-gap {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.mini-game-rating__me-gap--in-top {
+  border-top-color: rgba(16, 185, 129, 0.25);
+  color: rgba(110, 231, 183, 0.95);
+}
+
+.mini-game-rating__caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mini-game-rating__table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mini-game-rating__table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.mini-game-rating__th {
+  padding: 10px 12px 12px 0;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  vertical-align: bottom;
+}
+
+.mini-game-rating__th--rank {
+  width: 72px;
+  padding-right: 8px;
+}
+
+.mini-game-rating__th--name {
+  min-width: 140px;
+}
+
+.mini-game-rating__th--num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mini-game-rating__td {
+  padding: 12px 12px 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: middle;
+}
+
+.mini-game-rating__td--rank {
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-game-rating__td--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mini-game-rating__rank-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.mini-game-rating__name-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mini-game-rating__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-game-rating__you-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(113, 119, 248, 0.35);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+/* Топ-3: золото / серебро / бронза */
+.mini-game-rating__tr--top1 .mini-game-rating__td {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.14) 0%,
+    rgba(251, 191, 36, 0.04) 48%,
+    transparent 100%
+  );
+  border-bottom-color: rgba(251, 191, 36, 0.22);
+}
+
+.mini-game-rating__tr--top1 .mini-game-rating__rank-cell {
+  color: #fbbf24;
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.35);
+}
+
+.mini-game-rating__tr--top2 .mini-game-rating__td {
+  background: linear-gradient(
+    90deg,
+    rgba(203, 213, 225, 0.16) 0%,
+    rgba(203, 213, 225, 0.05) 48%,
+    transparent 100%
+  );
+  border-bottom-color: rgba(203, 213, 225, 0.2);
+}
+
+.mini-game-rating__tr--top2 .mini-game-rating__rank-cell {
+  color: #e2e8f0;
+}
+
+.mini-game-rating__tr--top3 .mini-game-rating__td {
+  background: linear-gradient(
+    90deg,
+    rgba(234, 88, 12, 0.14) 0%,
+    rgba(234, 88, 12, 0.04) 48%,
+    transparent 100%
+  );
+  border-bottom-color: rgba(234, 88, 12, 0.22);
+}
+
+.mini-game-rating__tr--top3 .mini-game-rating__rank-cell {
+  color: #fb923c;
+}
+
+.mini-game-rating__tr--self .mini-game-rating__td {
+  background: rgba(113, 119, 248, 0.12);
+  border-bottom-color: rgba(113, 119, 248, 0.28);
+}
+
+.mini-game-rating__tbody-pinned .mini-game-rating__tr--self .mini-game-rating__td:first-child {
+  border-left: 3px solid rgba(129, 140, 248, 0.95);
+  padding-left: 9px;
+}
+
+.mini-game-rating__tbody-pinned .mini-game-rating__tr--self {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  box-shadow: 0 -8px 24px rgba(5, 12, 38, 0.35);
+}
+
+.mini-game-rating__tbody-pinned .mini-game-rating__tr--self .mini-game-rating__td {
+  background: rgba(113, 119, 248, 0.18);
+}
+
+.mini-game-rating__tr--omit .mini-game-rating__td--omit {
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.38);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+  background: transparent;
+}
+
+/* Light theme */
+[data-theme="light"] .mini-game-rating__period-btn {
+  background: rgba(15, 23, 42, 0.04);
+  color: rgba(38, 50, 92, 0.72);
+}
+
+[data-theme="light"] .mini-game-rating__period-btn:hover,
+[data-theme="light"] .mini-game-rating__period-btn:focus-visible {
+  background: rgba(15, 23, 42, 0.07);
+  color: #26325c;
+}
+
+[data-theme="light"] .mini-game-rating__period-btn--active {
+  background: rgba(113, 119, 248, 0.18);
+  color: #1e1b4b;
+  box-shadow: inset 0 0 0 1px rgba(113, 119, 248, 0.35);
+}
+
+[data-theme="light"] .mini-game-rating__me-card {
+  background: rgba(15, 23, 42, 0.03);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .mini-game-rating__me-label {
+  color: rgba(38, 50, 92, 0.52);
+}
+
+[data-theme="light"] .mini-game-rating__me-rank {
+  color: #26325c;
+}
+
+[data-theme="light"] .mini-game-rating__me-stats {
+  color: rgba(38, 50, 92, 0.78);
+}
+
+[data-theme="light"] .mini-game-rating__me-stat-value {
+  color: #242f3d;
+}
+
+[data-theme="light"] .mini-game-rating__me-stats-league {
+  color: rgba(38, 50, 92, 0.72);
+}
+
+[data-theme="light"] .mini-game-rating__me-league {
+  color: #26325c;
+}
+
+[data-theme="light"] .mini-game-rating__me-gap {
+  border-top-color: rgba(15, 23, 42, 0.08);
+  color: rgba(38, 50, 92, 0.62);
+}
+
+[data-theme="light"] .mini-game-rating__table {
+  color: rgba(38, 50, 92, 0.88);
+}
+
+[data-theme="light"] .mini-game-rating__th {
+  color: rgba(38, 50, 92, 0.55);
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-theme="light"] .mini-game-rating__td {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .mini-game-rating__rank-cell {
+  color: rgba(38, 50, 92, 0.85);
+}
+
+[data-theme="light"] .mini-game-rating__tr--top1 .mini-game-rating__td {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.2) 0%,
+    rgba(251, 191, 36, 0.06) 55%,
+    transparent 100%
+  );
+  border-bottom-color: rgba(217, 119, 6, 0.22);
+}
+
+[data-theme="light"] .mini-game-rating__tr--top1 .mini-game-rating__rank-cell {
+  color: #b45309;
+  text-shadow: none;
+}
+
+[data-theme="light"] .mini-game-rating__tr--top2 .mini-game-rating__td {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.22) 0%,
+    rgba(148, 163, 184, 0.07) 55%,
+    transparent 100%
+  );
+  border-bottom-color: rgba(100, 116, 139, 0.22);
+}
+
+[data-theme="light"] .mini-game-rating__tr--top2 .mini-game-rating__rank-cell {
+  color: #475569;
+}
+
+[data-theme="light"] .mini-game-rating__tr--top3 .mini-game-rating__td {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 146, 60, 0.18) 0%,
+    rgba(251, 146, 60, 0.06) 55%,
+    transparent 100%
+  );
+  border-bottom-color: rgba(234, 88, 12, 0.22);
+}
+
+[data-theme="light"] .mini-game-rating__tr--top3 .mini-game-rating__rank-cell {
+  color: #c2410c;
+}
+
+[data-theme="light"] .mini-game-rating__tr--self .mini-game-rating__td {
+  background: rgba(113, 119, 248, 0.1);
+  border-bottom-color: rgba(113, 119, 248, 0.22);
+}
+
+[data-theme="light"] .mini-game-rating__tbody-pinned .mini-game-rating__tr--self .mini-game-rating__td {
+  background: rgba(113, 119, 248, 0.14);
+}
+
+[data-theme="light"] .mini-game-rating__tr--omit .mini-game-rating__td--omit {
+  color: rgba(38, 50, 92, 0.38);
+  border-bottom-color: rgba(15, 23, 42, 0.12);
+}
+
+.mini-game-rating__footnote {
+  margin: 0;
+  max-width: 720px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+[data-theme="light"] .mini-game-rating__footnote {
+  color: rgba(38, 50, 92, 0.55);
+}
+
+@media (max-width: 560px) {
+  .mini-game-rating__me-rank {
+    font-size: 22px;
+  }
+
+  .mini-game-rating__table {
+    min-width: 640px;
+  }
+}
+
+/* Страница прогресса мини-игры (miniGameProgress.js) импортирует этот файл */
 .mini-game-rating__note {
   margin: 12px 0 20px;
   max-width: 520px;
   font-size: 14px;
   line-height: 1.45;
   color: rgba(255, 255, 255, 0.55);
-}
-
-.mini-game-rating__panel {
-  max-width: 520px;
-}
-
-/* Встроенное меню как в шапке ЛК; без обводки как у таблицы в игре */
-.mini-game-rating__menu.lk-header__menu {
-  position: static;
-  width: 100%;
-  max-width: none;
-  border: none;
-  box-shadow: none;
-}
-
-.mini-game-rating__row.lk-header__menu-item {
-  cursor: default;
-}
-
-.mini-game-rating__rank {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: #7f91a4;
-}
-
-.mini-game-rating__diamond--1 {
-  color: #fbbf24;
-  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.35));
-}
-
-.mini-game-rating__diamond--2 {
-  color: #cbd5e1;
-  filter: drop-shadow(0 0 4px rgba(203, 213, 225, 0.35));
-}
-
-.mini-game-rating__diamond--3 {
-  color: #ea580c;
-  filter: drop-shadow(0 0 4px rgba(234, 88, 12, 0.32));
-}
-
-.mini-game-rating__score {
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-}
-
-.mini-game-rating__panel .lk-header__menu-item-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-theme="light"] .mini-game-rating__menu.lk-header__menu {
-  border: none;
-  box-shadow: none;
 }
 
 [data-theme="light"] .mini-game-rating__note {

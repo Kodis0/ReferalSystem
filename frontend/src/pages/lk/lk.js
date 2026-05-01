@@ -25,6 +25,8 @@ import LkSidebar from "./LkSidebar";
 import NewsPage from "./news/news";
 import BugPage from "./bug/bug";
 import MiniGamePage from "./mini-game/mini-game";
+import MiniGameProgressPage from "./mini-game/miniGameProgress";
+import MiniGameLeaguesPage from "./mini-game/miniGameLeagues";
 import MiniGameRatingPage from "./mini-game/miniGameRating";
 import IdeaPage from "./idea/idea";
 import PartnerDashboard from "./partner/partner";
@@ -791,6 +793,8 @@ function LK() {
             <Route path="programs" element={<ProgramsCatalogPage />} />
             <Route path="my-programs" element={<MyProgramsPage />} />
             <Route path="mini-game/rating" element={<MiniGameRatingPage />} />
+            <Route path="mini-game/leagues" element={<MiniGameLeaguesPage />} />
+            <Route path="mini-game/progress" element={<MiniGameProgressPage />} />
             <Route path="mini-game" element={<MiniGamePage />} />
             <Route path="settings/users/create" element={<AccountAdditionalUsersCreatePage />} />
             <Route

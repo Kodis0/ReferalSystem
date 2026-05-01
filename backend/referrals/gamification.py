@@ -9,18 +9,25 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import ROUND_FLOOR, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from typing import Any
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Count, F, Max, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .gamification_game import replay_daily_challenge, validate_finish_timing
-from .models import DailyChallengeAttempt, GamificationProfile, XPEvent
+from .models import DailyChallengeAttempt, GamificationProfile, Order, PartnerProfile, XPEvent
 
 # Sanity cap for submitted game scores (anti-abuse).
 MAX_CHALLENGE_SCORE = 100_000
+
+LEADERBOARD_TOP_N = 50
+
+REFERRAL_LEADERBOARD_TOP_N = 50
 
 CHALLENGE_LIFE_RECOVERY_INTERVAL = timedelta(hours=4)
 
@@ -51,6 +58,59 @@ STREAK_MULTIPLIER_TIERS: tuple[tuple[int, Decimal], ...] = (
 def local_today() -> date:
     """Calendar day for challenge boundaries (timezone-aware). Patch in tests."""
     return timezone.localdate()
+
+
+def _leaderboard_display_name(user) -> str:
+    """Public-ish label for daily leaderboard (no raw email)."""
+    if user is None:
+        return "Игрок"
+    fio = (getattr(user, "fio", "") or "").strip()
+    if fio:
+        return fio if len(fio) <= 48 else fio[:45] + "…"
+    username = (getattr(user, "username", "") or "").strip()
+    if username:
+        return username if len(username) <= 48 else username[:45] + "…"
+    pid = (getattr(user, "public_id", "") or "").strip()
+    if pid:
+        return f"Игрок {pid}"
+    return "Игрок"
+
+
+def build_daily_challenge_leaderboard(limit: int = LEADERBOARD_TOP_N) -> dict[str, Any]:
+    """
+    Best completed challenge score per user for the current local calendar day, top ``limit``.
+    """
+    today = local_today()
+    lim = max(1, min(int(limit), LEADERBOARD_TOP_N))
+    ranked = (
+        DailyChallengeAttempt.objects.filter(
+            status=DailyChallengeAttempt.Status.COMPLETED,
+            challenge_date=today,
+        )
+        .values("user_id")
+        .annotate(best_score=Max("score"))
+        .order_by("-best_score")[:lim]
+    )
+    rows_raw = list(ranked)
+    User = get_user_model()
+    users = User.objects.in_bulk([r["user_id"] for r in rows_raw])
+    rows: list[dict[str, Any]] = []
+    for rank, r in enumerate(rows_raw, start=1):
+        uid = r["user_id"]
+        u = users.get(uid)
+        rows.append(
+            {
+                "rank": rank,
+                "user_id": uid,
+                "name": _leaderboard_display_name(u),
+                "score": int(r["best_score"]),
+            }
+        )
+    return {
+        "challenge_date": today.isoformat(),
+        "limit": lim,
+        "rows": rows,
+    }
 
 
 def get_or_create_gamification_profile(user) -> GamificationProfile:
@@ -491,3 +551,193 @@ def finish_daily_challenge(
             reward=reward,
             already_completed=False,
         )
+
+
+def referral_league_from_sales_rub(sales_rub: int) -> str:
+    """Temporary league tiers by confirmed sales (RUB, integer), aligned with referral rating MVP."""
+    if sales_rub >= 15_000_000:
+        return "ultra"
+    if sales_rub >= 5_000_000:
+        return "diamond"
+    if sales_rub >= 1_500_000:
+        return "platinum"
+    if sales_rub >= 500_000:
+        return "gold"
+    if sales_rub >= 75_000:
+        return "silver"
+    if sales_rub >= 15_000:
+        return "bronze"
+    return "start"
+
+
+def _looks_like_email(value: str) -> bool:
+    return "@" in value
+
+
+def _referral_leaderboard_display_name(user) -> str:
+    """Public leaderboard label: ФИО / username / public_id / fallback — never raw email."""
+    if user is None:
+        return "Участник"
+    fio = (getattr(user, "fio", "") or "").strip()
+    if fio:
+        return fio if len(fio) <= 48 else fio[:45] + "…"
+    username = (getattr(user, "username", "") or "").strip()
+    if username and not _looks_like_email(username):
+        return username if len(username) <= 48 else username[:45] + "…"
+    pid = (getattr(user, "public_id", "") or "").strip()
+    if pid:
+        return f"Участник {pid}"
+    return f"Участник #{user.pk}"
+
+
+def _referral_leaderboard_period_start(period: str, now) -> Any:
+    if period == "all":
+        return None
+    if period == "week":
+        return now - timedelta(days=7)
+    if period == "month":
+        local = timezone.localtime(now)
+        return local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    raise ValueError(period)
+
+
+def _rub_from_decimal(amount: Decimal | None) -> int:
+    if amount is None:
+        return 0
+    return int(Decimal(amount).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _referral_paid_orders_qs(since: Any):
+    """Paid orders attributed to a partner, RUB-or-empty currency, optional lower bound on payment time."""
+    qs = Order.objects.filter(status=Order.Status.PAID, partner_id__isnull=False).filter(
+        Q(currency="") | Q(currency="RUB")
+    )
+    qs = qs.annotate(eff_ts=Coalesce(F("paid_at"), F("created_at")))
+    if since is not None:
+        qs = qs.filter(eff_ts__gte=since)
+    return qs
+
+
+def build_gamification_leaderboard(request_user, period: str, *, now=None) -> dict[str, Any]:
+    """
+    Referral sales leaderboard for the mini-game rating page.
+
+    Ranking uses sum of confirmed paid ``Order.amount`` in RUB (or blank currency) per ``PartnerProfile``,
+    within the selected period. Tie-breakers: paid order count, then ``GamificationProfile.xp_total``.
+    """
+    if period not in ("week", "month", "all"):
+        raise ValueError("invalid_period")
+
+    now = now if now is not None else timezone.now()
+    since = _referral_leaderboard_period_start(period, now)
+
+    paid_in_period = _referral_paid_orders_qs(since)
+    leaderboard_empty = not paid_in_period.exists()
+
+    agg_rows = (
+        paid_in_period.values("partner_id")
+        .annotate(sales_sum=Sum("amount"), orders_cnt=Count("id"))
+        .order_by()
+    )
+    partner_totals: dict[int, dict[str, Any]] = {
+        int(r["partner_id"]): {
+            "sales_amount": _rub_from_decimal(r["sales_sum"]),
+            "paid_orders_count": int(r["orders_cnt"] or 0),
+        }
+        for r in agg_rows
+    }
+
+    profiles = list(PartnerProfile.objects.select_related("user").order_by("user_id"))
+    user_ids = [p.user_id for p in profiles]
+    gam_map = {gp.user_id: gp for gp in GamificationProfile.objects.filter(user_id__in=user_ids)}
+
+    rows_raw: list[dict[str, Any]] = []
+    for p in profiles:
+        u = p.user
+        totals = partner_totals.get(p.id, {"sales_amount": 0, "paid_orders_count": 0})
+        gp = gam_map.get(u.id)
+        xp_total = int(gp.xp_total) if gp else 0
+        streak_days = int(gp.streak_days) if gp else 0
+        rows_raw.append(
+            {
+                "user_id": u.id,
+                "user": u,
+                "sales_amount": int(totals["sales_amount"]),
+                "paid_orders_count": int(totals["paid_orders_count"]),
+                "xp_total": xp_total,
+                "streak_days": streak_days,
+            }
+        )
+
+    rows_raw.sort(
+        key=lambda r: (-r["sales_amount"], -r["paid_orders_count"], -r["xp_total"], r["user_id"])
+    )
+
+    ranked: list[dict[str, Any]] = []
+    for idx, r in enumerate(rows_raw, start=1):
+        rr = dict(r)
+        rr["rank"] = idx
+        ranked.append(rr)
+
+    top_limit = max(1, min(int(REFERRAL_LEADERBOARD_TOP_N), 500))
+
+    def entry_dict(r: dict[str, Any], *, is_current_user: bool) -> dict[str, Any]:
+        u = r["user"]
+        sales_rub = int(r["sales_amount"])
+        return {
+            "rank": int(r["rank"]),
+            "user_id": int(u.id),
+            "display_name": _referral_leaderboard_display_name(u),
+            "is_current_user": bool(is_current_user),
+            "league": referral_league_from_sales_rub(sales_rub),
+            "sales_amount": sales_rub,
+            "paid_orders_count": int(r["paid_orders_count"]),
+            "xp_total": int(r["xp_total"]),
+            "streak_days": int(r["streak_days"]),
+        }
+
+    entries_out: list[dict[str, Any]] = []
+    if not leaderboard_empty:
+        for r in ranked[:top_limit]:
+            entries_out.append(entry_dict(r, is_current_user=r["user"].id == request_user.id))
+
+    request_row = next((r for r in ranked if r["user"].id == request_user.id), None)
+    gp_self = GamificationProfile.objects.filter(user=request_user).first()
+
+    if request_row is None:
+        xp_self = int(gp_self.xp_total) if gp_self else 0
+        streak_self = int(gp_self.streak_days) if gp_self else 0
+        current_user = {
+            "rank": None,
+            "sales_amount": 0,
+            "paid_orders_count": 0,
+            "xp_total": xp_self,
+            "streak_days": streak_self,
+            "league": referral_league_from_sales_rub(0),
+            "gap_to_top_5": 0,
+        }
+    else:
+        ur = request_row
+        sales_u = int(ur["sales_amount"])
+        rank_u = int(ur["rank"])
+        fifth_sales = 0
+        if ranked:
+            fi = min(4, len(ranked) - 1)
+            fifth_sales = int(ranked[fi]["sales_amount"])
+        gap = max(0, fifth_sales - sales_u) if rank_u > 5 else 0
+        current_user = {
+            "rank": rank_u,
+            "sales_amount": sales_u,
+            "paid_orders_count": int(ur["paid_orders_count"]),
+            "xp_total": int(ur["xp_total"]),
+            "streak_days": int(ur["streak_days"]),
+            "league": referral_league_from_sales_rub(sales_u),
+            "gap_to_top_5": int(gap),
+        }
+
+    return {
+        "period": period,
+        "leaderboard_empty": leaderboard_empty,
+        "entries": entries_out,
+        "current_user": current_user,
+    }

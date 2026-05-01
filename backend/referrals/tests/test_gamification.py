@@ -311,6 +311,57 @@ class GamificationApiTests(TestCase):
         base_xp = calculate_daily_challenge_base_xp(server_score)
         self.assertEqual(body["reward"]["base_xp"], base_xp)
 
+    def test_leaderboard_requires_auth(self):
+        anon = APIClient()
+        r = anon.get("/referrals/gamification/daily-challenge/leaderboard/")
+        self.assertEqual(r.status_code, 401)
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 11, 15))
+    def test_leaderboard_empty(self, _mock):
+        r = self.client.get("/referrals/gamification/daily-challenge/leaderboard/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["challenge_date"], "2026-11-15")
+        self.assertEqual(body["limit"], 50)
+        self.assertEqual(body["rows"], [])
+
+    @patch("referrals.gamification.local_today", return_value=date(2026, 11, 16))
+    def test_leaderboard_orders_by_best_score_today(self, _mock):
+        payload_a, score_a = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload_a, format="json")
+
+        user_b = User.objects.create_user(
+            username="gamer_b",
+            email="gamer_b@example.com",
+            password="secret12",
+        )
+        client_b = APIClient()
+        client_b.force_authenticate(user=user_b)
+        client_b.post("/referrals/gamification/daily-challenge/start/")
+        summ_b = client_b.get("/referrals/gamification/summary/").json()
+        aid_b = summ_b["active_attempt"]["attempt_public_id"]
+        seed_b = int(summ_b["active_attempt"]["rng_seed"])
+        moves_b = greedy_moves_until_game_over(seed_b)
+        server_score_b, err_b = replay_daily_challenge(seed_b, moves_b)
+        self.assertEqual(err_b, "")
+        client_b.post(
+            "/referrals/gamification/daily-challenge/finish/",
+            {
+                "attempt_id": aid_b,
+                "moves": moves_b,
+                "client_score": server_score_b,
+            },
+            format="json",
+        )
+
+        r = self.client.get("/referrals/gamification/daily-challenge/leaderboard/")
+        self.assertEqual(r.status_code, 200)
+        rows = r.json()["rows"]
+        self.assertEqual(len(rows), 2)
+        scores = [rows[0]["score"], rows[1]["score"]]
+        self.assertEqual(set(scores), {score_a, server_score_b})
+        self.assertEqual(rows[0]["score"], max(score_a, server_score_b))
+
 
 class LocalTodayPatchTests(TestCase):
     """Ensure tests patch the same symbol the app uses."""

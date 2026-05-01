@@ -129,6 +129,30 @@ function MiniGameRatingNavIcon() {
   );
 }
 
+function MiniGameProgressNavIcon() {
+  return (
+    <svg
+      className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_mini-game-progress"
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 18V12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path d="M10 18V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M16 18V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M22 18V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function MiniGameNavIcon() {
   return (
     <svg
@@ -220,6 +244,7 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   let programsListActive = currentPath === "/lk/programs";
   let connectedProgramsActive = currentPath === "/lk/my-programs";
   const miniGamePlayActive = currentPath === "/lk/mini-game";
+  const miniGameProgressActive = currentPath === "/lk/mini-game/progress";
   const miniGameRatingActive = currentPath === "/lk/mini-game/rating";
 
   if (isReferralProgramDetail) {
@@ -890,6 +915,14 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             >
               <MiniGameNavIcon />
               <span className="lk-sidebar__nav-text">Мини игра</span>
+            </Link>
+            <Link
+              to="/lk/mini-game/progress"
+              className={itemClass(miniGameProgressActive)}
+              aria-current={miniGameProgressActive ? "page" : undefined}
+            >
+              <MiniGameProgressNavIcon />
+              <span className="lk-sidebar__nav-text">Прогресс</span>
             </Link>
             <Link
               to="/lk/mini-game/rating"

@@ -18,6 +18,7 @@ import {
 import "./blockBlastGame.css";
 import "../dashboard/dashboard.css";
 import {
+  fetchGamificationDailyChallengeLeaderboard,
   fetchGamificationSummary,
   postGamificationDailyChallengeFinish,
   postGamificationDailyChallengeStart,
@@ -65,15 +66,6 @@ function AnimatedScoreValue({ value }) {
     </span>
   );
 }
-
-/** Демо-таблица лидеров (без бэкенда). */
-const BLOCK_BLAST_LEADERBOARD_MOCK = [
-  { rank: 1, name: "Участник A", score: 2840 },
-  { rank: 2, name: "Участник B", score: 2510 },
-  { rank: 3, name: "Участник C", score: 2185 },
-  { rank: 4, name: "Участник D", score: 1960 },
-  { rank: 5, name: "Участник E", score: 1742 },
-];
 
 function ruDaysWord(n) {
   const nAbs = Math.floor(Math.abs(Number(n)));
@@ -404,9 +396,10 @@ export default function BlockBlastGame() {
   const [preStartBusy, setPreStartBusy] = useState(false);
   const [startChallengeError, setStartChallengeError] = useState(null);
   const [finishUiState, setFinishUiState] = useState("idle");
-  const [finishReward, setFinishReward] = useState(null);
-  const [finishAlreadyCompleted, setFinishAlreadyCompleted] = useState(false);
   const [finishErrorMessage, setFinishErrorMessage] = useState(null);
+
+  const [leaderboardRows, setLeaderboardRows] = useState([]);
+  const [leaderboardLoadState, setLeaderboardLoadState] = useState("loading");
 
   const [timerTick, setTimerTick] = useState(0);
 
@@ -436,9 +429,31 @@ export default function BlockBlastGame() {
     }
   }, []);
 
+  const loadLeaderboard = useCallback(async () => {
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
+    if (!token) {
+      setLeaderboardLoadState("error");
+      setLeaderboardRows([]);
+      return;
+    }
+    setLeaderboardLoadState("loading");
+    try {
+      const data = await fetchGamificationDailyChallengeLeaderboard(token);
+      setLeaderboardRows(Array.isArray(data?.rows) ? data.rows : []);
+      setLeaderboardLoadState("ready");
+    } catch {
+      setLeaderboardRows([]);
+      setLeaderboardLoadState("error");
+    }
+  }, []);
+
   useEffect(() => {
     loadGamificationSummary();
   }, [loadGamificationSummary]);
+
+  useEffect(() => {
+    loadLeaderboard();
+  }, [loadLeaderboard]);
 
   useEffect(() => {
     const id = setInterval(() => setTimerTick((x) => x + 1), 1000);
@@ -469,8 +484,6 @@ export default function BlockBlastGame() {
     if (!gameOver || !gameStarted) return undefined;
     if (!challengeAttemptIdRef.current) {
       setFinishUiState("done");
-      setFinishReward(null);
-      setFinishAlreadyCompleted(false);
       setFinishErrorMessage(null);
       return undefined;
     }
@@ -495,10 +508,8 @@ export default function BlockBlastGame() {
           { signal: ac.signal },
         );
         if (data.summary) setGamificationSummary(data.summary);
-        setFinishReward(data.reward ?? null);
-        const alreadyDone = Boolean(data.already_completed);
-        setFinishAlreadyCompleted(alreadyDone);
         setFinishUiState("done");
+        void loadLeaderboard();
       } catch (e) {
         if (e?.name === "AbortError") return;
         const status = e?.status;
@@ -514,12 +525,10 @@ export default function BlockBlastGame() {
       }
     })();
     return () => ac.abort();
-  }, [gameOver, gameStarted, score]);
+  }, [gameOver, gameStarted, score, loadLeaderboard]);
 
   const resetBoardState = useCallback(() => {
     setFinishUiState("idle");
-    setFinishReward(null);
-    setFinishAlreadyCompleted(false);
     setFinishErrorMessage(null);
 
     setGameStarted(true);
@@ -1325,29 +1334,6 @@ export default function BlockBlastGame() {
                     {finishErrorMessage || "Не удалось отправить результат."}
                   </p>
                 ) : null}
-                {finishUiState === "done" && finishReward ? (
-                  <div className="block-blast-game__finish-reward" aria-live="polite">
-                    {finishAlreadyCompleted ? (
-                      <p className="block-blast-game__gamification-sub">Этот раунд уже учтён.</p>
-                    ) : (
-                      <>
-                        <p className="block-blast-game__finish-reward-line">
-                          Результат: {Number(finishReward.score ?? score).toLocaleString("ru-RU")}
-                        </p>
-                        <p className="block-blast-game__finish-reward-line">
-                          Начислено: +{Number(finishReward.awarded_xp).toLocaleString("ru-RU")} XP
-                          {finishReward.multiplier != null ? ` · ×${String(finishReward.multiplier)}` : ""}
-                        </p>
-                        <p className="block-blast-game__finish-reward-line">
-                          Жизней осталось:{" "}
-                          {Number.isFinite(livesAfterFinish)
-                            ? `${Math.max(0, livesAfterFinish)}/${livesMaxShown}`
-                            : "—"}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                ) : null}
                 <button
                   type="button"
                   className="lk-dashboard__my-programs-catalog-banner-cta"
@@ -1425,7 +1411,7 @@ export default function BlockBlastGame() {
                 id="block-blast-leaderboard-heading"
                 className="block-blast-game__leaderboard-title block-blast-game__leaderboard-title--toolbar"
               >
-                Лидеры
+                Топ за сутки
               </h3>
               {gameStarted ? (
                 <div className="block-blast-game__actions">
@@ -1440,32 +1426,42 @@ export default function BlockBlastGame() {
               aria-labelledby="block-blast-leaderboard-heading"
             >
               <div className="lk-header__menu block-blast-game__leaderboard-menu" role="list">
-                {BLOCK_BLAST_LEADERBOARD_MOCK.map((row) => (
-                  <div
-                    key={row.rank}
-                    className={`lk-header__menu-item block-blast-game__leaderboard-row${
-                      row.rank <= 3 ? " block-blast-game__leaderboard-row--top" : ""
-                    }`}
-                    role="listitem"
-                  >
-                    <span
-                      className="block-blast-game__leaderboard-rank"
-                      aria-label={`Место ${row.rank}`}
+                {leaderboardLoadState === "loading" ? (
+                  <p className="block-blast-game__leaderboard-placeholder">Загрузка…</p>
+                ) : leaderboardLoadState === "error" ? (
+                  <p className="block-blast-game__leaderboard-placeholder">Не удалось загрузить топ.</p>
+                ) : leaderboardRows.length === 0 ? (
+                  <p className="block-blast-game__leaderboard-placeholder">Пока никого в топе за сегодня.</p>
+                ) : (
+                  leaderboardRows.map((row) => (
+                    <div
+                      key={`${row.user_id}-${row.rank}`}
+                      className={`lk-header__menu-item block-blast-game__leaderboard-row${
+                        row.rank <= 3 ? " block-blast-game__leaderboard-row--top" : ""
+                      }`}
+                      role="listitem"
                     >
-                      {row.rank <= 3 ? (
-                        <DiamondIcon
-                          className={`block-blast-game__leaderboard-diamond block-blast-game__leaderboard-diamond--${row.rank}`}
-                          size={18}
-                          strokeWidth={2}
-                        />
-                      ) : (
-                        row.rank
-                      )}
-                    </span>
-                    <span className="lk-header__menu-item-text">{row.name}</span>
-                    <span className="block-blast-game__leaderboard-score">{row.score}</span>
-                  </div>
-                ))}
+                      <span
+                        className="block-blast-game__leaderboard-rank"
+                        aria-label={`Место ${row.rank}`}
+                      >
+                        {row.rank <= 3 ? (
+                          <DiamondIcon
+                            className={`block-blast-game__leaderboard-diamond block-blast-game__leaderboard-diamond--${row.rank}`}
+                            size={18}
+                            strokeWidth={2}
+                          />
+                        ) : (
+                          row.rank
+                        )}
+                      </span>
+                      <span className="lk-header__menu-item-text">{row.name}</span>
+                      <span className="block-blast-game__leaderboard-score">
+                        {Number(row.score).toLocaleString("ru-RU")}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </aside>
           </div>
