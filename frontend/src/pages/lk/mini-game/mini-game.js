@@ -14,8 +14,8 @@ export default function MiniGamePage() {
           <div className="lk-dashboard__my-programs-catalog-banner-copy">
             <p className="lk-dashboard__my-programs-catalog-banner-title">Челлендж</p>
             <p className="lk-dashboard__my-programs-catalog-banner-sub">
-              Собирайте линии и зарабатывайте XP. Пять жизней — по одной за раунд; каждая восстанавливается через 4 часа.
-              Серия и таблица лидеров по вашей активности.
+              Собирайте линии, зарабатывайте XP и поднимайтесь в рейтинге. У вас 5 жизней: каждый раунд тратит одну,
+              новая жизнь восстанавливается каждые 4 часа.
             </p>
           </div>
           <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">

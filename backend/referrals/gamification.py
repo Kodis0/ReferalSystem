@@ -1,9 +1,10 @@
 """
-Gamification / mini-game XP (daily challenge, streaks). Future XP sources use ``XPEvent.Source``.
+Gamification / mini-game XP (challenge runs, streaks, lives). Future XP sources use ``XPEvent.Source``.
 """
 
 from __future__ import annotations
 
+import math
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ from .models import DailyChallengeAttempt, GamificationProfile, XPEvent
 
 # Sanity cap for submitted game scores (anti-abuse).
 MAX_CHALLENGE_SCORE = 100_000
+
+CHALLENGE_LIFE_RECOVERY_INTERVAL = timedelta(hours=4)
 
 # --- XP tiers by score (daily challenge base XP) ---
 # score < 500 -> 10; 500..999 -> 20; 1000..1999 -> 35; score >= 2000 -> 50
@@ -46,7 +49,7 @@ STREAK_MULTIPLIER_TIERS: tuple[tuple[int, Decimal], ...] = (
 
 
 def local_today() -> date:
-    """Calendar day for daily challenge boundaries (timezone-aware). Patch in tests."""
+    """Calendar day for challenge boundaries (timezone-aware). Patch in tests."""
     return timezone.localdate()
 
 
@@ -140,8 +143,52 @@ def _apply_streak_on_activity(profile: GamificationProfile, activity_date: date)
     profile.last_activity_date = activity_date
 
 
-def _daily_challenge_idempotency_key(user_id: int, challenge_date: date) -> str:
-    return f"daily_challenge:{user_id}:{challenge_date.isoformat()}"
+def refresh_challenge_lives(profile: GamificationProfile, now) -> None:
+    """
+    Apply elapsed recovery intervals; ensure a timer exists when below max lives.
+    """
+    interval = CHALLENGE_LIFE_RECOVERY_INTERVAL
+    while profile.lives_current < profile.lives_max:
+        if profile.next_life_at is None:
+            break
+        if now < profile.next_life_at:
+            break
+        profile.lives_current += 1
+        profile.last_life_refill_at = now
+        if profile.lives_current >= profile.lives_max:
+            profile.next_life_at = None
+            break
+        profile.next_life_at = profile.next_life_at + interval
+
+    if profile.lives_current >= profile.lives_max:
+        profile.next_life_at = None
+    elif profile.next_life_at is None:
+        profile.next_life_at = now + interval
+
+
+def get_life_recovery_seconds(profile: GamificationProfile, now) -> int | None:
+    if profile.lives_current >= profile.lives_max:
+        return None
+    if profile.next_life_at is None:
+        return None
+    delta = (profile.next_life_at - now).total_seconds()
+    return max(0, int(math.ceil(delta)))
+
+
+def can_start_challenge_run(profile: GamificationProfile, now) -> bool:
+    refresh_challenge_lives(profile, now)
+    return profile.lives_current > 0
+
+
+def consume_challenge_life(profile: GamificationProfile, now) -> None:
+    interval = CHALLENGE_LIFE_RECOVERY_INTERVAL
+    profile.lives_current -= 1
+    if profile.lives_current < profile.lives_max and profile.next_life_at is None:
+        profile.next_life_at = now + interval
+
+
+def _challenge_xp_idempotency_key(attempt_public_id: uuid.UUID) -> str:
+    return f"daily_challenge:{attempt_public_id}"
 
 
 def _award_decimal_to_int(base: int, multiplier: Decimal) -> int:
@@ -149,49 +196,59 @@ def _award_decimal_to_int(base: int, multiplier: Decimal) -> int:
     return max(0, int(v))
 
 
-def _attempt_to_dict(attempt: DailyChallengeAttempt | None) -> dict[str, Any] | None:
-    if attempt is None:
+def _active_attempt_dict(attempt: DailyChallengeAttempt | None) -> dict[str, Any] | None:
+    if attempt is None or attempt.status != DailyChallengeAttempt.Status.STARTED:
         return None
-    out: dict[str, Any] = {
-        "challenge_date": attempt.challenge_date.isoformat(),
+    return {
         "attempt_public_id": str(attempt.public_id),
-        "status": attempt.status,
-        "score": attempt.score,
-        "base_xp": attempt.base_xp,
-        "multiplier": str(attempt.multiplier),
-        "awarded_xp": attempt.awarded_xp,
-        "started_at": attempt.started_at.isoformat(),
-        "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None,
+        "rng_seed": attempt.rng_seed,
     }
-    if attempt.status == DailyChallengeAttempt.Status.STARTED:
-        out["rng_seed"] = attempt.rng_seed
-    else:
-        out["rng_seed"] = None
-    return out
 
 
 def build_gamification_summary(user) -> dict[str, Any]:
     profile = get_or_create_gamification_profile(user)
-    today = local_today()
-    attempt = DailyChallengeAttempt.objects.filter(
-        user=user,
-        challenge_date=today,
-    ).first()
+    now = timezone.now()
+    refresh_challenge_lives(profile, now)
+    profile.save(
+        update_fields=[
+            "lives_current",
+            "lives_max",
+            "next_life_at",
+            "last_life_refill_at",
+            "updated_at",
+        ]
+    )
+
     xp_total = profile.xp_total
     level = calculate_level(xp_total)
     progress = get_level_progress(xp_total)
     streak_mult = get_streak_multiplier(profile.streak_days)
+    recovery_seconds = get_life_recovery_seconds(profile, now)
+    next_iso = profile.next_life_at.isoformat() if profile.next_life_at else None
+
+    active = (
+        DailyChallengeAttempt.objects.filter(user=user, status=DailyChallengeAttempt.Status.STARTED)
+        .order_by("-started_at")
+        .first()
+    )
+
     return {
-        "xp_total": xp_total,
-        "streak_days": profile.streak_days,
-        "streak_multiplier": str(streak_mult),
-        "last_activity_date": profile.last_activity_date.isoformat()
-        if profile.last_activity_date
-        else None,
-        "best_challenge_score": profile.best_challenge_score,
-        "level": level,
-        "level_progress": progress,
-        "today_attempt": _attempt_to_dict(attempt),
+        "profile": {
+            "xp_total": xp_total,
+            "level": level,
+            "level_progress": progress,
+            "streak_days": profile.streak_days,
+            "streak_multiplier": str(streak_mult),
+            "best_challenge_score": profile.best_challenge_score,
+        },
+        "lives": {
+            "current": profile.lives_current,
+            "max": profile.lives_max,
+            "next_life_at": next_iso,
+            "recovery_seconds": recovery_seconds,
+            "recovery_interval_hours": 4,
+        },
+        "active_attempt": _active_attempt_dict(active),
         "daily_challenge_xp_tiers": list(DAILY_CHALLENGE_XP_TIERS),
         "streak_multiplier_tiers": [
             {"min_streak_days": md, "multiplier": str(m)} for md, m in STREAK_MULTIPLIER_TIERS
@@ -200,22 +257,46 @@ def build_gamification_summary(user) -> dict[str, Any]:
 
 
 def start_daily_challenge(user) -> DailyChallengeAttempt:
-    """Create or return today's attempt (started); completed attempts are returned as-is."""
+    """Spend one life and create a new started attempt (RNG seed server-side)."""
     today = local_today()
     now = timezone.now()
-    attempt, created = DailyChallengeAttempt.objects.get_or_create(
-        user=user,
-        challenge_date=today,
-        defaults={
-            "status": DailyChallengeAttempt.Status.STARTED,
-            "started_at": now,
-            "rng_seed": secrets.randbelow(2**31),
-        },
-    )
-    if not created and attempt.status == DailyChallengeAttempt.Status.STARTED and attempt.rng_seed == 0:
-        attempt.rng_seed = secrets.randbelow(2**31)
-        attempt.save(update_fields=["rng_seed", "updated_at"])
-    return attempt
+    with transaction.atomic():
+        profile, _ = GamificationProfile.objects.select_for_update().get_or_create(user=user)
+        refresh_challenge_lives(profile, now)
+        if profile.lives_current == 0:
+            profile.save(
+                update_fields=[
+                    "lives_current",
+                    "lives_max",
+                    "next_life_at",
+                    "last_life_refill_at",
+                    "updated_at",
+                ]
+            )
+            raise ValidationError("no_lives", code="no_lives")
+
+        consume_challenge_life(profile, now)
+
+        DailyChallengeAttempt.objects.filter(user=user, status=DailyChallengeAttempt.Status.STARTED).delete()
+
+        attempt = DailyChallengeAttempt.objects.create(
+            user=user,
+            challenge_date=today,
+            status=DailyChallengeAttempt.Status.STARTED,
+            started_at=now,
+            rng_seed=secrets.randbelow(2**31),
+        )
+
+        profile.save(
+            update_fields=[
+                "lives_current",
+                "lives_max",
+                "next_life_at",
+                "last_life_refill_at",
+                "updated_at",
+            ]
+        )
+        return attempt
 
 
 @dataclass
@@ -233,7 +314,7 @@ def finish_daily_challenge(
     client_score: Any | None = None,
 ) -> DailyChallengeFinishOutcome:
     """
-    Replay ``moves`` with today's seeded attempt; grant XP from server-side score only.
+    Replay ``moves`` with the seeded attempt; grant XP from server-side score only.
     """
     today = local_today()
 
@@ -247,7 +328,7 @@ def finish_daily_challenge(
     with transaction.atomic():
         attempt = (
             DailyChallengeAttempt.objects.select_for_update()
-            .filter(public_id=aid, user=user, challenge_date=today)
+            .filter(public_id=aid, user=user)
             .first()
         )
 
@@ -304,33 +385,41 @@ def finish_daily_challenge(
         GamificationProfile.objects.get_or_create(user=user)
         profile = GamificationProfile.objects.select_for_update().get(user=user)
 
-        if attempt.status == DailyChallengeAttempt.Status.COMPLETED:
-            summary = build_gamification_summary(user)
-            reward = {
-                "score": attempt.score,
-                "client_score": client_opt
-                if client_opt is not None
-                else (attempt.client_reported_score or 0),
-                "base_xp": attempt.base_xp,
-                "multiplier": str(attempt.multiplier),
-                "awarded_xp": attempt.awarded_xp,
-                "xp_total": profile.xp_total,
-                "level": calculate_level(profile.xp_total),
-            }
-            if client_opt is not None and client_opt != attempt.score:
-                reward["score_mismatch_warning"] = True
-            return DailyChallengeFinishOutcome(
-                summary=summary,
-                reward=reward,
-                already_completed=True,
+        if attempt.status != DailyChallengeAttempt.Status.STARTED:
+            if attempt.status == DailyChallengeAttempt.Status.COMPLETED:
+                summary = build_gamification_summary(user)
+                reward = {
+                    "score": attempt.score,
+                    "client_score": client_opt
+                    if client_opt is not None
+                    else (attempt.client_reported_score or 0),
+                    "base_xp": attempt.base_xp,
+                    "multiplier": str(attempt.multiplier),
+                    "awarded_xp": attempt.awarded_xp,
+                    "xp_total": profile.xp_total,
+                    "level": calculate_level(profile.xp_total),
+                }
+                if client_opt is not None and client_opt != attempt.score:
+                    reward["score_mismatch_warning"] = True
+                return DailyChallengeFinishOutcome(
+                    summary=summary,
+                    reward=reward,
+                    already_completed=True,
+                )
+            raise ValidationError(
+                "daily_challenge_not_started",
+                code="daily_challenge_not_started",
             )
 
         base_xp = calculate_daily_challenge_base_xp(server_score)
-        _apply_streak_on_activity(profile, today)
+
+        if profile.last_streak_increment_date != today:
+            _apply_streak_on_activity(profile, today)
+            profile.last_streak_increment_date = today
 
         mult = get_streak_multiplier(profile.streak_days)
         awarded = _award_decimal_to_int(base_xp, mult)
-        idem = _daily_challenge_idempotency_key(user.pk, today)
+        idem = _challenge_xp_idempotency_key(attempt.public_id)
 
         XPEvent.objects.create(
             user=user,
@@ -342,6 +431,7 @@ def finish_daily_challenge(
             metadata_json={
                 "challenge_date": today.isoformat(),
                 "score": server_score,
+                "attempt_public_id": str(attempt.public_id),
             },
         )
 
@@ -352,6 +442,7 @@ def finish_daily_challenge(
             update_fields=[
                 "streak_days",
                 "last_activity_date",
+                "last_streak_increment_date",
                 "xp_total",
                 "best_challenge_score",
                 "updated_at",
@@ -390,8 +481,8 @@ def finish_daily_challenge(
             "base_xp": base_xp,
             "multiplier": str(mult),
             "awarded_xp": awarded,
-            "xp_total": summary["xp_total"],
-            "level": summary["level"],
+            "xp_total": summary["profile"]["xp_total"],
+            "level": summary["profile"]["level"],
         }
         if client_opt is not None and client_opt != server_score:
             reward["score_mismatch_warning"] = True

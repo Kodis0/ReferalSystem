@@ -18,7 +18,7 @@ export default function MiniGameRatingPage() {
       <h1 className="lk-simple-page__title" id="mini-game-rating-heading">
         Рейтинг
       </h1>
-      <p className="mini-game-rating__note">Демо-данные, без синхронизации с сервером.</p>
+      <p className="mini-game-rating__note">Демо-данные (локально).</p>
       <div className="mini-game-rating__panel" role="region" aria-label="Таблица рейтинга">
         <div className="lk-header__menu mini-game-rating__menu" role="list">
           {MINI_GAME_RATING_MOCK.map((row) => (

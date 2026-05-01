@@ -603,7 +603,12 @@ class GamificationProfile(models.Model):
     xp_total = models.PositiveIntegerField(default=0)
     streak_days = models.PositiveIntegerField(default=0)
     last_activity_date = models.DateField(null=True, blank=True)
+    last_streak_increment_date = models.DateField(null=True, blank=True)
     best_challenge_score = models.PositiveIntegerField(default=0)
+    lives_current = models.PositiveSmallIntegerField(default=5)
+    lives_max = models.PositiveSmallIntegerField(default=5)
+    next_life_at = models.DateTimeField(null=True, blank=True)
+    last_life_refill_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -689,11 +694,8 @@ class DailyChallengeAttempt(models.Model):
 
     class Meta:
         ordering = ["-challenge_date", "-id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "challenge_date"],
-                name="uniq_daily_challenge_attempt_user_date",
-            ),
+        indexes = [
+            models.Index(fields=["user", "challenge_date"], name="referrals_da_user_date_idx"),
         ]
 
     def __str__(self) -> str:

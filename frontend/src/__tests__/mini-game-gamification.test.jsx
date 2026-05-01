@@ -7,19 +7,27 @@ import BlockBlastGame from "../pages/lk/mini-game/BlockBlastGame";
 import { postGamificationDailyChallengeFinish } from "../pages/lk/mini-game/gamificationApi";
 
 const BASE_SUMMARY = {
-  xp_total: 120,
-  streak_days: 3,
-  streak_multiplier: "1.2000",
-  last_activity_date: null,
-  best_challenge_score: 900,
-  level: 2,
-  level_progress: {
+  profile: {
+    xp_total: 120,
+    streak_days: 3,
+    streak_multiplier: "1.2000",
+    best_challenge_score: 900,
     level: 2,
-    xp_into_level: 20,
-    xp_for_current_level_span: 100,
-    xp_remaining_for_next_level: 80,
+    level_progress: {
+      level: 2,
+      xp_into_level: 20,
+      xp_for_current_level_span: 100,
+      xp_remaining_for_next_level: 80,
+    },
   },
-  today_attempt: null,
+  lives: {
+    current: 5,
+    max: 5,
+    next_life_at: null,
+    recovery_seconds: null,
+    recovery_interval_hours: 4,
+  },
+  active_attempt: null,
   daily_challenge_xp_tiers: [],
   streak_multiplier_tiers: [],
 };
@@ -81,17 +89,10 @@ describe("BlockBlastGame gamification API", () => {
   it("POST start is called when starting a new game from pre-start overlay", async () => {
     const afterStart = {
       ...BASE_SUMMARY,
-      today_attempt: {
-        challenge_date: "2026-05-01",
-        status: "started",
+      lives: { ...BASE_SUMMARY.lives, current: 4 },
+      active_attempt: {
         attempt_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         rng_seed: 12345,
-        score: 0,
-        base_xp: 0,
-        multiplier: "1.0000",
-        awarded_xp: 0,
-        started_at: "2026-05-01T10:00:00Z",
-        completed_at: null,
       },
     };
 
@@ -101,9 +102,9 @@ describe("BlockBlastGame gamification API", () => {
 
     render(<BlockBlastGame />);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /Новая игра/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Начать раунд/i })).toBeEnabled());
 
-    await userEvent.click(screen.getByRole("button", { name: /Новая игра/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Начать раунд/i }));
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
@@ -119,33 +120,23 @@ describe("BlockBlastGame gamification API", () => {
     });
   });
 
-  it("blocks pre-start when today's challenge is already completed", async () => {
-    const completedSummary = {
+  it("disables start when no lives left", async () => {
+    const noLives = {
       ...BASE_SUMMARY,
-      today_attempt: {
-        challenge_date: "2026-05-01",
-        status: "completed",
-        attempt_public_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-        rng_seed: null,
-        score: 750,
-        base_xp: 20,
-        multiplier: "1.0000",
-        awarded_xp: 20,
-        started_at: "2026-05-01T09:00:00Z",
-        completed_at: "2026-05-01T09:05:00Z",
+      lives: {
+        ...BASE_SUMMARY.lives,
+        current: 0,
+        next_life_at: "2026-05-01T14:00:00.000Z",
+        recovery_seconds: 3600,
       },
     };
-
-    global.fetch.mockResolvedValueOnce(mockJsonResponse(completedSummary));
+    global.fetch.mockResolvedValueOnce(mockJsonResponse(noLives));
 
     render(<BlockBlastGame />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Сегодняшний челлендж уже завершён/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Жизни закончились/i })).toBeDisabled();
     });
-
-    expect(screen.queryByRole("button", { name: /^Новая игра$/i })).not.toBeInTheDocument();
-    expect(screen.getAllByText(/750/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("postGamificationDailyChallengeFinish sends attempt_id, moves, client_score", async () => {

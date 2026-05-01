@@ -23,29 +23,8 @@ import {
   postGamificationDailyChallengeStart,
 } from "./gamificationApi";
 
-/** Дневной лимит попыток челленджа (сердца в карточке; API может вернуть `daily_attempts_remaining`). */
-const MAX_DAILY_GAME_ATTEMPTS = 5;
-/** Интервал восстановления одной «жизни» на клиенте (до поддержки сервером очереди). */
-const LIFE_RESTORE_MS = 4 * 60 * 60 * 1000;
-const STORAGE_KEY_LIFE_LOSS_QUEUE = "lk-mini-game-block-blast-life-loss-queue";
-
-function readStoredLifeLossQueue() {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_LIFE_LOSS_QUEUE);
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.every((x) => typeof x === "number" && Number.isFinite(x))) {
-      const sorted = arr.filter((x) => x > 0).sort((a, b) => a - b);
-      if (sorted.length > MAX_DAILY_GAME_ATTEMPTS) {
-        return sorted.slice(0, MAX_DAILY_GAME_ATTEMPTS);
-      }
-      return sorted;
-    }
-  } catch {
-    /* ignore */
-  }
-  return [];
-}
+/** Число слотов сердец по умолчанию (совпадает с `lives.max` из API). */
+const DEFAULT_LIVES_MAX = 5;
 
 function formatLifeRestoreCountdown(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -429,7 +408,6 @@ export default function BlockBlastGame() {
   const [finishAlreadyCompleted, setFinishAlreadyCompleted] = useState(false);
   const [finishErrorMessage, setFinishErrorMessage] = useState(null);
 
-  const [lifeLossQueueMs, setLifeLossQueueMs] = useState(() => readStoredLifeLossQueue());
   const [timerTick, setTimerTick] = useState(0);
 
   const challengeSeedRef = useRef(null);
@@ -437,6 +415,7 @@ export default function BlockBlastGame() {
   const challengeRngRef = useRef(null);
   const moveLogRef = useRef([]);
   const gameStartPerfRef = useRef(0);
+  const lifeRecoveryFetchPendingRef = useRef(false);
 
   const loadGamificationSummary = useCallback(async () => {
     const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
@@ -462,27 +441,29 @@ export default function BlockBlastGame() {
   }, [loadGamificationSummary]);
 
   useEffect(() => {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY_LIFE_LOSS_QUEUE, JSON.stringify(lifeLossQueueMs));
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [lifeLossQueueMs]);
-
-  useEffect(() => {
     const id = setInterval(() => setTimerTick((x) => x + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    if (!lifeLossQueueMs.length) return;
-    const deadline = lifeLossQueueMs[0] + LIFE_RESTORE_MS;
-    if (Date.now() < deadline) return;
-    setLifeLossQueueMs((q) => q.slice(1));
-    loadGamificationSummary();
-  }, [lifeLossQueueMs, timerTick, loadGamificationSummary]);
+    if (summaryLoadState !== "ready") return;
+    const lives = gamificationSummary?.lives;
+    if (!lives || lives.current >= lives.max) {
+      lifeRecoveryFetchPendingRef.current = false;
+      return;
+    }
+    const nextMs = lives.next_life_at ? Date.parse(lives.next_life_at) : NaN;
+    if (!Number.isFinite(nextMs)) return;
+    if (Date.now() < nextMs) {
+      lifeRecoveryFetchPendingRef.current = false;
+      return;
+    }
+    if (lifeRecoveryFetchPendingRef.current) return;
+    lifeRecoveryFetchPendingRef.current = true;
+    loadGamificationSummary().finally(() => {
+      lifeRecoveryFetchPendingRef.current = false;
+    });
+  }, [timerTick, summaryLoadState, gamificationSummary, loadGamificationSummary]);
 
   useEffect(() => {
     if (!gameOver || !gameStarted) return undefined;
@@ -517,12 +498,6 @@ export default function BlockBlastGame() {
         setFinishReward(data.reward ?? null);
         const alreadyDone = Boolean(data.already_completed);
         setFinishAlreadyCompleted(alreadyDone);
-        if (!alreadyDone && data.reward != null) {
-          setLifeLossQueueMs((q) => {
-            if (q.length >= MAX_DAILY_GAME_ATTEMPTS) return q;
-            return [...q, Date.now()].sort((a, b) => a - b);
-          });
-        }
         setFinishUiState("done");
       } catch (e) {
         if (e?.name === "AbortError") return;
@@ -530,7 +505,7 @@ export default function BlockBlastGame() {
         const code = e?.body?.code ?? e?.body?.detail;
         if (status === 400 && code) {
           setFinishErrorMessage(
-            "Не удалось подтвердить результат. Попробуйте следующий челлендж позже.",
+            "Не удалось подтвердить результат раунда. Попробуйте позже.",
           );
         } else {
           setFinishErrorMessage("Не удалось отправить результат.");
@@ -591,16 +566,15 @@ export default function BlockBlastGame() {
 
   const handlePreStartNewGame = useCallback(async () => {
     if (preStartBusy || summaryLoadState !== "ready") return;
-    if (lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS) return;
-    const ta = gamificationSummary?.today_attempt;
-    if (ta?.status === "completed") return;
+    const livesCur = Number(gamificationSummary?.lives?.current);
+    if (!Number.isFinite(livesCur) || livesCur <= 0) return;
     const token = window.localStorage.getItem("access_token");
     if (!token) return;
     setPreStartBusy(true);
     setStartChallengeError(null);
     try {
       const summary = await postGamificationDailyChallengeStart(token);
-      const ta = summary.today_attempt;
+      const ta = summary.active_attempt;
       if (ta?.rng_seed != null && ta?.attempt_public_id) {
         challengeSeedRef.current = Number(ta.rng_seed);
         challengeAttemptIdRef.current = ta.attempt_public_id;
@@ -611,18 +585,18 @@ export default function BlockBlastGame() {
       }
       setGamificationSummary(summary);
       resetBoardState();
-    } catch {
-      setStartChallengeError("Не удалось начать попытку. Попробуйте ещё раз.");
+    } catch (e) {
+      if (e?.status === 409 && e.body?.summary) {
+        setGamificationSummary(e.body.summary);
+      }
+      const code = e?.body?.code;
+      setStartChallengeError(
+        code === "no_lives" ? "Жизни закончились. Дождитесь восстановления." : "Не удалось начать раунд. Попробуйте ещё раз.",
+      );
     } finally {
       setPreStartBusy(false);
     }
-  }, [
-    gamificationSummary?.today_attempt,
-    lifeLossQueueMs.length,
-    preStartBusy,
-    resetBoardState,
-    summaryLoadState,
-  ]);
+  }, [gamificationSummary?.lives?.current, preStartBusy, resetBoardState, summaryLoadState]);
 
   const startNewGame = useCallback(() => {
     resetBoardState();
@@ -1177,46 +1151,53 @@ export default function BlockBlastGame() {
     "--bb-palette-3": paletteColors[3],
   };
 
-  const challengeCompletedToday = gamificationSummary?.today_attempt?.status === "completed";
-  const todayAttemptScore =
-    gamificationSummary?.today_attempt?.status === "completed"
-      ? Number(gamificationSummary?.today_attempt?.score)
-      : null;
-  const xpInto = Number(gamificationSummary?.level_progress?.xp_into_level) || 0;
-  const xpSpanRaw = Number(gamificationSummary?.level_progress?.xp_for_current_level_span);
+  const profile = gamificationSummary?.profile ?? {};
+  const livesInfo = gamificationSummary?.lives ?? {};
+  const xpInto = Number(profile.level_progress?.xp_into_level) || 0;
+  const xpSpanRaw = Number(profile.level_progress?.xp_for_current_level_span);
   const xpSpan = Number.isFinite(xpSpanRaw) && xpSpanRaw > 0 ? xpSpanRaw : 1;
   const profileXpPct = Math.min(100, Math.max(0, Math.round((xpInto / xpSpan) * 100)));
-  const streakDaysShown = Number(gamificationSummary?.streak_days) || 0;
-  const streakMultLabel = formatStreakMultiplier(parseMultiplier(gamificationSummary?.streak_multiplier));
-  const apiBestChallenge = Number(gamificationSummary?.best_challenge_score) || 0;
+  const streakDaysShown = Number(profile.streak_days) || 0;
+  const streakMultLabel = formatStreakMultiplier(parseMultiplier(profile.streak_multiplier));
+  const apiBestChallenge = Number(profile.best_challenge_score) || 0;
   const displayBestScore = Math.max(apiBestChallenge, score);
-  const levelShown = Number(gamificationSummary?.level) || 1;
-  const xpTotalShown = Number(gamificationSummary?.xp_total) || 0;
+  const levelShown = Number(profile.level) || 1;
+  const xpTotalShown = Number(profile.xp_total) || 0;
+  const livesCurrent = Number(livesInfo.current);
+  const livesMaxShown = Number(livesInfo.max) || DEFAULT_LIVES_MAX;
   const xpBarAriaText =
     summaryLoadState === "ready"
       ? `Прогресс уровня: ${xpInto.toLocaleString("ru-RU")} из ${xpSpan.toLocaleString("ru-RU")} XP, всего ${xpTotalShown.toLocaleString("ru-RU")} XP`
       : "";
 
-  /** Жизни: 5 − число «потерь» в очереди восстановления (одна потеря за засчитанный раунд). */
-  const clientLivesRemaining =
-    summaryLoadState !== "ready"
-      ? null
-      : Math.max(0, MAX_DAILY_GAME_ATTEMPTS - lifeLossQueueMs.length);
+  const heartsFilled =
+    summaryLoadState !== "ready" || !Number.isFinite(livesCurrent)
+      ? 0
+      : Math.max(0, Math.min(livesMaxShown, livesCurrent));
 
   const dailyAttemptHeartsAria =
     summaryLoadState !== "ready"
-      ? "Загрузка статуса попыток дня"
-      : clientLivesRemaining === 0
-        ? `Жизней не осталось, 0 из ${MAX_DAILY_GAME_ATTEMPTS}`
-        : `Осталось жизней: ${clientLivesRemaining} из ${MAX_DAILY_GAME_ATTEMPTS}`;
+      ? "Загрузка статуса жизней"
+      : heartsFilled === 0
+        ? `Жизней не осталось, 0 из ${livesMaxShown}`
+        : `Жизней осталось: ${heartsFilled} из ${livesMaxShown}`;
 
+  const nextLifeAtMs = livesInfo.next_life_at ? Date.parse(livesInfo.next_life_at) : NaN;
   const nextLifeRestoreRemainingMs =
-    lifeLossQueueMs.length > 0
-      ? Math.max(0, lifeLossQueueMs[0] + LIFE_RESTORE_MS - Date.now()) + 0 * timerTick
+    summaryLoadState === "ready" &&
+    Number.isFinite(livesCurrent) &&
+    livesCurrent < livesMaxShown &&
+    Number.isFinite(nextLifeAtMs)
+      ? Math.max(0, nextLifeAtMs - Date.now()) + 0 * timerTick
       : null;
 
+  const livesAfterFinish =
+    finishUiState === "done" && gamificationSummary?.lives
+      ? Number(gamificationSummary.lives.current)
+      : livesCurrent;
   const gameOverRestartDisabled =
-    lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS || finishUiState === "submitting";
+    finishUiState === "submitting" ||
+    (finishUiState === "done" && Number.isFinite(livesAfterFinish) && livesAfterFinish <= 0);
 
   return (
     <div className="block-blast-game" style={paletteStyle}>
@@ -1271,50 +1252,37 @@ export default function BlockBlastGame() {
                       </button>
                     </>
                   ) : null}
-                  {summaryLoadState === "ready" &&
-                  challengeCompletedToday &&
-                  (clientLivesRemaining ?? 0) > 0 ? (
-                    <>
-                      <p className="block-blast-game__gamification-status">
-                        Челлендж: раунд засчитан на сервере. Жизни восстанавливаются каждые 4 часа — таймер в карточке
-                        «Восстановление».
-                      </p>
-                      {todayAttemptScore != null && Number.isFinite(todayAttemptScore) ? (
-                        <p className="block-blast-game__gamification-sub">
-                          Результат попытки: {todayAttemptScore.toLocaleString("ru-RU")}
-                        </p>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {summaryLoadState === "ready" &&
-                  challengeCompletedToday &&
-                  (clientLivesRemaining ?? 0) === 0 ? (
-                    <>
-                      <p className="block-blast-game__gamification-status block-blast-game__gamification-status--done">
-                        Все жизни израсходованы. Следующая восстановится по таймеру в карточке «Восстановление».
-                      </p>
-                      {todayAttemptScore != null && Number.isFinite(todayAttemptScore) ? (
-                        <p className="block-blast-game__gamification-sub">
-                          Результат попытки: {todayAttemptScore.toLocaleString("ru-RU")}
-                        </p>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {summaryLoadState === "ready" && !challengeCompletedToday ? (
+                  {summaryLoadState === "ready" ? (
                     <>
                       <button
                         type="button"
                         className="lk-dashboard__my-programs-catalog-banner-cta"
                         onClick={handlePreStartNewGame}
-                        disabled={preStartBusy || lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS}
+                        disabled={
+                          preStartBusy ||
+                          !Number.isFinite(livesCurrent) ||
+                          livesCurrent <= 0
+                        }
                       >
-                        {preStartBusy ? "Подождите…" : "Новая игра"}
+                        {preStartBusy
+                          ? "Подождите…"
+                          : Number.isFinite(livesCurrent) && livesCurrent <= 0
+                            ? "Жизни закончились"
+                            : "Начать раунд"}
                       </button>
                       {preStartBusy ? (
-                        <p className="block-blast-game__gamification-status">Подготовка попытки…</p>
+                        <p className="block-blast-game__gamification-status">Подготовка раунда…</p>
                       ) : null}
                       {startChallengeError ? (
                         <p className="block-blast-game__gamification-status">{startChallengeError}</p>
+                      ) : null}
+                      {Number.isFinite(livesCurrent) && livesCurrent <= 0 && !preStartBusy ? (
+                        <p className="block-blast-game__gamification-status block-blast-game__gamification-status--done">
+                          Следующая жизнь через:{" "}
+                          {nextLifeRestoreRemainingMs != null
+                            ? formatLifeRestoreCountdown(nextLifeRestoreRemainingMs)
+                            : "—"}
+                        </p>
                       ) : null}
                     </>
                   ) : null}
@@ -1347,7 +1315,7 @@ export default function BlockBlastGame() {
                 aria-labelledby="block-blast-gameover-heading"
               >
                 <p id="block-blast-gameover-heading" className="block-blast-game__gameover-title">
-                  Игра окончена
+                  {finishUiState === "done" ? "Раунд завершён" : "Игра окончена"}
                 </p>
                 {finishUiState === "submitting" ? (
                   <p className="block-blast-game__gamification-status">Отправка результата…</p>
@@ -1360,27 +1328,56 @@ export default function BlockBlastGame() {
                 {finishUiState === "done" && finishReward ? (
                   <div className="block-blast-game__finish-reward" aria-live="polite">
                     {finishAlreadyCompleted ? (
-                      <p className="block-blast-game__gamification-sub">Челлендж уже был засчитан ранее.</p>
+                      <p className="block-blast-game__gamification-sub">Этот раунд уже учтён.</p>
                     ) : (
-                      <p className="block-blast-game__finish-reward-line">
-                        Счёт: {Number(finishReward.score ?? score).toLocaleString("ru-RU")} · +
-                        {Number(finishReward.awarded_xp).toLocaleString("ru-RU")} XP
-                        {finishReward.multiplier != null ? ` · ×${String(finishReward.multiplier)}` : ""}
-                      </p>
+                      <>
+                        <p className="block-blast-game__finish-reward-line">
+                          Результат: {Number(finishReward.score ?? score).toLocaleString("ru-RU")}
+                        </p>
+                        <p className="block-blast-game__finish-reward-line">
+                          Начислено: +{Number(finishReward.awarded_xp).toLocaleString("ru-RU")} XP
+                          {finishReward.multiplier != null ? ` · ×${String(finishReward.multiplier)}` : ""}
+                        </p>
+                        <p className="block-blast-game__finish-reward-line">
+                          Жизней осталось:{" "}
+                          {Number.isFinite(livesAfterFinish)
+                            ? `${Math.max(0, livesAfterFinish)}/${livesMaxShown}`
+                            : "—"}
+                        </p>
+                      </>
                     )}
                   </div>
                 ) : null}
                 <button
                   type="button"
                   className="lk-dashboard__my-programs-catalog-banner-cta"
-                  onClick={startNewGame}
+                  onClick={() => {
+                    if (finishUiState === "error") {
+                      startNewGame();
+                      return;
+                    }
+                    void handlePreStartNewGame();
+                  }}
                   disabled={gameOverRestartDisabled}
                 >
-                  Начать игру
+                  {finishUiState === "done" &&
+                  Number.isFinite(livesAfterFinish) &&
+                  livesAfterFinish <= 0
+                    ? "Жизни закончились"
+                    : finishUiState === "done" &&
+                        Number.isFinite(livesAfterFinish) &&
+                        livesAfterFinish > 0
+                      ? "Играть ещё"
+                      : "Начать игру"}
                 </button>
-                {lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS && finishUiState === "done" ? (
+                {finishUiState === "done" &&
+                Number.isFinite(livesAfterFinish) &&
+                livesAfterFinish <= 0 ? (
                   <p className="block-blast-game__no-attempts-hint">
-                    Все жизни израсходованы. Следующая восстановится по таймеру в карточке «Восстановление».
+                    Следующая жизнь через:{" "}
+                    {nextLifeRestoreRemainingMs != null
+                      ? formatLifeRestoreCountdown(nextLifeRestoreRemainingMs)
+                      : "—"}
                   </p>
                 ) : null}
               </div>
@@ -1509,77 +1506,76 @@ export default function BlockBlastGame() {
         </article>
         <article className="block-blast-game__profile-card">
           <h4 className="block-blast-game__profile-card-label">Серия</h4>
-          <p
-            className="block-blast-game__profile-card-value block-blast-game__profile-card-value--streak"
-            aria-label={`Серия ${streakDaysShown} ${ruDaysWord(streakDaysShown)}, множитель ${streakMultLabel}`}
-          >
-            <span>
-              {summaryLoadState !== "ready"
-                ? "—"
-                : `${streakDaysShown.toLocaleString("ru-RU")} ${ruDaysWord(streakDaysShown)}`}
-            </span>
-            {summaryLoadState === "ready" ? (
-              <span className="block-blast-game__streak-mult">{streakMultLabel}</span>
-            ) : null}
-          </p>
+          <div className="block-blast-game__profile-card-body">
+            <p
+              className="block-blast-game__profile-card-value block-blast-game__profile-card-value--streak"
+              aria-label={`Серия ${streakDaysShown} ${ruDaysWord(streakDaysShown)}, множитель ${streakMultLabel}`}
+            >
+              <span>
+                {summaryLoadState !== "ready"
+                  ? "—"
+                  : `${streakDaysShown.toLocaleString("ru-RU")} ${ruDaysWord(streakDaysShown)}`}
+              </span>
+              {summaryLoadState === "ready" ? (
+                <span className="block-blast-game__streak-mult">{streakMultLabel}</span>
+              ) : null}
+            </p>
+          </div>
         </article>
         <article className="block-blast-game__profile-card">
           <h4 className="block-blast-game__profile-card-label">Жизни</h4>
-          {summaryLoadState !== "ready" ? (
-            <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
-              —
-            </p>
-          ) : (
-            <div
-              className="block-blast-game__attempts-hearts"
-              role="img"
-              aria-label={dailyAttemptHeartsAria}
-            >
-              {Array.from({ length: MAX_DAILY_GAME_ATTEMPTS }, (_, i) => (
-                <span
-                  key={i}
-                  className={[
-                    "block-blast-game__attempt-heart",
-                    i < (clientLivesRemaining ?? 0)
-                      ? "block-blast-game__attempt-heart_filled"
-                      : "block-blast-game__attempt-heart_empty",
-                  ].join(" ")}
-                >
-                  <PixelHeartGlyph />
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="block-blast-game__profile-card-body">
+            {summaryLoadState !== "ready" ? (
+              <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
+                —
+              </p>
+            ) : (
+              <div
+                className="block-blast-game__attempts-hearts"
+                role="img"
+                aria-label={dailyAttemptHeartsAria}
+              >
+                {Array.from({ length: livesMaxShown }, (_, i) => (
+                  <span
+                    key={i}
+                    className={[
+                      "block-blast-game__attempt-heart",
+                      i < heartsFilled ? "block-blast-game__attempt-heart_filled" : "block-blast-game__attempt-heart_empty",
+                    ].join(" ")}
+                  >
+                    <PixelHeartGlyph />
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </article>
         <article className="block-blast-game__profile-card">
           <h4 className="block-blast-game__profile-card-label">Восстановление</h4>
-          {summaryLoadState !== "ready" ? (
-            <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
-              —
-            </p>
-          ) : lifeLossQueueMs.length === 0 ? (
-            <p className="block-blast-game__profile-card-caption block-blast-game__profile-card-caption--muted">
-              Все попытки доступны
-            </p>
-          ) : (
-            <>
-              <p className="block-blast-game__profile-card-caption block-blast-game__profile-card-caption--life-hint">
-                Следующая попытка через
+          <div className="block-blast-game__profile-card-body">
+            {summaryLoadState !== "ready" ? (
+              <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
+                —
               </p>
+            ) : Number.isFinite(livesCurrent) && livesCurrent >= livesMaxShown ? (
+              <p className="block-blast-game__profile-card-caption block-blast-game__profile-card-caption--muted">
+                Все жизни доступны
+              </p>
+            ) : (
               <p
                 className="block-blast-game__life-restore-timer"
                 aria-live="polite"
                 aria-atomic="true"
                 aria-label={
                   nextLifeRestoreRemainingMs != null
-                    ? `До восстановления одной попытки осталось ${formatLifeRestoreCountdown(nextLifeRestoreRemainingMs)}`
+                    ? `До следующей жизни осталось ${formatLifeRestoreCountdown(nextLifeRestoreRemainingMs)}`
                     : undefined
                 }
               >
                 {formatLifeRestoreCountdown(nextLifeRestoreRemainingMs ?? 0)}
               </p>
-            </>
-          )}
+            )}
+          </div>
         </article>
       </section>
 

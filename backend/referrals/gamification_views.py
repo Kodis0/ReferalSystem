@@ -27,7 +27,19 @@ class DailyChallengeStartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        start_daily_challenge(request.user)
+        try:
+            start_daily_challenge(request.user)
+        except DjangoValidationError as exc:
+            if getattr(exc, "code", None) == "no_lives":
+                return Response(
+                    {
+                        "detail": "no_lives",
+                        "code": "no_lives",
+                        "summary": build_gamification_summary(request.user),
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            raise
         return Response(build_gamification_summary(request.user))
 
 

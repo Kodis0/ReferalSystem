@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./LkSidebar.css";
-import { DiamondIcon } from "./mini-game/DiamondIcon";
+import { CrownIcon } from "./mini-game/CrownIcon";
 import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
 import { formatSiteCardTitle } from "./owner-programs/siteDisplay";
 
@@ -121,7 +121,7 @@ function ProgramsNavIcon() {
 
 function MiniGameRatingNavIcon() {
   return (
-    <DiamondIcon
+    <CrownIcon
       className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_mini-game-rating"
       size={24}
       strokeWidth={2}
