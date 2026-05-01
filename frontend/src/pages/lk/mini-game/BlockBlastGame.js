@@ -23,6 +23,70 @@ import {
   postGamificationDailyChallengeStart,
 } from "./gamificationApi";
 
+/** Дневной лимит попыток челленджа (сердца в карточке; API может вернуть `daily_attempts_remaining`). */
+const MAX_DAILY_GAME_ATTEMPTS = 5;
+/** Интервал восстановления одной «жизни» на клиенте (до поддержки сервером очереди). */
+const LIFE_RESTORE_MS = 4 * 60 * 60 * 1000;
+const STORAGE_KEY_LIFE_LOSS_QUEUE = "lk-mini-game-block-blast-life-loss-queue";
+
+function readStoredLifeLossQueue() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_LIFE_LOSS_QUEUE);
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.every((x) => typeof x === "number" && Number.isFinite(x))) {
+      const sorted = arr.filter((x) => x > 0).sort((a, b) => a - b);
+      if (sorted.length > MAX_DAILY_GAME_ATTEMPTS) {
+        return sorted.slice(0, MAX_DAILY_GAME_ATTEMPTS);
+      }
+      return sorted;
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+function formatLifeRestoreCountdown(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+/** Плавное изменение отображаемого счёта при смене значения. */
+function AnimatedScoreValue({ value }) {
+  const [display, setDisplay] = useState(value);
+  const dispRef = useRef(value);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    if (value === dispRef.current) return;
+    const from = dispRef.current;
+    const to = value;
+    const t0 = performance.now();
+    const dur = 320;
+    const ease = (u) => 1 - (1 - u) ** 3;
+    const loop = (now) => {
+      const p = Math.min(1, (now - t0) / dur);
+      const v = Math.round(from + (to - from) * ease(p));
+      dispRef.current = v;
+      setDisplay(v);
+      if (p < 1) rafRef.current = requestAnimationFrame(loop);
+    };
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [value]);
+
+  return (
+    <span className="block-blast-game__score-mini-value block-blast-game__score-mini-value--accent">
+      {display.toLocaleString("ru-RU")}
+    </span>
+  );
+}
+
 /** Демо-таблица лидеров (без бэкенда). */
 const BLOCK_BLAST_LEADERBOARD_MOCK = [
   { rank: 1, name: "Участник A", score: 2840 },
@@ -49,6 +113,38 @@ function parseMultiplier(str) {
 
 function formatStreakMultiplier(mult) {
   return `x${mult.toFixed(1)}`;
+}
+
+/** Сетка 10×6 для пиксельного сердца (viewBox), симметричный контур. */
+const PIXEL_HEART_PATTERN = [
+  "0011001100",
+  "0111111110",
+  "0111111110",
+  "0011111100",
+  "0001111000",
+  "0000110000",
+];
+
+function PixelHeartGlyph() {
+  const rects = [];
+  for (let r = 0; r < PIXEL_HEART_PATTERN.length; r++) {
+    const row = PIXEL_HEART_PATTERN[r];
+    for (let c = 0; c < row.length; c++) {
+      if (row[c] === "1") {
+        rects.push(<rect key={`${r}-${c}`} x={c} y={r} width={1} height={1} />);
+      }
+    }
+  }
+  return (
+    <svg
+      className="block-blast-game__pixel-heart-svg"
+      viewBox="0 0 10 6"
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
+    >
+      {rects}
+    </svg>
+  );
 }
 
 /** Пиксели сердца в сетке 10×6 (viewBox), ортогональный «8-bit» контур. */
@@ -333,6 +429,9 @@ export default function BlockBlastGame() {
   const [finishAlreadyCompleted, setFinishAlreadyCompleted] = useState(false);
   const [finishErrorMessage, setFinishErrorMessage] = useState(null);
 
+  const [lifeLossQueueMs, setLifeLossQueueMs] = useState(() => readStoredLifeLossQueue());
+  const [timerTick, setTimerTick] = useState(0);
+
   const challengeSeedRef = useRef(null);
   const challengeAttemptIdRef = useRef(null);
   const challengeRngRef = useRef(null);
@@ -361,6 +460,29 @@ export default function BlockBlastGame() {
   useEffect(() => {
     loadGamificationSummary();
   }, [loadGamificationSummary]);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(STORAGE_KEY_LIFE_LOSS_QUEUE, JSON.stringify(lifeLossQueueMs));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [lifeLossQueueMs]);
+
+  useEffect(() => {
+    const id = setInterval(() => setTimerTick((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!lifeLossQueueMs.length) return;
+    const deadline = lifeLossQueueMs[0] + LIFE_RESTORE_MS;
+    if (Date.now() < deadline) return;
+    setLifeLossQueueMs((q) => q.slice(1));
+    loadGamificationSummary();
+  }, [lifeLossQueueMs, timerTick, loadGamificationSummary]);
 
   useEffect(() => {
     if (!gameOver || !gameStarted) return undefined;
@@ -393,7 +515,14 @@ export default function BlockBlastGame() {
         );
         if (data.summary) setGamificationSummary(data.summary);
         setFinishReward(data.reward ?? null);
-        setFinishAlreadyCompleted(Boolean(data.already_completed));
+        const alreadyDone = Boolean(data.already_completed);
+        setFinishAlreadyCompleted(alreadyDone);
+        if (!alreadyDone && data.reward != null) {
+          setLifeLossQueueMs((q) => {
+            if (q.length >= MAX_DAILY_GAME_ATTEMPTS) return q;
+            return [...q, Date.now()].sort((a, b) => a - b);
+          });
+        }
         setFinishUiState("done");
       } catch (e) {
         if (e?.name === "AbortError") return;
@@ -462,6 +591,7 @@ export default function BlockBlastGame() {
 
   const handlePreStartNewGame = useCallback(async () => {
     if (preStartBusy || summaryLoadState !== "ready") return;
+    if (lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS) return;
     const ta = gamificationSummary?.today_attempt;
     if (ta?.status === "completed") return;
     const token = window.localStorage.getItem("access_token");
@@ -486,7 +616,13 @@ export default function BlockBlastGame() {
     } finally {
       setPreStartBusy(false);
     }
-  }, [gamificationSummary?.today_attempt, preStartBusy, resetBoardState, summaryLoadState]);
+  }, [
+    gamificationSummary?.today_attempt,
+    lifeLossQueueMs.length,
+    preStartBusy,
+    resetBoardState,
+    summaryLoadState,
+  ]);
 
   const startNewGame = useCallback(() => {
     resetBoardState();
@@ -1061,7 +1197,26 @@ export default function BlockBlastGame() {
       ? `Прогресс уровня: ${xpInto.toLocaleString("ru-RU")} из ${xpSpan.toLocaleString("ru-RU")} XP, всего ${xpTotalShown.toLocaleString("ru-RU")} XP`
       : "";
 
-  const gameOverRestartDisabled = challengeCompletedToday || finishUiState === "submitting";
+  /** Жизни: 5 − число «потерь» в очереди восстановления (одна потеря за засчитанный раунд). */
+  const clientLivesRemaining =
+    summaryLoadState !== "ready"
+      ? null
+      : Math.max(0, MAX_DAILY_GAME_ATTEMPTS - lifeLossQueueMs.length);
+
+  const dailyAttemptHeartsAria =
+    summaryLoadState !== "ready"
+      ? "Загрузка статуса попыток дня"
+      : clientLivesRemaining === 0
+        ? `Жизней не осталось, 0 из ${MAX_DAILY_GAME_ATTEMPTS}`
+        : `Осталось жизней: ${clientLivesRemaining} из ${MAX_DAILY_GAME_ATTEMPTS}`;
+
+  const nextLifeRestoreRemainingMs =
+    lifeLossQueueMs.length > 0
+      ? Math.max(0, lifeLossQueueMs[0] + LIFE_RESTORE_MS - Date.now()) + 0 * timerTick
+      : null;
+
+  const gameOverRestartDisabled =
+    lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS || finishUiState === "submitting";
 
   return (
     <div className="block-blast-game" style={paletteStyle}>
@@ -1116,10 +1271,27 @@ export default function BlockBlastGame() {
                       </button>
                     </>
                   ) : null}
-                  {summaryLoadState === "ready" && challengeCompletedToday ? (
+                  {summaryLoadState === "ready" &&
+                  challengeCompletedToday &&
+                  (clientLivesRemaining ?? 0) > 0 ? (
+                    <>
+                      <p className="block-blast-game__gamification-status">
+                        Челлендж: раунд засчитан на сервере. Жизни восстанавливаются каждые 4 часа — таймер в карточке
+                        «Восстановление».
+                      </p>
+                      {todayAttemptScore != null && Number.isFinite(todayAttemptScore) ? (
+                        <p className="block-blast-game__gamification-sub">
+                          Результат попытки: {todayAttemptScore.toLocaleString("ru-RU")}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {summaryLoadState === "ready" &&
+                  challengeCompletedToday &&
+                  (clientLivesRemaining ?? 0) === 0 ? (
                     <>
                       <p className="block-blast-game__gamification-status block-blast-game__gamification-status--done">
-                        Сегодняшний челлендж уже завершён
+                        Все жизни израсходованы. Следующая восстановится по таймеру в карточке «Восстановление».
                       </p>
                       {todayAttemptScore != null && Number.isFinite(todayAttemptScore) ? (
                         <p className="block-blast-game__gamification-sub">
@@ -1134,7 +1306,7 @@ export default function BlockBlastGame() {
                         type="button"
                         className="lk-dashboard__my-programs-catalog-banner-cta"
                         onClick={handlePreStartNewGame}
-                        disabled={preStartBusy}
+                        disabled={preStartBusy || lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS}
                       >
                         {preStartBusy ? "Подождите…" : "Новая игра"}
                       </button>
@@ -1177,7 +1349,6 @@ export default function BlockBlastGame() {
                 <p id="block-blast-gameover-heading" className="block-blast-game__gameover-title">
                   Игра окончена
                 </p>
-                <p className="block-blast-game__gameover-score">Счёт: {score.toLocaleString("ru-RU")}</p>
                 {finishUiState === "submitting" ? (
                   <p className="block-blast-game__gamification-status">Отправка результата…</p>
                 ) : null}
@@ -1191,20 +1362,11 @@ export default function BlockBlastGame() {
                     {finishAlreadyCompleted ? (
                       <p className="block-blast-game__gamification-sub">Челлендж уже был засчитан ранее.</p>
                     ) : (
-                      <>
-                        <p className="block-blast-game__finish-reward-meta">
-                          Засчитано очков: {Number(finishReward.score ?? 0).toLocaleString("ru-RU")}
-                        </p>
-                        <p className="block-blast-game__finish-reward-line">
-                          +{Number(finishReward.awarded_xp).toLocaleString("ru-RU")} XP
-                          {finishReward.multiplier != null ? ` · ×${String(finishReward.multiplier)}` : ""}
-                        </p>
-                        <p className="block-blast-game__finish-reward-meta">
-                          База {Number(finishReward.base_xp).toLocaleString("ru-RU")} XP · Уровень{" "}
-                          {Number(finishReward.level).toLocaleString("ru-RU")} · Всего{" "}
-                          {Number(finishReward.xp_total).toLocaleString("ru-RU")} XP
-                        </p>
-                      </>
+                      <p className="block-blast-game__finish-reward-line">
+                        Счёт: {Number(finishReward.score ?? score).toLocaleString("ru-RU")} · +
+                        {Number(finishReward.awarded_xp).toLocaleString("ru-RU")} XP
+                        {finishReward.multiplier != null ? ` · ×${String(finishReward.multiplier)}` : ""}
+                      </p>
                     )}
                   </div>
                 ) : null}
@@ -1216,9 +1378,9 @@ export default function BlockBlastGame() {
                 >
                   Начать игру
                 </button>
-                {challengeCompletedToday && finishUiState === "done" ? (
+                {lifeLossQueueMs.length >= MAX_DAILY_GAME_ATTEMPTS && finishUiState === "done" ? (
                   <p className="block-blast-game__no-attempts-hint">
-                    Сегодняшний челлендж завершён — новая попытка будет доступна завтра.
+                    Все жизни израсходованы. Следующая восстановится по таймеру в карточке «Восстановление».
                   </p>
                 ) : null}
               </div>
@@ -1245,68 +1407,71 @@ export default function BlockBlastGame() {
           ) : null}
         </div>
 
-        <div className="block-blast-game__panel">
-          <div className="block-blast-game__panel-toolbar">
-            <div className="block-blast-game__stats block-blast-game__stats--inline">
-              <span className="block-blast-game__stat-group">
-                <span className="block-blast-game__stat-label">Счёт</span>
-                <span className="block-blast-game__stat-value">{score}</span>
-              </span>
-              <span className="block-blast-game__stats-sep" aria-hidden="true">
-                ·
-              </span>
-              <span className="block-blast-game__stat-group">
-                <span className="block-blast-game__stat-label">Лучший</span>
-                <span className="block-blast-game__stat-value">{displayBestScore}</span>
-              </span>
-            </div>
-            {gameStarted ? (
-              <div className="block-blast-game__actions">
-                <button type="button" className="block-blast-game__restart-text" onClick={startNewGame}>
-                  Рестарт
-                </button>
-              </div>
-            ) : null}
-            <h3
-              id="block-blast-leaderboard-heading"
-              className="block-blast-game__leaderboard-title block-blast-game__leaderboard-title--toolbar"
-            >
-              Лидеры
-            </h3>
-          </div>
-          <aside
-            className="block-blast-game__leaderboard"
-            aria-labelledby="block-blast-leaderboard-heading"
+        <div className="block-blast-game__panel-stack">
+          <div
+            className="block-blast-game__score-mini-cards"
+            role="group"
+            aria-label="Счёт и лучший результат"
           >
-            <div className="lk-header__menu block-blast-game__leaderboard-menu" role="list">
-              {BLOCK_BLAST_LEADERBOARD_MOCK.map((row) => (
-                <div
-                  key={row.rank}
-                  className={`lk-header__menu-item block-blast-game__leaderboard-row${
-                    row.rank <= 3 ? " block-blast-game__leaderboard-row--top" : ""
-                  }`}
-                  role="listitem"
-                >
-                  <span
-                    className="block-blast-game__leaderboard-rank"
-                    aria-label={`Место ${row.rank}`}
-                  >
-                    {row.rank <= 3 ? (
-                      <DiamondIcon
-                        className={`block-blast-game__leaderboard-diamond block-blast-game__leaderboard-diamond--${row.rank}`}
-                        size={18}
-                        strokeWidth={2}
-                      />
-                    ) : (
-                      row.rank
-                    )}
-                  </span>
-                  <span className="lk-header__menu-item-text">{row.name}</span>
-                  <span className="block-blast-game__leaderboard-score">{row.score}</span>
-                </div>
-              ))}
+            <div className="block-blast-game__score-mini-card">
+              <span className="block-blast-game__score-mini-label">Счёт</span>
+              <AnimatedScoreValue value={score} />
             </div>
-          </aside>
+            <div className="block-blast-game__score-mini-card">
+              <span className="block-blast-game__score-mini-label">Лучший</span>
+              <span className="block-blast-game__score-mini-value">{displayBestScore}</span>
+            </div>
+          </div>
+          <div className="block-blast-game__panel">
+            <div className="block-blast-game__panel-toolbar">
+              <h3
+                id="block-blast-leaderboard-heading"
+                className="block-blast-game__leaderboard-title block-blast-game__leaderboard-title--toolbar"
+              >
+                Лидеры
+              </h3>
+              {gameStarted ? (
+                <div className="block-blast-game__actions">
+                  <button type="button" className="block-blast-game__restart-text" onClick={startNewGame}>
+                    Рестарт
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <aside
+              className="block-blast-game__leaderboard"
+              aria-labelledby="block-blast-leaderboard-heading"
+            >
+              <div className="lk-header__menu block-blast-game__leaderboard-menu" role="list">
+                {BLOCK_BLAST_LEADERBOARD_MOCK.map((row) => (
+                  <div
+                    key={row.rank}
+                    className={`lk-header__menu-item block-blast-game__leaderboard-row${
+                      row.rank <= 3 ? " block-blast-game__leaderboard-row--top" : ""
+                    }`}
+                    role="listitem"
+                  >
+                    <span
+                      className="block-blast-game__leaderboard-rank"
+                      aria-label={`Место ${row.rank}`}
+                    >
+                      {row.rank <= 3 ? (
+                        <DiamondIcon
+                          className={`block-blast-game__leaderboard-diamond block-blast-game__leaderboard-diamond--${row.rank}`}
+                          size={18}
+                          strokeWidth={2}
+                        />
+                      ) : (
+                        row.rank
+                      )}
+                    </span>
+                    <span className="lk-header__menu-item-text">{row.name}</span>
+                    <span className="block-blast-game__leaderboard-score">{row.score}</span>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
 
@@ -1317,8 +1482,14 @@ export default function BlockBlastGame() {
             <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">—</p>
           ) : (
             <>
-              <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
-                {xpTotalShown.toLocaleString("ru-RU")} XP · уровень {levelShown.toLocaleString("ru-RU")}
+              <p
+                className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact block-blast-game__profile-card-value--xp-line"
+                aria-label={`${xpTotalShown.toLocaleString("ru-RU")} XP, уровень ${levelShown.toLocaleString("ru-RU")}`}
+              >
+                <span>{xpTotalShown.toLocaleString("ru-RU")} XP</span>
+                <span className="block-blast-game__xp-level-label">
+                  уровень {levelShown.toLocaleString("ru-RU")}
+                </span>
               </p>
               <p className="block-blast-game__profile-card-caption">
                 В уровне: {xpInto.toLocaleString("ru-RU")} / {xpSpan.toLocaleString("ru-RU")}
@@ -1337,12 +1508,6 @@ export default function BlockBlastGame() {
           )}
         </article>
         <article className="block-blast-game__profile-card">
-          <h4 className="block-blast-game__profile-card-label">Уровень</h4>
-          <p className="block-blast-game__profile-card-value">
-            {summaryLoadState !== "ready" ? "—" : levelShown.toLocaleString("ru-RU")}
-          </p>
-        </article>
-        <article className="block-blast-game__profile-card">
           <h4 className="block-blast-game__profile-card-label">Серия</h4>
           <p
             className="block-blast-game__profile-card-value block-blast-game__profile-card-value--streak"
@@ -1359,33 +1524,62 @@ export default function BlockBlastGame() {
           </p>
         </article>
         <article className="block-blast-game__profile-card">
-          <h4 className="block-blast-game__profile-card-label">Множитель опыта</h4>
-          <p className="block-blast-game__profile-card-value">
-            {summaryLoadState !== "ready" ? "—" : streakMultLabel}
-          </p>
-        </article>
-        <article className="block-blast-game__profile-card">
-          <h4 className="block-blast-game__profile-card-label">Попытка дня</h4>
-          <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
-            {summaryLoadState !== "ready"
-              ? "—"
-              : challengeCompletedToday
-                ? "Завершена"
-                : gamificationSummary?.today_attempt?.status === "started"
-                  ? "В процессе"
-                  : "Доступна"}
-          </p>
-          {summaryLoadState === "ready" && challengeCompletedToday && todayAttemptScore != null ? (
-            <p className="block-blast-game__profile-card-caption">
-              Счёт: {todayAttemptScore.toLocaleString("ru-RU")}
+          <h4 className="block-blast-game__profile-card-label">Жизни</h4>
+          {summaryLoadState !== "ready" ? (
+            <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
+              —
             </p>
-          ) : null}
+          ) : (
+            <div
+              className="block-blast-game__attempts-hearts"
+              role="img"
+              aria-label={dailyAttemptHeartsAria}
+            >
+              {Array.from({ length: MAX_DAILY_GAME_ATTEMPTS }, (_, i) => (
+                <span
+                  key={i}
+                  className={[
+                    "block-blast-game__attempt-heart",
+                    i < (clientLivesRemaining ?? 0)
+                      ? "block-blast-game__attempt-heart_filled"
+                      : "block-blast-game__attempt-heart_empty",
+                  ].join(" ")}
+                >
+                  <PixelHeartGlyph />
+                </span>
+              ))}
+            </div>
+          )}
         </article>
         <article className="block-blast-game__profile-card">
-          <h4 className="block-blast-game__profile-card-label">Лучший результат</h4>
-          <p className="block-blast-game__profile-card-value">
-            {summaryLoadState !== "ready" ? "—" : apiBestChallenge.toLocaleString("ru-RU")}
-          </p>
+          <h4 className="block-blast-game__profile-card-label">Восстановление</h4>
+          {summaryLoadState !== "ready" ? (
+            <p className="block-blast-game__profile-card-value block-blast-game__profile-card-value--compact">
+              —
+            </p>
+          ) : lifeLossQueueMs.length === 0 ? (
+            <p className="block-blast-game__profile-card-caption block-blast-game__profile-card-caption--muted">
+              Все попытки доступны
+            </p>
+          ) : (
+            <>
+              <p className="block-blast-game__profile-card-caption block-blast-game__profile-card-caption--life-hint">
+                Следующая попытка через
+              </p>
+              <p
+                className="block-blast-game__life-restore-timer"
+                aria-live="polite"
+                aria-atomic="true"
+                aria-label={
+                  nextLifeRestoreRemainingMs != null
+                    ? `До восстановления одной попытки осталось ${formatLifeRestoreCountdown(nextLifeRestoreRemainingMs)}`
+                    : undefined
+                }
+              >
+                {formatLifeRestoreCountdown(nextLifeRestoreRemainingMs ?? 0)}
+              </p>
+            </>
+          )}
         </article>
       </section>
 

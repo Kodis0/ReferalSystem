@@ -12,10 +12,10 @@ export default function MiniGamePage() {
       >
         <div className="lk-dashboard__my-programs-catalog-banner-inner">
           <div className="lk-dashboard__my-programs-catalog-banner-copy">
-            <p className="lk-dashboard__my-programs-catalog-banner-title">Ежедневный челлендж</p>
+            <p className="lk-dashboard__my-programs-catalog-banner-title">Челлендж</p>
             <p className="lk-dashboard__my-programs-catalog-banner-sub">
-              Собирайте линии, набирайте очки и получайте XP за активность. Возвращайтесь каждый день,
-              сохраняйте серию и поднимайтесь в рейтинге участников.
+              Собирайте линии и зарабатывайте XP. Пять жизней — по одной за раунд; каждая восстанавливается через 4 часа.
+              Серия и таблица лидеров по вашей активности.
             </p>
           </div>
           <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">

@@ -68,12 +68,54 @@
   font-size: 17px;
 }
 
+.block-blast-game__profile-card-value--xp-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.block-blast-game__xp-level-label {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #7177f8;
+}
+
 .block-blast-game__profile-card-caption {
   margin: 8px 0 0;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.62);
+}
+
+.block-blast-game__profile-card-caption--muted {
+  margin-top: 0;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.block-blast-game__profile-card-caption--life-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.block-blast-game__life-restore-timer {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0.02em;
+  color: #7177f8;
+  transition: color 0.15s ease;
 }
 
 .block-blast-game__gamification-status {
@@ -210,7 +252,7 @@
     align-items: stretch;
   }
 
-  .block-blast-game__panel {
+  .block-blast-game__panel-stack {
     flex: 0 0 auto;
     width: 100%;
   }
@@ -234,13 +276,65 @@
   --bb-cube-lo: rgba(15, 23, 42, 0.22);
 }
 
-.block-blast-game__panel {
+.block-blast-game__panel-stack {
   flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+}
+
+.block-blast-game__score-mini-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.block-blast-game__score-mini-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: #242f3d;
+}
+
+.block-blast-game__score-mini-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.block-blast-game__score-mini-value {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.block-blast-game__score-mini-value--accent {
+  color: #7177f8;
+  transition: color 0.15s ease, transform 0.18s ease;
+}
+
+.block-blast-game__panel {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
-  align-self: stretch;
   min-width: 0;
   min-height: 0;
   padding: 10px 14px;
@@ -260,6 +354,10 @@
   gap: 10px 20px;
   flex: 0 0 auto;
   width: 100%;
+}
+
+.block-blast-game__panel-toolbar .block-blast-game__actions {
+  margin-left: auto;
 }
 
 .block-blast-game__leaderboard {
@@ -283,7 +381,8 @@
 }
 
 .block-blast-game__leaderboard-title--toolbar {
-  margin-left: auto;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 /* Как выпадающее меню аккаунта: `.lk-header__menu` / `.lk-header__menu-item` (lk.css) */
@@ -392,9 +491,12 @@
   }
 
   .block-blast-game__leaderboard-title--toolbar {
-    margin-left: 0;
-    flex-basis: 100%;
-    text-align: right;
+    flex-basis: auto;
+    text-align: left;
+  }
+
+  .block-blast-game__panel-toolbar .block-blast-game__actions {
+    margin-left: auto;
   }
 }
 
@@ -402,6 +504,22 @@
   background: #242f3d;
   border: none;
   box-shadow: none;
+}
+
+[data-theme="light"] .block-blast-game__score-mini-card {
+  background: #242f3d;
+}
+
+[data-theme="light"] .block-blast-game__score-mini-label {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+[data-theme="light"] .block-blast-game__score-mini-value {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="light"] .block-blast-game__score-mini-value--accent {
+  color: #7177f8;
 }
 
 [data-theme="light"] .block-blast-game__panel .block-blast-game__stat-label {
