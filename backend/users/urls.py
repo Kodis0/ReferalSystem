@@ -22,6 +22,14 @@ from .views import (
     SiteCtaLeaveView,
 )
 from rest_framework_simplejwt.views import TokenRefreshView
+from .passkey_views import (
+    PasskeyDestroyView,
+    PasskeyListView,
+    PasskeyLoginOptionsView,
+    PasskeyLoginVerifyView,
+    PasskeyRegisterOptionsView,
+    PasskeyRegisterVerifyView,
+)
 from .views_orders import OrderReceiveView
 from .support_views import (
     SupportTicketAttachmentView,
@@ -42,7 +50,13 @@ urlpatterns = [
     path('token/telegram/start/', TelegramLoginStartView.as_view(), name='telegram_login_start'),
     path('token/telegram/callback/', TelegramLoginCallbackView.as_view(), name='telegram_login_callback'),
     path('token/telegram/widget/', TelegramWidgetLoginView.as_view(), name='telegram_widget_login'),
+    path('token/passkey/login/options/', PasskeyLoginOptionsView.as_view(), name='passkey_login_options'),
+    path('token/passkey/login/verify/', PasskeyLoginVerifyView.as_view(), name='passkey_login_verify'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('me/passkeys/register/options/', PasskeyRegisterOptionsView.as_view(), name='passkey_register_options'),
+    path('me/passkeys/register/verify/', PasskeyRegisterVerifyView.as_view(), name='passkey_register_verify'),
+    path('me/passkeys/', PasskeyListView.as_view(), name='passkey_list'),
+    path('me/passkeys/<uuid:credential_pk>/', PasskeyDestroyView.as_view(), name='passkey_destroy'),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('programs/<uuid:site_public_id>/', ProgramCatalogDetailView.as_view(), name='program_catalog_detail'),
     path('programs/', ProgramsCatalogView.as_view(), name='programs_catalog'),

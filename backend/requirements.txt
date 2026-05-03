@@ -9,3 +9,4 @@ requests==2.32.4
 google-auth>=2.35,<3.0
 playwright
 Pillow
+webauthn>=2.2,<3

@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 from referrals.models import Project
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME
 
-from .models import SupportTicket
+from .models import SupportTicket, WebAuthnCredential
 from .support_attachments import attachment_disk_path
 
 
@@ -793,3 +793,58 @@ class AccountAdditionalUsersApiTests(TestCase):
         r = api.get("/users/me/account-users/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["results"], [])
+
+
+class PasskeyApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="passkey-user@example.com",
+            username="passkeyuser",
+            password="secret123",
+        )
+
+    def test_login_options_unknown_email_404(self):
+        c = APIClient()
+        r = c.post("/users/token/passkey/login/options/", {"email": "nope@example.com"}, format="json")
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data.get("code"), "passkey_email_not_registered")
+
+    def test_login_options_no_credentials_404(self):
+        c = APIClient()
+        r = c.post(
+            "/users/token/passkey/login/options/",
+            {"email": self.user.email},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.data.get("code"), "passkey_not_registered")
+
+    def test_login_options_returns_options_when_credential_exists(self):
+        WebAuthnCredential.objects.create(
+            user=self.user,
+            credential_id=b"cid-test-unique",
+            public_key=b"k" * 64,
+            sign_count=0,
+        )
+        c = APIClient()
+        r = c.post(
+            "/users/token/passkey/login/options/",
+            {"email": self.user.email},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("challenge_key", r.data)
+        self.assertIn("options", r.data)
+        self.assertIn("challenge", r.data["options"])
+
+    def test_register_options_requires_auth(self):
+        c = APIClient()
+        r = c.post("/users/me/passkeys/register/options/", {}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+    def test_passkeys_list_empty(self):
+        api = APIClient()
+        api.force_authenticate(self.user)
+        r = api.get("/users/me/passkeys/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("results"), [])

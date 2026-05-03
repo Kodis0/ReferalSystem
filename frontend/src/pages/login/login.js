@@ -2,6 +2,11 @@ import "./login.css";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
+import {
+  authenticationCredentialToJSON,
+  preparePublicKeyCredentialRequestOptions,
+  webAuthnSupported,
+} from "../../utils/webauthnBrowser";
 import { LoginBrandLogo } from "./LoginBrandLogo";
 
 /** Сообщения ответа DRF/JWT — отображаем по-русски */
@@ -57,6 +62,23 @@ function telegramErrorMessageRu(code) {
 
 function formatLoginApiErrors(data) {
   if (!data || typeof data !== "object") return "";
+  if (typeof data.code === "string" && data.code.startsWith("passkey_")) {
+    const byCode = {
+      passkey_email_required: "Укажите email в поле выше.",
+      passkey_challenge_required: "Сессия Passkey не начата. Обновите страницу.",
+      passkey_credential_required: "Не получен ответ от устройства.",
+      passkey_challenge_expired: "Время на вход истекло. Нажмите Passkey снова.",
+      passkey_email_mismatch: "Email не совпадает с начатым входом.",
+      passkey_email_not_registered: "Нет аккаунта с этим email.",
+      passkey_not_registered: "Для этого аккаунта нет Passkey. Войдите по паролю и добавьте ключ в настройках.",
+      passkey_origin_not_allowed: "Origin не разрешён для Passkey (проверьте WEBAUTHN_* на сервере).",
+      passkey_origin_missing: "Запрос без Origin — откройте сайт в браузере.",
+      passkey_unknown_credential: "Этот ключ не привязан к аккаунту.",
+      passkey_verification_failed: "Не удалось подтвердить Passkey. Попробуйте снова.",
+      passkey_credential_invalid: "Некорректный ответ устройства.",
+    };
+    if (byCode[data.code]) return byCode[data.code];
+  }
   if (typeof data.code === "string" && data.code.startsWith("google_")) {
     const byCode = {
       google_oauth_not_configured: "Вход через Google не настроен на сервере.",
@@ -425,6 +447,92 @@ function Login() {
     window.location.assign(API_ENDPOINTS.tokenTelegramStart);
   };
 
+  const handlePasskeyClick = async () => {
+    const emailRaw = email.trim();
+    if (!emailRaw) {
+      setMessage("Введите email (логин), затем нажмите Passkey.");
+      return;
+    }
+    if (!webAuthnSupported()) {
+      setMessage("Ваш браузер не поддерживает Passkey.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    try {
+      const ro = await fetch(API_ENDPOINTS.tokenPasskeyLoginOptions, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailRaw }),
+        credentials: "include",
+      });
+      const roData = await ro.json().catch(() => ({}));
+      if (!ro.ok) {
+        setMessage(formatLoginApiErrors(roData) || "Не удалось начать вход по Passkey.");
+        setLoading(false);
+        return;
+      }
+      const publicKey = preparePublicKeyCredentialRequestOptions(roData.options);
+      if (!publicKey) {
+        setMessage("Некорректные параметры Passkey с сервера.");
+        setLoading(false);
+        return;
+      }
+      let assertion;
+      try {
+        assertion = await navigator.credentials.get({ publicKey });
+      } catch (err) {
+        if (err && err.name === "NotAllowedError") {
+          setMessage("Вход отменён или устройство недоступно.");
+        } else {
+          setMessage("Не удалось использовать Passkey на этом устройстве.");
+        }
+        setLoading(false);
+        return;
+      }
+      if (!assertion || assertion.type !== "public-key") {
+        setMessage("Не удалось получить ответ Passkey.");
+        setLoading(false);
+        return;
+      }
+      const credentialPayload = authenticationCredentialToJSON(assertion);
+      if (!credentialPayload) {
+        setMessage("Не удалось сериализовать ответ Passkey.");
+        setLoading(false);
+        return;
+      }
+      const vr = await fetch(API_ENDPOINTS.tokenPasskeyLoginVerify, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailRaw,
+          challenge_key: roData.challenge_key,
+          credential: credentialPayload,
+        }),
+        credentials: "include",
+      });
+      const vd = await vr.json().catch(() => ({}));
+      if (!vr.ok) {
+        setMessage(formatLoginApiErrors(vd) || "Не удалось завершить вход по Passkey.");
+        setLoading(false);
+        return;
+      }
+      localStorage.setItem("access_token", vd.access);
+      localStorage.setItem("refresh_token", vd.refresh);
+      if (vd.user) {
+        localStorage.setItem("user", JSON.stringify(vd.user));
+      }
+      persistReturningUserWelcome(vd.user);
+      setMessage("✅ Вход выполнен!");
+      navigate("/lk/partner");
+    } catch (err) {
+      console.error("Passkey login:", err);
+      setMessage("Произошла ошибка, попробуйте позже");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -577,6 +685,8 @@ function Login() {
                   type="button"
                   className="login-page__social-btn login-page__social-btn--passkey"
                   aria-label="Войти с помощью Passkey"
+                  disabled={loading}
+                  onClick={handlePasskeyClick}
                 >
                   <PasskeyIcon />
                   <span>Passkey</span>

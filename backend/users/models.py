@@ -62,6 +62,31 @@ class CustomUser(AbstractUser):
         return self.username or self.email
 
 
+class WebAuthnCredential(models.Model):
+    """Сохранённый WebAuthn / Passkey для входа без пароля."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="webauthn_credentials",
+    )
+    credential_id = models.BinaryField(unique=True)
+    public_key = models.BinaryField()
+    sign_count = models.PositiveBigIntegerField(default=0)
+    transports = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"WebAuthnCredential({self.id}) user={self.user_id}"
+
+
 class SupportTicket(models.Model):
     """Обращение пользователя в поддержку из ЛК (список в хабе поддержки)."""
 

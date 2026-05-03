@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Fingerprint, KeyRound, User } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
+import {
+  preparePublicKeyCredentialCreationOptions,
+  registrationCredentialToJSON,
+  webAuthnSupported,
+} from "../../../utils/webauthnBrowser";
 import { persistReturningUserWelcome } from "../../login/login";
 import AccountSettingsAvatar from "./AccountSettingsAvatar";
 import OwnerActivityHistoryPanel from "../owner-programs/OwnerActivityHistoryPanel";
@@ -110,6 +115,255 @@ function loadGoogleIdentityScript() {
     s.onerror = () => reject(new Error("gis_load_failed"));
     document.head.appendChild(s);
   });
+}
+
+function PasskeyManageModal({ open, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState("");
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError("");
+      setHint("");
+      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      if (!token) {
+        setError("Сессия истекла. Войдите снова.");
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(API_ENDPOINTS.passkeysList, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) {
+          setError("Не удалось загрузить список ключей.");
+          setRows([]);
+        } else {
+          setRows(Array.isArray(data.results) ? data.results : []);
+        }
+      } catch {
+        if (!cancelled) setError("Ошибка сети.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const refreshList = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+    const res = await fetch(API_ENDPOINTS.passkeysList, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && Array.isArray(data.results)) setRows(data.results);
+  };
+
+  const handleAdd = async () => {
+    setHint("");
+    if (!webAuthnSupported()) {
+      setHint("Браузер не поддерживает Passkey.");
+      return;
+    }
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setHint("Сессия истекла.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const ro = await fetch(API_ENDPOINTS.passkeysRegisterOptions, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: "{}",
+      });
+      const roData = await ro.json().catch(() => ({}));
+      if (!ro.ok) {
+        setHint(roData.detail || "Не удалось начать регистрацию ключа.");
+        setBusy(false);
+        return;
+      }
+      const publicKey = preparePublicKeyCredentialCreationOptions(roData.options);
+      if (!publicKey) {
+        setHint("Некорректные параметры с сервера.");
+        setBusy(false);
+        return;
+      }
+      let attestation;
+      try {
+        attestation = await navigator.credentials.create({ publicKey });
+      } catch (err) {
+        if (err && err.name === "NotAllowedError") {
+          setHint("Регистрация отменена или устройство недоступно.");
+        } else {
+          setHint("Не удалось создать ключ на этом устройстве.");
+        }
+        setBusy(false);
+        return;
+      }
+      if (!attestation || attestation.type !== "public-key") {
+        setHint("Не получен ответ от устройства.");
+        setBusy(false);
+        return;
+      }
+      const packed = registrationCredentialToJSON(attestation);
+      if (!packed || !packed.json) {
+        setHint("Не удалось сериализовать ключ.");
+        setBusy(false);
+        return;
+      }
+      const vr = await fetch(API_ENDPOINTS.passkeysRegisterVerify, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          challenge_key: roData.challenge_key,
+          credential: packed.json,
+          transports: packed.transports,
+        }),
+      });
+      const vd = await vr.json().catch(() => ({}));
+      if (!vr.ok) {
+        setHint(vd.detail || "Не удалось сохранить ключ.");
+        setBusy(false);
+        return;
+      }
+      setHint("Ключ добавлен.");
+      await refreshList();
+    } catch (e) {
+      console.error(e);
+      setHint("Ошибка при добавлении ключа.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+    setBusy(true);
+    setHint("");
+    try {
+      const res = await fetch(API_ENDPOINTS.passkeyDetail(id), {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (res.status === 204) {
+        setRows((prev) => prev.filter((r) => r.id !== id));
+        setHint("Ключ удалён.");
+      } else {
+        setHint("Не удалось удалить ключ.");
+      }
+    } catch {
+      setHint("Ошибка сети.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="lk-personalization-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Passkey"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="lk-personalization-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <button type="button" className="lk-personalization-modal__close" aria-label="Закрыть" onClick={onClose}>
+          ×
+        </button>
+        <div className="lk-personalization">
+          <div className="lk-personalization__title">Passkey</div>
+          <p className="lk-settings-stub-modal__text">
+            Вход по отпечатку, PIN устройства или системному ключу. Добавьте ключ здесь, затем на странице входа укажите
+            тот же email и нажмите Passkey.
+          </p>
+          {loading ? <p className="lk-settings-stub-modal__text">Загрузка…</p> : null}
+          {error ? (
+            <p className="lk-settings-stub-modal__text" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {hint ? (
+            <p className="lk-settings-stub-modal__text" role="status">
+              {hint}
+            </p>
+          ) : null}
+          {!loading && !error ? (
+            <ul className="lk-settings-passkey-list" aria-label="Сохранённые ключи">
+              {rows.length === 0 ? (
+                <li className="lk-settings-passkey-list__empty">Пока нет ключей</li>
+              ) : (
+                rows.map((row) => (
+                  <li key={row.id} className="lk-settings-passkey-list__row">
+                    <span className="lk-settings-passkey-list__meta">
+                      {row.created_at ? new Date(row.created_at).toLocaleString() : "ключ"}
+                    </span>
+                    <button
+                      type="button"
+                      className="lk-settings-manage-action"
+                      disabled={busy}
+                      onClick={() => handleDelete(row.id)}
+                    >
+                      Удалить
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          ) : null}
+          <div className="lk-settings-stub-modal__actions">
+            <button
+              type="button"
+              className="lk-settings-personal-btn lk-settings-personal-btn_primary"
+              disabled={busy || loading || !!error}
+              onClick={handleAdd}
+            >
+              Добавить ключ
+            </button>
+            <button type="button" className="lk-settings-personal-btn" onClick={onClose}>
+              Закрыть
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AccountSettingsMessageModal({ open, title, message, onClose }) {
@@ -755,12 +1009,7 @@ function Settings({ user, fetchUser, setUser }) {
         message="Изменение логина появится в этом разделе позже. Пока используйте текущий логин для входа."
         onClose={() => setLoginStubOpen(false)}
       />
-      <AccountSettingsMessageModal
-        open={securityStub === "passkey"}
-        title="Passkey"
-        message="Управление ключами Passkey в этом разделе будет доступно позже."
-        onClose={() => setSecurityStub(null)}
-      />
+      <PasskeyManageModal open={securityStub === "passkey"} onClose={() => setSecurityStub(null)} />
     </div>
   );
 }

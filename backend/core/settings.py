@@ -47,6 +47,11 @@ ALLOWED_HOSTS = [
 
 _cors_raw = os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").strip()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# WebAuthn (Passkey): RP id обычно = hostname фронта без порта; origins — точные URL браузера (схема+хост+порт).
+WEBAUTHN_RP_ID = os.getenv("WEBAUTHN_RP_ID", "").strip()
+WEBAUTHN_RP_NAME = os.getenv("WEBAUTHN_RP_NAME", "LumoRef").strip() or "LumoRef"
+WEBAUTHN_EXPECTED_ORIGINS = os.getenv("WEBAUTHN_EXPECTED_ORIGINS", "").strip()
 # Browser widget `data-rs-api` base (public `/public/v1/`). If empty, install API falls back to request host.
 PUBLIC_API_BASE = os.getenv("PUBLIC_API_BASE", "").strip().rstrip("/")
 if _cors_raw:

@@ -27,6 +27,13 @@ export const API_ENDPOINTS = {
   tokenVkStart: `${API_BASE}/users/token/vk/start/`,
   tokenTelegramStart: `${API_BASE}/users/token/telegram/start/`,
   tokenTelegramWidget: `${API_BASE}/users/token/telegram/widget/`,
+  tokenPasskeyLoginOptions: `${API_BASE}/users/token/passkey/login/options/`,
+  tokenPasskeyLoginVerify: `${API_BASE}/users/token/passkey/login/verify/`,
+  passkeysRegisterOptions: `${API_BASE}/users/me/passkeys/register/options/`,
+  passkeysRegisterVerify: `${API_BASE}/users/me/passkeys/register/verify/`,
+  passkeysList: `${API_BASE}/users/me/passkeys/`,
+  passkeyDetail: (credentialId) =>
+    `${API_BASE}/users/me/passkeys/${encodeURIComponent(credentialId)}/`,
   refreshToken: `${API_BASE}/users/token/refresh/`,
   currentUser: `${API_BASE}/users/me/`,
   /** Дополнительные пользователи аккаунта (учётные записи с привязкой к владельцу). */
