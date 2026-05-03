@@ -25,6 +25,7 @@ from webauthn.helpers.structs import (
     AuthenticatorAttachment,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
+    ResidentKeyRequirement,
     UserVerificationRequirement,
 )
 
@@ -64,64 +65,80 @@ def _issue_tokens(request, user: CustomUser) -> Response:
 
 
 class PasskeyLoginOptionsView(APIView):
-    """POST { email } → challenge + PublicKeyCredentialRequestOptions (JSON)."""
+    """
+    POST → challenge + PublicKeyCredentialRequestOptions (JSON).
+
+    Без поля ``email`` — запрос «discoverable credential``: браузер/ОС показывает выбор
+    ключей (в т.ч. телефон, USB), без ввода логина. В кэше challenge без привязки к email.
+
+    С полем ``email`` — прежний режим: только passkeys этого пользователя (для старых
+    ключей без resident/discoverable).
+    """
 
     permission_classes = [AllowAny]
 
     def post(self, request):
         raw_email = request.data.get("email")
-        if not raw_email or not isinstance(raw_email, str):
-            return Response(
-                {"detail": "Нужен email.", "code": "passkey_email_required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        email = raw_email.strip()
-        if not email:
-            return Response(
-                {"detail": "Нужен email.", "code": "passkey_email_required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        try:
-            user = CustomUser.objects.get(email__iexact=email)
-        except CustomUser.DoesNotExist:
-            return Response(
-                {
-                    "detail": "Нет аккаунта с этим email.",
-                    "code": "passkey_email_not_registered",
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        email = raw_email.strip() if isinstance(raw_email, str) else ""
 
-        if not user.is_active:
-            return Response(
-                {"detail": "Аккаунт отключён.", "code": "account_disabled"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if email:
+            try:
+                user = CustomUser.objects.get(email__iexact=email)
+            except CustomUser.DoesNotExist:
+                return Response(
+                    {
+                        "detail": "Нет аккаунта с этим email.",
+                        "code": "passkey_email_not_registered",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
-        creds = list(WebAuthnCredential.objects.filter(user=user))
-        if not creds:
-            return Response(
-                {
-                    "detail": "Для этого аккаунта не привязан Passkey. Войдите по паролю и добавьте ключ в настройках.",
-                    "code": "passkey_not_registered",
-                },
-                status=status.HTTP_404_NOT_FOUND,
+            if not user.is_active:
+                return Response(
+                    {"detail": "Аккаунт отключён.", "code": "account_disabled"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            creds = list(WebAuthnCredential.objects.filter(user=user))
+            if not creds:
+                return Response(
+                    {
+                        "detail": "Для этого аккаунта не привязан Passkey. Войдите по паролю и добавьте ключ в настройках.",
+                        "code": "passkey_not_registered",
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            rp_id = webauthn_rp_id()
+            allow_credentials = [
+                PublicKeyCredentialDescriptor(id=c.credential_id) for c in creds
+            ]
+            opts = generate_authentication_options(
+                rp_id=rp_id,
+                allow_credentials=allow_credentials,
+                user_verification=UserVerificationRequirement.PREFERRED,
             )
+            challenge = opts.challenge
+            token = secrets.token_urlsafe(32)
+            cache.set(
+                f"{PASSKEY_LOGIN_CACHE}{token}",
+                {"challenge": challenge, "email": user.email},
+                CACHE_TTL,
+            )
+            options_obj = json.loads(options_to_json(opts))
+            return Response({"challenge_key": token, "options": options_obj})
 
         rp_id = webauthn_rp_id()
-        allow_credentials = [
-            PublicKeyCredentialDescriptor(id=c.credential_id) for c in creds
-        ]
         opts = generate_authentication_options(
             rp_id=rp_id,
-            allow_credentials=allow_credentials,
+            allow_credentials=None,
             user_verification=UserVerificationRequirement.PREFERRED,
         )
         challenge = opts.challenge
         token = secrets.token_urlsafe(32)
         cache.set(
             f"{PASSKEY_LOGIN_CACHE}{token}",
-            {"challenge": challenge, "email": user.email},
+            {"challenge": challenge},
             CACHE_TTL,
         )
         options_obj = json.loads(options_to_json(opts))
@@ -129,7 +146,13 @@ class PasskeyLoginOptionsView(APIView):
 
 
 class PasskeyLoginVerifyView(APIView):
-    """POST { email, challenge_key, credential } → JWT."""
+    """
+    POST { challenge_key, credential } → JWT.
+
+    Если вход начат без email (discoverable), пользователь определяется по credential_id.
+
+    Если вход начат с email в options — в теле verify нужно передать тот же email.
+    """
 
     permission_classes = [AllowAny]
 
@@ -137,11 +160,6 @@ class PasskeyLoginVerifyView(APIView):
         email_raw = request.data.get("email")
         challenge_key = request.data.get("challenge_key")
         credential = request.data.get("credential")
-        if not email_raw or not isinstance(email_raw, str):
-            return Response(
-                {"detail": "Нужен email.", "code": "passkey_email_required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         if not challenge_key or not isinstance(challenge_key, str):
             return Response(
                 {"detail": "Нужен challenge_key.", "code": "passkey_challenge_required"},
@@ -168,27 +186,6 @@ class PasskeyLoginVerifyView(APIView):
             return Response(
                 {"detail": "Некорректное состояние Passkey.", "code": "passkey_challenge_invalid"},
                 status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        email = email_raw.strip()
-        if cached_email and email.lower() != str(cached_email).lower():
-            return Response(
-                {"detail": "Email не совпадает с начатым входом.", "code": "passkey_email_mismatch"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            user = CustomUser.objects.get(email__iexact=email)
-        except CustomUser.DoesNotExist:
-            return Response(
-                {"detail": "Нет аккаунта с этим email.", "code": "passkey_email_not_registered"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if not user.is_active:
-            return Response(
-                {"detail": "Аккаунт отключён.", "code": "account_disabled"},
-                status=status.HTTP_403_FORBIDDEN,
             )
 
         try:
@@ -220,18 +217,72 @@ class PasskeyLoginVerifyView(APIView):
 
         expected_origin = origins[0] if len(origins) == 1 else origins
 
-        if not WebAuthnCredential.objects.filter(credential_id=raw_id, user=user).exists():
-            return Response(
-                {"detail": "Этот ключ не привязан к аккаунту.", "code": "passkey_unknown_credential"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if cached_email is not None:
+            if not email_raw or not isinstance(email_raw, str) or not str(email_raw).strip():
+                return Response(
+                    {"detail": "Нужен email.", "code": "passkey_email_required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            email = str(email_raw).strip()
+            if email.lower() != str(cached_email).lower():
+                return Response(
+                    {"detail": "Email не совпадает с начатым входом.", "code": "passkey_email_mismatch"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                user = CustomUser.objects.get(email__iexact=email)
+            except CustomUser.DoesNotExist:
+                return Response(
+                    {"detail": "Нет аккаунта с этим email.", "code": "passkey_email_not_registered"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if not user.is_active:
+                return Response(
+                    {"detail": "Аккаунт отключён.", "code": "account_disabled"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not WebAuthnCredential.objects.filter(credential_id=raw_id, user=user).exists():
+                return Response(
+                    {"detail": "Этот ключ не привязан к аккаунту.", "code": "passkey_unknown_credential"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                with transaction.atomic():
+                    stored = WebAuthnCredential.objects.select_for_update().get(
+                        credential_id=raw_id,
+                        user=user,
+                    )
+                    verified = verify_authentication_response(
+                        credential=credential,
+                        expected_challenge=bytes(expected_challenge),
+                        expected_rp_id=webauthn_rp_id(),
+                        expected_origin=expected_origin,
+                        credential_public_key=bytes(stored.public_key),
+                        credential_current_sign_count=stored.sign_count,
+                        require_user_verification=False,
+                    )
+                    stored.sign_count = verified.new_sign_count
+                    stored.save(update_fields=["sign_count"])
+            except InvalidAuthenticationResponse as e:
+                logger.info("Passkey verify failed: %s", e)
+                return Response(
+                    {"detail": "Не удалось подтвердить Passkey.", "code": "passkey_verification_failed"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            cache.delete(cache_key)
+            return _issue_tokens(request, user)
 
         try:
             with transaction.atomic():
-                stored = WebAuthnCredential.objects.select_for_update().get(
+                stored = WebAuthnCredential.objects.select_related("user").select_for_update().get(
                     credential_id=raw_id,
-                    user=user,
                 )
+                user = stored.user
+                if not user.is_active:
+                    return Response(
+                        {"detail": "Аккаунт отключён.", "code": "account_disabled"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
                 verified = verify_authentication_response(
                     credential=credential,
                     expected_challenge=bytes(expected_challenge),
@@ -243,6 +294,11 @@ class PasskeyLoginVerifyView(APIView):
                 )
                 stored.sign_count = verified.new_sign_count
                 stored.save(update_fields=["sign_count"])
+        except WebAuthnCredential.DoesNotExist:
+            return Response(
+                {"detail": "Этот ключ не привязан к аккаунту.", "code": "passkey_unknown_credential"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except InvalidAuthenticationResponse as e:
             logger.info("Passkey verify failed: %s", e)
             return Response(
@@ -278,6 +334,7 @@ class PasskeyRegisterOptionsView(APIView):
 
         selection_kwargs = {
             "user_verification": UserVerificationRequirement.PREFERRED,
+            "resident_key": ResidentKeyRequirement.PREFERRED,
         }
         if authenticator_attachment is not None:
             selection_kwargs["authenticator_attachment"] = authenticator_attachment

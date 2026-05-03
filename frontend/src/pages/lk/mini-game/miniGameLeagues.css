@@ -198,7 +198,9 @@
   background: #7177f8;
 }
 
-.block-blast-game__profile-card.mini-game-leagues__bronze-unlock-card:not(.block-blast-game__profile-card_xp) {
+.block-blast-game__profile-card.mini-game-leagues__bronze-unlock-card:not(.block-blast-game__profile-card_xp):not(
+    .mini-game-leagues__bronze-unlock-card--requirements
+  ):not(.mini-game-leagues__bronze-unlock-card--reward) {
   align-items: stretch;
   justify-content: flex-start;
 }
@@ -221,6 +223,27 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+}
+
+/* Слайды «Условия» и «Награда»: содержимое по вертикали по центру карточки (min-height) */
+.mini-game-leagues__unlock-pair-track
+  > .block-blast-game__profile-card.mini-game-leagues__bronze-unlock-card.mini-game-leagues__bronze-unlock-card--requirements,
+.mini-game-leagues__unlock-pair-track
+  > .block-blast-game__profile-card.mini-game-leagues__bronze-unlock-card.mini-game-leagues__bronze-unlock-card--reward {
+  justify-content: center;
+}
+
+.mini-game-leagues__bronze-unlock-card--requirements .mini-game-leagues__bronze-req-wrap {
+  flex: 0 1 auto;
+  width: 100%;
+}
+
+.mini-game-leagues__bronze-unlock-card--requirements .mini-game-leagues__bronze-req-list {
+  flex: 0 1 auto;
+}
+
+.mini-game-leagues__bronze-unlock-card--reward .mini-game-leagues__bronze-reward-table-wrap {
+  flex: 0 1 auto;
 }
 
 .mini-game-leagues__bronze-unlock-card-title {
@@ -248,7 +271,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px var(--ml-hero-gap, 12px);
-  align-items: end;
+  align-items: center;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -286,7 +309,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px var(--ml-hero-gap, 12px);
-  align-items: start;
+  align-items: center;
 }
 
 .mini-game-leagues__bronze-req-head {
@@ -296,20 +319,23 @@
 .mini-game-leagues__bronze-req-label {
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.35;
   color: rgba(255, 255, 255, 0.72);
   min-width: 0;
+  align-self: center;
 }
 
 .mini-game-leagues__bronze-req-fraction {
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   color: rgba(255, 255, 255, 0.92);
   text-align: right;
   white-space: nowrap;
   justify-self: end;
+  align-self: center;
 }
 
 .mini-game-leagues__bronze-req-bar.block-blast-game__xp-bar {
@@ -354,6 +380,21 @@
 
 .mini-game-leagues__bronze-reward-table-corner {
   width: 28%;
+}
+
+/* Заголовок «Награда» в первой колонке шапки (вместо отдельного h3), приглушённый серый */
+.mini-game-leagues__bronze-reward-table-corner-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  line-height: 1.25;
+}
+
+[data-theme="light"] .mini-game-leagues__bronze-reward-table-corner-label {
+  color: rgba(38, 50, 92, 0.4);
 }
 
 .mini-game-leagues__bronze-reward-table thead th {

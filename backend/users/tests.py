@@ -837,6 +837,15 @@ class PasskeyApiTests(TestCase):
         self.assertIn("options", r.data)
         self.assertIn("challenge", r.data["options"])
 
+    def test_login_options_discoverable_without_email_returns_challenge(self):
+        """Discoverable: без email — пустой allowCredentials, чтобы ОС показала выбор ключа."""
+        c = APIClient()
+        r = c.post("/users/token/passkey/login/options/", {}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("challenge_key", r.data)
+        opts = r.data.get("options") or {}
+        self.assertEqual(opts.get("allowCredentials"), [])
+
     def test_register_options_requires_auth(self):
         c = APIClient()
         r = c.post("/users/me/passkeys/register/options/", {}, format="json")

@@ -140,15 +140,17 @@ function MiniGameProgressNavIcon() {
       fill="none"
       aria-hidden="true"
     >
-      <path
-        d="M4 18V12"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path d="M10 18V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M16 18V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M22 18V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <g className="lk-sidebar__mini-game-progress-bars">
+        <path
+          d="M4 18V12"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path d="M10 18V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M16 18V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M22 18V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </g>
     </svg>
   );
 }

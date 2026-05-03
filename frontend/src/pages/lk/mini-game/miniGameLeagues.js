@@ -412,12 +412,9 @@ function MiniGameLeagueBronzeUnlockCard({ summary }) {
   return (
     <MiniGameLeagueUnlockPair ariaLabel="Переход в Bronze: условия и награды">
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
-        aria-labelledby="mini-game-leagues-bronze-requirements-title"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--requirements"
+        aria-label="Условия для перехода в лигу Bronze"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-bronze-requirements-title">
-          Условия
-        </h3>
         <div className="mini-game-leagues__bronze-req-wrap">
           <div className="mini-game-leagues__bronze-req-headers" aria-hidden="true">
             <span>Условие</span>
@@ -447,12 +444,9 @@ function MiniGameLeagueBronzeUnlockCard({ summary }) {
         </div>
       </aside>
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--reward"
         aria-labelledby="mini-game-leagues-bronze-reward-title"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-bronze-reward-title">
-          Награда
-        </h3>
         <div className="mini-game-leagues__bronze-reward-table-wrap">
           <table
             className="mini-game-leagues__bronze-reward-table"
@@ -460,7 +454,12 @@ function MiniGameLeagueBronzeUnlockCard({ summary }) {
           >
             <thead>
               <tr>
-                <th className="mini-game-leagues__bronze-reward-table-corner" scope="col">
+                <th
+                  className="mini-game-leagues__bronze-reward-table-corner"
+                  scope="col"
+                  id="mini-game-leagues-bronze-reward-title"
+                >
+                  <span className="mini-game-leagues__bronze-reward-table-corner-label">Награда</span>
                   <span className="mini-game-leagues__bronze-reward-table-sr">Показатель</span>
                 </th>
                 <th scope="col">Сейчас</th>
@@ -504,12 +503,9 @@ function MiniGameLeagueSilverUnlockCard({ summary }) {
   return (
     <MiniGameLeagueUnlockPair ariaLabel="Переход в Silver: условия и награды">
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
-        aria-labelledby="mini-game-leagues-silver-requirements-title"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--requirements"
+        aria-label="Условия для перехода в лигу Silver"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-silver-requirements-title">
-          Условия
-        </h3>
         <div className="mini-game-leagues__bronze-req-wrap">
           <div className="mini-game-leagues__bronze-req-headers" aria-hidden="true">
             <span>Условие</span>
@@ -540,12 +536,9 @@ function MiniGameLeagueSilverUnlockCard({ summary }) {
         </div>
       </aside>
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--reward"
         aria-labelledby="mini-game-leagues-silver-reward-title"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-silver-reward-title">
-          Награда
-        </h3>
         <div className="mini-game-leagues__bronze-reward-table-wrap">
           <table
             className="mini-game-leagues__bronze-reward-table"
@@ -553,7 +546,12 @@ function MiniGameLeagueSilverUnlockCard({ summary }) {
           >
             <thead>
               <tr>
-                <th className="mini-game-leagues__bronze-reward-table-corner" scope="col">
+                <th
+                  className="mini-game-leagues__bronze-reward-table-corner"
+                  scope="col"
+                  id="mini-game-leagues-silver-reward-title"
+                >
+                  <span className="mini-game-leagues__bronze-reward-table-corner-label">Награда</span>
                   <span className="mini-game-leagues__bronze-reward-table-sr">Показатель</span>
                 </th>
                 <th scope="col">Сейчас</th>
@@ -597,12 +595,9 @@ function MiniGameLeagueGoldUnlockCard({ summary }) {
   return (
     <MiniGameLeagueUnlockPair ariaLabel="Переход в Gold: условия и награды">
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
-        aria-labelledby="mini-game-leagues-gold-requirements-title"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--requirements"
+        aria-label="Условия для перехода в лигу Gold"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-gold-requirements-title">
-          Условия
-        </h3>
         <div className="mini-game-leagues__bronze-req-wrap">
           <div className="mini-game-leagues__bronze-req-headers" aria-hidden="true">
             <span>Условие</span>
@@ -633,12 +628,9 @@ function MiniGameLeagueGoldUnlockCard({ summary }) {
         </div>
       </aside>
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--reward"
         aria-labelledby="mini-game-leagues-gold-reward-title"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-gold-reward-title">
-          Награда
-        </h3>
         <div className="mini-game-leagues__bronze-reward-table-wrap">
           <table
             className="mini-game-leagues__bronze-reward-table"
@@ -646,7 +638,12 @@ function MiniGameLeagueGoldUnlockCard({ summary }) {
           >
             <thead>
               <tr>
-                <th className="mini-game-leagues__bronze-reward-table-corner" scope="col">
+                <th
+                  className="mini-game-leagues__bronze-reward-table-corner"
+                  scope="col"
+                  id="mini-game-leagues-gold-reward-title"
+                >
+                  <span className="mini-game-leagues__bronze-reward-table-corner-label">Награда</span>
                   <span className="mini-game-leagues__bronze-reward-table-sr">Показатель</span>
                 </th>
                 <th scope="col">Сейчас</th>
@@ -695,12 +692,9 @@ function MiniGameLeaguePlatinumUnlockCard({ summary }) {
   return (
     <MiniGameLeagueUnlockPair ariaLabel="Переход в Platinum: условия и награды">
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
-        aria-labelledby="mini-game-leagues-platinum-requirements-title"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--requirements"
+        aria-label="Условия для перехода в лигу Platinum"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-platinum-requirements-title">
-          Условия
-        </h3>
         <div className="mini-game-leagues__bronze-req-wrap">
           <div className="mini-game-leagues__bronze-req-headers" aria-hidden="true">
             <span>Условие</span>
@@ -731,12 +725,9 @@ function MiniGameLeaguePlatinumUnlockCard({ summary }) {
         </div>
       </aside>
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--reward"
         aria-labelledby="mini-game-leagues-platinum-reward-title"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-platinum-reward-title">
-          Награда
-        </h3>
         <div className="mini-game-leagues__bronze-reward-table-wrap">
           <table
             className="mini-game-leagues__bronze-reward-table"
@@ -744,7 +735,12 @@ function MiniGameLeaguePlatinumUnlockCard({ summary }) {
           >
             <thead>
               <tr>
-                <th className="mini-game-leagues__bronze-reward-table-corner" scope="col">
+                <th
+                  className="mini-game-leagues__bronze-reward-table-corner"
+                  scope="col"
+                  id="mini-game-leagues-platinum-reward-title"
+                >
+                  <span className="mini-game-leagues__bronze-reward-table-corner-label">Награда</span>
                   <span className="mini-game-leagues__bronze-reward-table-sr">Показатель</span>
                 </th>
                 <th scope="col">Сейчас</th>
@@ -798,12 +794,9 @@ function MiniGameLeagueDiamondUnlockCard({ summary }) {
   return (
     <MiniGameLeagueUnlockPair ariaLabel="Переход в Diamond: условия и награды">
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
-        aria-labelledby="mini-game-leagues-diamond-requirements-title"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--requirements"
+        aria-label="Условия для перехода в лигу Diamond"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-diamond-requirements-title">
-          Условия
-        </h3>
         <div className="mini-game-leagues__bronze-req-wrap">
           <div className="mini-game-leagues__bronze-req-headers" aria-hidden="true">
             <span>Условие</span>
@@ -834,12 +827,9 @@ function MiniGameLeagueDiamondUnlockCard({ summary }) {
         </div>
       </aside>
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--reward"
         aria-labelledby="mini-game-leagues-diamond-reward-title"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-diamond-reward-title">
-          Награда
-        </h3>
         <div className="mini-game-leagues__bronze-reward-table-wrap">
           <table
             className="mini-game-leagues__bronze-reward-table"
@@ -847,7 +837,12 @@ function MiniGameLeagueDiamondUnlockCard({ summary }) {
           >
             <thead>
               <tr>
-                <th className="mini-game-leagues__bronze-reward-table-corner" scope="col">
+                <th
+                  className="mini-game-leagues__bronze-reward-table-corner"
+                  scope="col"
+                  id="mini-game-leagues-diamond-reward-title"
+                >
+                  <span className="mini-game-leagues__bronze-reward-table-corner-label">Награда</span>
                   <span className="mini-game-leagues__bronze-reward-table-sr">Показатель</span>
                 </th>
                 <th scope="col">Сейчас</th>
@@ -901,12 +896,9 @@ function MiniGameLeagueUltraUnlockCard({ summary }) {
   return (
     <MiniGameLeagueUnlockPair ariaLabel="Переход в Ultra: условия и награды">
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
-        aria-labelledby="mini-game-leagues-ultra-requirements-title"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--requirements"
+        aria-label="Условия для перехода в лигу Ultra"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-ultra-requirements-title">
-          Условия
-        </h3>
         <div className="mini-game-leagues__bronze-req-wrap">
           <div className="mini-game-leagues__bronze-req-headers" aria-hidden="true">
             <span>Условие</span>
@@ -937,12 +929,9 @@ function MiniGameLeagueUltraUnlockCard({ summary }) {
         </div>
       </aside>
       <aside
-        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card"
+        className="block-blast-game__profile-card mini-game-leagues__bronze-unlock-card mini-game-leagues__bronze-unlock-card--reward"
         aria-labelledby="mini-game-leagues-ultra-reward-title"
       >
-        <h3 className="mini-game-leagues__bronze-unlock-card-title" id="mini-game-leagues-ultra-reward-title">
-          Награда
-        </h3>
         <div className="mini-game-leagues__bronze-reward-table-wrap">
           <table
             className="mini-game-leagues__bronze-reward-table"
@@ -950,7 +939,12 @@ function MiniGameLeagueUltraUnlockCard({ summary }) {
           >
             <thead>
               <tr>
-                <th className="mini-game-leagues__bronze-reward-table-corner" scope="col">
+                <th
+                  className="mini-game-leagues__bronze-reward-table-corner"
+                  scope="col"
+                  id="mini-game-leagues-ultra-reward-title"
+                >
+                  <span className="mini-game-leagues__bronze-reward-table-corner-label">Награда</span>
                   <span className="mini-game-leagues__bronze-reward-table-sr">Показатель</span>
                 </th>
                 <th scope="col">Сейчас</th>

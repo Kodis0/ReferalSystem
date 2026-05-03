@@ -917,6 +917,78 @@ button.lk-sidebar__nav-link {
   animation: lk-mini-game-dice-tumble 0.58s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
 }
 
+/* Прогресс: столбики «эквалайзера» при наведении */
+.lk-sidebar__mini-game-progress-bars path {
+  transform-box: view-box;
+}
+
+@keyframes lk-mini-game-progress-bar-pop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-2.5px);
+  }
+  65% {
+    transform: translateY(0);
+  }
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__mini-game-progress-bars path:nth-child(1),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-progress-bars path:nth-child(1) {
+  animation: lk-mini-game-progress-bar-pop 0.52s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__mini-game-progress-bars path:nth-child(2),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-progress-bars path:nth-child(2) {
+  animation: lk-mini-game-progress-bar-pop 0.52s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
+  animation-delay: 0.06s;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__mini-game-progress-bars path:nth-child(3),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-progress-bars path:nth-child(3) {
+  animation: lk-mini-game-progress-bar-pop 0.52s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
+  animation-delay: 0.12s;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__mini-game-progress-bars path:nth-child(4),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-progress-bars path:nth-child(4) {
+  animation: lk-mini-game-progress-bar-pop 0.52s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
+  animation-delay: 0.18s;
+}
+
+/* Рейтинг: корона слегка подпрыгивает и качается */
+.lk-sidebar__nav-icon-svg_mini-game-rating {
+  overflow: visible;
+}
+
+.lk-sidebar__nav-icon-svg_mini-game-rating path {
+  transform-box: view-box;
+  transform-origin: 12px 11px;
+}
+
+@keyframes lk-mini-game-rating-crown-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-2px) rotate(-4deg);
+  }
+  55% {
+    transform: translateY(1px) rotate(3deg);
+  }
+  80% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_mini-game-rating path,
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_mini-game-rating path {
+  animation: lk-mini-game-rating-crown-nod 0.62s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
+}
+
 .lk-sidebar__nav-icon-svg_programs-catalog {
   overflow: hidden;
   border-radius: 3px;
@@ -1024,6 +1096,13 @@ button.lk-sidebar__nav-link {
 
   .lk-sidebar__nav-link:hover .lk-sidebar__mini-game-dice,
   .lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-dice {
+    animation: none;
+  }
+
+  .lk-sidebar__nav-link:hover .lk-sidebar__mini-game-progress-bars path,
+  .lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-progress-bars path,
+  .lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_mini-game-rating path,
+  .lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_mini-game-rating path {
     animation: none;
   }
 }

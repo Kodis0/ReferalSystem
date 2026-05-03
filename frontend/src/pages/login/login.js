@@ -449,10 +449,8 @@ function Login() {
 
   const handlePasskeyClick = async () => {
     const emailRaw = email.trim();
-    if (!emailRaw) {
-      setMessage("Введите email (логин), затем нажмите Passkey.");
-      return;
-    }
+    /** С email — только passkeys этого аккаунта (старые ключи без discoverable). Без email — выбор ключа в системе (Windows / телефон и т.д.). */
+    const useLegacyEmailFlow = Boolean(emailRaw);
     if (!webAuthnSupported()) {
       setMessage("Ваш браузер не поддерживает Passkey.");
       return;
@@ -463,7 +461,7 @@ function Login() {
       const ro = await fetch(API_ENDPOINTS.tokenPasskeyLoginOptions, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailRaw }),
+        body: JSON.stringify(useLegacyEmailFlow ? { email: emailRaw } : {}),
         credentials: "include",
       });
       const roData = await ro.json().catch(() => ({}));
@@ -501,14 +499,17 @@ function Login() {
         setLoading(false);
         return;
       }
+      const verifyBody = {
+        challenge_key: roData.challenge_key,
+        credential: credentialPayload,
+      };
+      if (useLegacyEmailFlow) {
+        verifyBody.email = emailRaw;
+      }
       const vr = await fetch(API_ENDPOINTS.tokenPasskeyLoginVerify, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: emailRaw,
-          challenge_key: roData.challenge_key,
-          credential: credentialPayload,
-        }),
+        body: JSON.stringify(verifyBody),
         credentials: "include",
       });
       const vd = await vr.json().catch(() => ({}));

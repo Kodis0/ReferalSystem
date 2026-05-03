@@ -180,7 +180,7 @@ export default function MiniGameProgressPage() {
       <nav
         className="owner-programs__tabs"
         role="tablist"
-        aria-label="Прогресс, достижения и магазин"
+        aria-label="Прогресс, магазин и достижения"
       >
         <button
           type="button"
@@ -196,18 +196,6 @@ export default function MiniGameProgressPage() {
         </button>
         <button
           type="button"
-          id="mini-game-progress-tab-achievements"
-          role="tab"
-          aria-selected={progressTab === "achievements"}
-          aria-controls="mini-game-progress-panel-achievements"
-          tabIndex={progressTab === "achievements" ? 0 : -1}
-          className={tabClass(progressTab === "achievements")}
-          onClick={() => setProgressTab("achievements")}
-        >
-          Достижения
-        </button>
-        <button
-          type="button"
           id="mini-game-progress-tab-shop"
           role="tab"
           aria-selected={progressTab === "shop"}
@@ -217,6 +205,18 @@ export default function MiniGameProgressPage() {
           onClick={() => setProgressTab("shop")}
         >
           Магазин
+        </button>
+        <button
+          type="button"
+          id="mini-game-progress-tab-achievements"
+          role="tab"
+          aria-selected={progressTab === "achievements"}
+          aria-controls="mini-game-progress-panel-achievements"
+          tabIndex={progressTab === "achievements" ? 0 : -1}
+          className={tabClass(progressTab === "achievements")}
+          onClick={() => setProgressTab("achievements")}
+        >
+          Достижения
         </button>
       </nav>
 
@@ -391,6 +391,16 @@ export default function MiniGameProgressPage() {
       </div>
 
       <div
+        id="mini-game-progress-panel-shop"
+        role="tabpanel"
+        aria-labelledby="mini-game-progress-tab-shop"
+        hidden={progressTab !== "shop"}
+        className="mini-game-progress__tab-panel"
+      >
+        <p className="mini-game-rating__note">Магазин скоро будет доступен.</p>
+      </div>
+
+      <div
         id="mini-game-progress-panel-achievements"
         role="tabpanel"
         aria-labelledby="mini-game-progress-tab-achievements"
@@ -400,16 +410,6 @@ export default function MiniGameProgressPage() {
         <p className="mini-game-rating__note">
           Здесь появятся достижения за игру и челлендж.
         </p>
-      </div>
-
-      <div
-        id="mini-game-progress-panel-shop"
-        role="tabpanel"
-        aria-labelledby="mini-game-progress-tab-shop"
-        hidden={progressTab !== "shop"}
-        className="mini-game-progress__tab-panel"
-      >
-        <p className="mini-game-rating__note">Магазин скоро будет доступен.</p>
       </div>
     </div>
   );
