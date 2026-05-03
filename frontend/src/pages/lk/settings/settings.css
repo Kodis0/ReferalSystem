@@ -489,19 +489,111 @@
   gap: 10px;
 }
 
-.lk-settings-passkey-list {
-  list-style: none;
-  margin: 0 0 16px;
-  padding: 0;
+/* Модалка Passkey (референс Timeweb: панель справа, подсказка, primary + link) */
+.lk-passkey-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(23, 33, 43, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
-.lk-settings-passkey-list__empty {
-  margin: 0 0 12px;
+.lk-passkey-dialog {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  left: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 592px;
+  max-height: calc(100vh - 32px);
+  padding: 32px;
+  overflow-y: auto;
+  outline: none;
+  border-radius: 12px;
+  background: #17212b;
+  box-shadow: 0 4px 12px rgba(5, 12, 38, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: "Stem", "Tahoma", "Arial", sans-serif;
+  font-size: 13px;
+  line-height: 16px;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.lk-passkey-dialog__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lk-passkey-dialog__close:hover {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lk-passkey-dialog__close:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: 1px;
+}
+
+.lk-passkey-dialog__title {
+  margin: 0 48px 16px 0;
+  padding: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.lk-passkey-dialog__hint {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(69, 76, 238, 0.1);
+}
+
+.lk-passkey-dialog__hint-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: left;
+}
+
+.lk-passkey-dialog__loading {
+  margin: 0 0 16px;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.55);
 }
 
-.lk-settings-passkey-list__row {
+.lk-passkey-dialog__keys {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+}
+
+.lk-passkey-dialog__key-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -511,8 +603,142 @@
   font-size: 14px;
 }
 
-.lk-settings-passkey-list__meta {
+.lk-passkey-dialog__key-meta {
   color: rgba(255, 255, 255, 0.75);
+}
+
+.lk-passkey-dialog__key-remove {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lk-passkey-dialog__key-remove:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lk-passkey-dialog__key-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lk-passkey-dialog__btn-primary {
+  width: 100%;
+  min-height: 48px;
+  margin: 0 0 12px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  background: #7177f8;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.lk-passkey-dialog__btn-primary:hover:not(:disabled) {
+  background: #5f66f0;
+}
+
+.lk-passkey-dialog__btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lk-passkey-dialog__link {
+  width: 100%;
+  margin: 0;
+  padding: 10px 8px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  color: #7177f8;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.lk-passkey-dialog__link:hover:not(:disabled) {
+  color: #8f94fa;
+}
+
+.lk-passkey-dialog__link:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .lk-passkey-dialog {
+    left: 16px;
+    right: 16px;
+    max-width: none;
+  }
+}
+
+[data-theme="light"] .lk-passkey-dialog-backdrop {
+  background: rgba(38, 50, 92, 0.35);
+}
+
+[data-theme="light"] .lk-passkey-dialog {
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(5, 12, 38, 0.12);
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-passkey-dialog__title {
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-passkey-dialog__hint {
+  background: rgba(69, 76, 238, 0.08);
+}
+
+[data-theme="light"] .lk-passkey-dialog__hint-text {
+  color: rgba(38, 50, 92, 0.88);
+}
+
+[data-theme="light"] .lk-passkey-dialog__close {
+  color: rgba(38, 50, 92, 0.45);
+}
+
+[data-theme="light"] .lk-passkey-dialog__close:hover {
+  color: rgba(38, 50, 92, 0.9);
+  background: rgba(38, 50, 92, 0.06);
+}
+
+[data-theme="light"] .lk-passkey-dialog__loading {
+  color: rgba(38, 50, 92, 0.55);
+}
+
+[data-theme="light"] .lk-passkey-dialog__key-row {
+  border-bottom-color: rgba(38, 50, 92, 0.12);
+}
+
+[data-theme="light"] .lk-passkey-dialog__key-meta {
+  color: rgba(38, 50, 92, 0.75);
+}
+
+[data-theme="light"] .lk-passkey-dialog__key-remove {
+  border-color: rgba(38, 50, 92, 0.18);
+  background: rgba(38, 50, 92, 0.04);
+  color: rgba(38, 50, 92, 0.88);
+}
+
+[data-theme="light"] .lk-passkey-dialog__key-remove:hover:not(:disabled) {
+  background: rgba(38, 50, 92, 0.08);
 }
 
 .lk-settings__section-title {
@@ -734,7 +960,7 @@
 }
 
 .lk-settings__control-avatar_secondary {
-  background: rgba(127, 145, 164, 0.16);
+  background: #4a5867;
   color: rgba(255, 255, 255, 0.75);
 }
 
@@ -831,6 +1057,73 @@
   width: 24px;
   height: 24px;
   display: block;
+}
+
+/* Привязанная соцсеть: фон как surface в референсе Timeweb (#242F3D), имя + отвязка */
+.lk-settings__oauth-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  max-width: 150px;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 8px 8px 8px 16px;
+  border: none;
+  border-radius: 12px;
+  background: #242f3d;
+  color: rgba(255, 255, 255, 0.85);
+  font: 500 14px/24px "Stem", "Tahoma", "Arial", sans-serif;
+}
+
+.lk-settings__oauth-chip_linked {
+  justify-content: flex-start;
+}
+
+.lk-settings__oauth-chip svg:first-child {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.lk-settings__oauth-chip__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: left;
+}
+
+.lk-settings__oauth-chip__unbind {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lk-settings__oauth-chip__unbind:hover {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lk-settings__oauth-chip__unbind:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: 1px;
 }
 
 .lk-settings__oauth-hint {
@@ -975,8 +1268,8 @@
 }
 
 [data-theme="light"] .lk-settings__control-avatar_secondary {
-  background: rgba(131, 137, 159, 0.18);
-  color: #64748b;
+  background: #4a5867;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 [data-theme="light"] .lk-settings__control-title {
@@ -994,6 +1287,24 @@
 
 [data-theme="light"] .lk-settings__oauth-network-btn:hover:not(:disabled) {
   background: #dce2ea;
+}
+
+[data-theme="light"] .lk-settings__oauth-chip {
+  background: #242f3d;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .lk-settings__oauth-chip__name {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="light"] .lk-settings__oauth-chip__unbind {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="light"] .lk-settings__oauth-chip__unbind:hover {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 [data-theme="light"] .lk-settings__oauth-hint {

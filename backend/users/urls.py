@@ -13,6 +13,7 @@ from .views import (
     TelegramWidgetLoginView,
     ChangePasswordView,
     CurrentUserView,
+    OAuthProviderUnlinkView,
     AccountAdditionalUsersListView,
     MyProgramsView,
     MyProgramDetailView,
@@ -65,6 +66,7 @@ urlpatterns = [
     path('me/password/', ChangePasswordView.as_view(), name='change_password'),
     path('me/account-users/', AccountAdditionalUsersListView.as_view(), name='account_additional_users'),
     path('me/', CurrentUserView.as_view(), name='current_user'),  # 🔹 текущий пользователь
+    path('me/oauth/unlink/', OAuthProviderUnlinkView.as_view(), name='oauth_provider_unlink'),
     path('me/support-tickets/', SupportTicketListCreateView.as_view(), name='support_tickets'),
     path(
         'me/support-tickets/<uuid:ticket_id>/attachments/<str:filename>/',

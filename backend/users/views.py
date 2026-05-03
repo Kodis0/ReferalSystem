@@ -157,6 +157,7 @@ from .vk_oauth import (
     generate_pkce_pair,
     parse_vk_id_callback_query,
     resolve_vk_login_email,
+    vk_user_id_from_token_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -420,6 +421,40 @@ class CurrentUserView(APIView):
         serializer.save()
         request.user.refresh_from_db()
         return Response(CurrentUserSerializer(request.user).data, status=status.HTTP_200_OK)
+
+
+class OAuthProviderUnlinkView(APIView):
+    """Отвязать вход через VK / Telegram / Google (очистить сохранённый идентификатор провайдера)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        raw = request.data.get("provider")
+        if not isinstance(raw, str) or not raw.strip():
+            return Response(
+                {"detail": "Укажите provider (vk, telegram или google).", "code": "oauth_provider_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        p = raw.strip().lower()
+        if p not in ("vk", "telegram", "google"):
+            return Response(
+                {"detail": "Неизвестный провайдер.", "code": "oauth_unknown_provider"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        fields: list[str] = []
+        if p == "vk":
+            user.oauth_vk_user_id = None
+            fields.append("oauth_vk_user_id")
+        elif p == "telegram":
+            user.telegram_id = None
+            fields.append("telegram_id")
+        else:
+            user.oauth_google_sub = None
+            fields.append("oauth_google_sub")
+        user.save(update_fields=fields)
+        user.refresh_from_db()
+        return Response({"user": CurrentUserSerializer(user).data}, status=status.HTTP_200_OK)
 
 
 class AccountAdditionalUsersListView(APIView):
@@ -702,7 +737,15 @@ class GoogleIdTokenLoginView(APIView):
             user=user,
         )
 
+        sub_raw = idinfo.get("sub")
+        if isinstance(sub_raw, str):
+            sub = sub_raw.strip()
+            if sub and user.oauth_google_sub != sub:
+                user.oauth_google_sub = sub
+                user.save(update_fields=["oauth_google_sub"])
+
         refresh = RefreshToken.for_user(user)
+        user.refresh_from_db()
         return Response(
             {
                 "refresh": str(refresh),
@@ -920,6 +963,11 @@ class VkOAuthCallbackView(View):
             session_key=request.session.session_key,
             user=user,
         )
+
+        vk_uid = vk_user_id_from_token_payload(token_payload)
+        if vk_uid:
+            user.oauth_vk_user_id = vk_uid
+            user.save(update_fields=["oauth_vk_user_id"])
 
         refresh = RefreshToken.for_user(user)
         access_jwt = str(refresh.access_token)

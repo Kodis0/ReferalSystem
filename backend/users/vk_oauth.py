@@ -221,6 +221,32 @@ def exchange_vk_oauth_code(
     return out
 
 
+def vk_user_id_from_token_payload(token_payload: dict[str, Any]) -> str | None:
+    """
+    Идентификатор пользователя VK для сохранения привязки (из id_token или ответа /oauth2/auth).
+    """
+    if not isinstance(token_payload, dict):
+        return None
+    it = token_payload.get("id_token")
+    if isinstance(it, str):
+        payload = _decode_jwt_payload(it)
+        if isinstance(payload, dict):
+            for key in ("user_id", "sub", "uid"):
+                v = payload.get(key)
+                if v is not None and str(v).strip():
+                    return str(v).strip()
+    user_obj = token_payload.get("user")
+    if isinstance(user_obj, dict):
+        v = user_obj.get("user_id") or user_obj.get("id")
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    for key in ("user_id",):
+        v = token_payload.get(key)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return None
+
+
 def email_from_vk_id_token_response(token_payload: dict[str, Any]) -> str | None:
     """Email из ответа /oauth2/auth, если VK отдал его сразу (не маску)."""
     em = _email_from_mapping(token_payload)

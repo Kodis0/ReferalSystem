@@ -22,6 +22,7 @@ from webauthn import (
 from webauthn.helpers import options_to_json, parse_authentication_credential_json
 from webauthn.helpers.exceptions import InvalidAuthenticationResponse, InvalidRegistrationResponse
 from webauthn.helpers.structs import (
+    AuthenticatorAttachment,
     AuthenticatorSelectionCriteria,
     PublicKeyCredentialDescriptor,
     UserVerificationRequirement,
@@ -265,6 +266,22 @@ class PasskeyRegisterOptionsView(APIView):
             PublicKeyCredentialDescriptor(id=c.credential_id)
             for c in WebAuthnCredential.objects.filter(user=user)
         ]
+        attachment_raw = request.data.get("authenticator_attachment")
+        authenticator_attachment = None
+        if attachment_raw == AuthenticatorAttachment.PLATFORM.value:
+            authenticator_attachment = AuthenticatorAttachment.PLATFORM
+        elif attachment_raw in (
+            AuthenticatorAttachment.CROSS_PLATFORM.value,
+            "cross_platform",
+        ):
+            authenticator_attachment = AuthenticatorAttachment.CROSS_PLATFORM
+
+        selection_kwargs = {
+            "user_verification": UserVerificationRequirement.PREFERRED,
+        }
+        if authenticator_attachment is not None:
+            selection_kwargs["authenticator_attachment"] = authenticator_attachment
+
         opts = generate_registration_options(
             rp_id=rp_id,
             rp_name=webauthn_rp_name(),
@@ -272,9 +289,7 @@ class PasskeyRegisterOptionsView(APIView):
             user_display_name=user.email,
             user_id=user_handle_bytes(user.pk),
             exclude_credentials=exclude or None,
-            authenticator_selection=AuthenticatorSelectionCriteria(
-                user_verification=UserVerificationRequirement.PREFERRED,
-            ),
+            authenticator_selection=AuthenticatorSelectionCriteria(**selection_kwargs),
         )
         challenge = opts.challenge
         token = secrets.token_urlsafe(32)

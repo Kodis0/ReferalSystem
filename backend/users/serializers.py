@@ -102,6 +102,8 @@ class SiteCtaJoinSerializer(serializers.Serializer):
 
 # ------------------- Текущий пользователь -------------------
 class CurrentUserSerializer(serializers.ModelSerializer):
+    oauth_providers = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
         fields = [
@@ -122,7 +124,17 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "passport_issue_date",
             "passport_registration_address",
             "avatar_data_url",
+            "oauth_providers",
         ]
+
+    def get_oauth_providers(self, obj: CustomUser) -> dict:
+        vk_id = (getattr(obj, "oauth_vk_user_id", None) or "").strip()
+        g_sub = (getattr(obj, "oauth_google_sub", None) or "").strip()
+        return {
+            "vk": {"linked": bool(vk_id)},
+            "telegram": {"linked": obj.telegram_id is not None},
+            "google": {"linked": bool(g_sub)},
+        }
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

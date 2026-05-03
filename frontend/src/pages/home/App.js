@@ -7,10 +7,12 @@ import SiteConnectPage from "../site-connect/SiteConnectPage";
 import ProtectedRoute from "../../components/protectedroute";
 import ReferralCaptureOnMount from "../../components/ReferralCaptureOnMount";
 import OAuthVkTgFragmentHandler from "../../components/OAuthVkTgFragmentHandler";
+import ToastStack from "../../components/toast/ToastStack";
 
 function App() {
   return (
     <BrowserRouter>
+      <ToastStack />
       <OAuthVkTgFragmentHandler />
       <ReferralCaptureOnMount />
       <Routes>

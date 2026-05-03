@@ -1,0 +1,137 @@
+/* Фиксированный стек внизу слева (как в референсе Timeweb: тост + полоса таймера) */
+
+.app-toast-stack {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: min(420px, calc(100vw - 48px));
+  pointer-events: none;
+}
+
+.app-toast-stack .app-toast {
+  pointer-events: auto;
+}
+
+.app-toast {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #242f3d;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  animation: app-toast-enter 0.22s ease-out;
+}
+
+@keyframes app-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-toast_variant_error {
+  border-color: rgba(255, 98, 112, 0.35);
+}
+
+.app-toast_variant_success {
+  border-color: rgba(112, 207, 152, 0.35);
+}
+
+.app-toast__progress {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.app-toast__progress-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: rgba(113, 119, 248, 0.95);
+  animation-name: app-toast-progress-shrink;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.app-toast_variant_error .app-toast__progress-fill {
+  background: rgba(255, 98, 112, 0.95);
+}
+
+.app-toast_variant_success .app-toast__progress-fill {
+  background: rgba(112, 207, 152, 0.95);
+}
+
+@keyframes app-toast-progress-shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.app-toast__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 12px 14px 16px;
+}
+
+.app-toast__message {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  font: 500 14px/1.45 "Stem", "Tahoma", "Arial", sans-serif;
+}
+
+.app-toast__close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.app-toast__close:hover {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-toast__close:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: 1px;
+}
+
+@media (max-width: 480px) {
+  .app-toast-stack {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+}

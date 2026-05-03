@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Fingerprint, KeyRound, User } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
@@ -12,6 +12,7 @@ import AccountSettingsAvatar from "./AccountSettingsAvatar";
 import OwnerActivityHistoryPanel from "../owner-programs/OwnerActivityHistoryPanel";
 import "../owner-programs/owner-programs.css";
 import "./settings.css";
+import { toast } from "../../../components/toast/toastBus";
 
 const TAB_IDS = ["general", "security", "users", "notifications", "history"];
 
@@ -34,6 +35,33 @@ function displayNameFromUser(user) {
   if (parts) return parts;
   if (user.username) return String(user.username);
   return "";
+}
+
+/** Полное имя для подсказки на чипе привязанной соцсети */
+function oauthChipFullName(u) {
+  const name = displayNameFromUser(u);
+  if (name.trim()) return name.trim();
+  const em = u?.email;
+  if (typeof em === "string" && em.includes("@")) return em.split("@")[0] || "";
+  return "";
+}
+
+/** Короткая подпись на чипе (как в референсе Timeweb — обрезка с многоточием) */
+function oauthChipTruncated(u, maxLen = 14) {
+  const s = oauthChipFullName(u);
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, Math.max(0, maxLen - 1))}…`;
+}
+
+function OauthUnbindIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} fill="none" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="m13.41 12 3.3-3.29a1 1 0 1 0-1.42-1.42L12 10.59l-3.29-3.3a1 1 0 0 0-1.42 1.42l3.3 3.29-3.3 3.29a1 1 0 0 0 .33 1.64 1 1 0 0 0 1.09-.22l3.29-3.3 3.29 3.3a1 1 0 0 0 1.42 0 1 1 0 0 0 0-1.42L13.41 12Z"
+      />
+    </svg>
+  );
 }
 
 /** Иконка ВК как в референсе (socialNetwork vk). */
@@ -120,20 +148,17 @@ function loadGoogleIdentityScript() {
 function PasskeyManageModal({ open, onClose }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [hint, setHint] = useState("");
+  const panelRef = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
     let cancelled = false;
     (async () => {
       setLoading(true);
-      setError("");
-      setHint("");
       const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
       if (!token) {
-        setError("Сессия истекла. Войдите снова.");
+        toast.error("Сессия истекла. Войдите снова.");
         setLoading(false);
         return;
       }
@@ -145,13 +170,13 @@ function PasskeyManageModal({ open, onClose }) {
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) {
-          setError("Не удалось загрузить список ключей.");
+          toast.error("Не удалось загрузить список ключей.");
           setRows([]);
         } else {
           setRows(Array.isArray(data.results) ? data.results : []);
         }
       } catch {
-        if (!cancelled) setError("Ошибка сети.");
+        if (!cancelled) toast.error("Ошибка сети.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -172,15 +197,14 @@ function PasskeyManageModal({ open, onClose }) {
     if (res.ok && Array.isArray(data.results)) setRows(data.results);
   };
 
-  const handleAdd = async () => {
-    setHint("");
+  const handleAdd = async (authenticatorAttachment) => {
     if (!webAuthnSupported()) {
-      setHint("Браузер не поддерживает Passkey.");
+      toast.error("Браузер не поддерживает Passkey.");
       return;
     }
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setHint("Сессия истекла.");
+      toast.error("Сессия истекла.");
       return;
     }
     setBusy(true);
@@ -192,17 +216,19 @@ function PasskeyManageModal({ open, onClose }) {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: "{}",
+        body: JSON.stringify({
+          authenticator_attachment: authenticatorAttachment,
+        }),
       });
       const roData = await ro.json().catch(() => ({}));
       if (!ro.ok) {
-        setHint(roData.detail || "Не удалось начать регистрацию ключа.");
+        toast.error(roData.detail || "Не удалось начать регистрацию ключа.");
         setBusy(false);
         return;
       }
       const publicKey = preparePublicKeyCredentialCreationOptions(roData.options);
       if (!publicKey) {
-        setHint("Некорректные параметры с сервера.");
+        toast.error("Некорректные параметры с сервера.");
         setBusy(false);
         return;
       }
@@ -211,21 +237,21 @@ function PasskeyManageModal({ open, onClose }) {
         attestation = await navigator.credentials.create({ publicKey });
       } catch (err) {
         if (err && err.name === "NotAllowedError") {
-          setHint("Регистрация отменена или устройство недоступно.");
+          toast.error("Регистрация отменена или устройство недоступно.");
         } else {
-          setHint("Не удалось создать ключ на этом устройстве.");
+          toast.error("Не удалось создать ключ на этом устройстве.");
         }
         setBusy(false);
         return;
       }
       if (!attestation || attestation.type !== "public-key") {
-        setHint("Не получен ответ от устройства.");
+        toast.error("Не получен ответ от устройства.");
         setBusy(false);
         return;
       }
       const packed = registrationCredentialToJSON(attestation);
       if (!packed || !packed.json) {
-        setHint("Не удалось сериализовать ключ.");
+        toast.error("Не удалось сериализовать ключ.");
         setBusy(false);
         return;
       }
@@ -244,15 +270,15 @@ function PasskeyManageModal({ open, onClose }) {
       });
       const vd = await vr.json().catch(() => ({}));
       if (!vr.ok) {
-        setHint(vd.detail || "Не удалось сохранить ключ.");
+        toast.error(vd.detail || "Не удалось сохранить ключ.");
         setBusy(false);
         return;
       }
-      setHint("Ключ добавлен.");
+      toast.success("Ключ добавлен.");
       await refreshList();
     } catch (e) {
       console.error(e);
-      setHint("Ошибка при добавлении ключа.");
+      toast.error("Во время добавления Passkey произошла ошибка.");
     } finally {
       setBusy(false);
     }
@@ -262,7 +288,6 @@ function PasskeyManageModal({ open, onClose }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
     setBusy(true);
-    setHint("");
     try {
       const res = await fetch(API_ENDPOINTS.passkeyDetail(id), {
         method: "DELETE",
@@ -271,12 +296,12 @@ function PasskeyManageModal({ open, onClose }) {
       });
       if (res.status === 204) {
         setRows((prev) => prev.filter((r) => r.id !== id));
-        setHint("Ключ удалён.");
+        toast.success("Ключ удалён.");
       } else {
-        setHint("Не удалось удалить ключ.");
+        toast.error("Не удалось удалить ключ.");
       }
     } catch {
-      setHint("Ошибка сети.");
+      toast.error("Ошибка сети.");
     } finally {
       setBusy(false);
     }
@@ -291,76 +316,94 @@ function PasskeyManageModal({ open, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const t = window.setTimeout(() => panelRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
   if (!open) return null;
 
   return (
     <div
-      className="lk-personalization-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Passkey"
+      id="lk-settings-passkey-dialog"
+      className="lk-passkey-dialog-backdrop"
+      role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="lk-personalization-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <button type="button" className="lk-personalization-modal__close" aria-label="Закрыть" onClick={onClose}>
-          ×
+      <div
+        ref={panelRef}
+        className="lk-passkey-dialog"
+        data-testid="dialog"
+        tabIndex={0}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lk-passkey-dialog-title"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="lk-passkey-dialog__close"
+          data-testid="close-btn"
+          aria-label="Закрыть"
+          onClick={onClose}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" aria-hidden>
+            <path
+              fill="currentColor"
+              d="m13.41 12 4.3-4.29a1 1 0 0 0-1.42-1.42L12 10.59l-4.29-4.3a1 1 0 1 0-1.42 1.42l4.3 4.29-4.3 4.29a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l4.29-4.3 4.29 4.3a1 1 0 0 0 1.64-.33 1 1 0 0 0-.22-1.09L13.4 12Z"
+            />
+          </svg>
         </button>
-        <div className="lk-personalization">
-          <div className="lk-personalization__title">Passkey</div>
-          <p className="lk-settings-stub-modal__text">
-            Вход по отпечатку, PIN устройства или системному ключу. Добавьте ключ здесь, затем на странице входа укажите
-            тот же email и нажмите Passkey.
+        <h2 id="lk-passkey-dialog-title" className="lk-passkey-dialog__title">
+          Авторизация через Passkey
+        </h2>
+        <div className="lk-passkey-dialog__hint">
+          <p className="lk-passkey-dialog__hint-text">
+            Ваши биометрические данные хранятся только на ваших устройствах и никогда не будут переданы кому-либо
           </p>
-          {loading ? <p className="lk-settings-stub-modal__text">Загрузка…</p> : null}
-          {error ? (
-            <p className="lk-settings-stub-modal__text" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {hint ? (
-            <p className="lk-settings-stub-modal__text" role="status">
-              {hint}
-            </p>
-          ) : null}
-          {!loading && !error ? (
-            <ul className="lk-settings-passkey-list" aria-label="Сохранённые ключи">
-              {rows.length === 0 ? (
-                <li className="lk-settings-passkey-list__empty">Пока нет ключей</li>
-              ) : (
-                rows.map((row) => (
-                  <li key={row.id} className="lk-settings-passkey-list__row">
-                    <span className="lk-settings-passkey-list__meta">
-                      {row.created_at ? new Date(row.created_at).toLocaleString() : "ключ"}
-                    </span>
-                    <button
-                      type="button"
-                      className="lk-settings-manage-action"
-                      disabled={busy}
-                      onClick={() => handleDelete(row.id)}
-                    >
-                      Удалить
-                    </button>
-                  </li>
-                ))
-              )}
-            </ul>
-          ) : null}
-          <div className="lk-settings-stub-modal__actions">
-            <button
-              type="button"
-              className="lk-settings-personal-btn lk-settings-personal-btn_primary"
-              disabled={busy || loading || !!error}
-              onClick={handleAdd}
-            >
-              Добавить ключ
-            </button>
-            <button type="button" className="lk-settings-personal-btn" onClick={onClose}>
-              Закрыть
-            </button>
-          </div>
         </div>
+
+        {loading ? <p className="lk-passkey-dialog__loading">Загрузка…</p> : null}
+
+        {!loading && rows.length > 0 ? (
+          <ul className="lk-passkey-dialog__keys" aria-label="Привязанные ключи">
+            {rows.map((row) => (
+              <li key={row.id} className="lk-passkey-dialog__key-row">
+                <span className="lk-passkey-dialog__key-meta">
+                  {row.created_at ? new Date(row.created_at).toLocaleString() : "ключ"}
+                </span>
+                <button
+                  type="button"
+                  className="lk-passkey-dialog__key-remove"
+                  disabled={busy}
+                  onClick={() => handleDelete(row.id)}
+                >
+                  Удалить
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <button
+          type="button"
+          className="lk-passkey-dialog__btn-primary"
+          disabled={busy || loading}
+          onClick={() => handleAdd("platform")}
+        >
+          Привязать устройство
+        </button>
+        <button
+          type="button"
+          className="lk-passkey-dialog__link"
+          disabled={busy || loading}
+          onClick={() => handleAdd("cross-platform")}
+        >
+          Привязать аппаратный ключ
+        </button>
       </div>
     </div>
   );
@@ -427,7 +470,6 @@ function Settings({ user, fetchUser, setUser }) {
   const [loginStubOpen, setLoginStubOpen] = useState(false);
   const [securityStub, setSecurityStub] = useState(null);
   const [oauthBusy, setOauthBusy] = useState(false);
-  const [oauthHint, setOauthHint] = useState("");
   const [accountAdditionalList, setAccountAdditionalList] = useState(null);
   const [accountAdditionalError, setAccountAdditionalError] = useState(null);
   const [accountAdditionalLoading, setAccountAdditionalLoading] = useState(false);
@@ -488,11 +530,26 @@ function Settings({ user, fetchUser, setUser }) {
   useEffect(() => {
     const code = searchParams.get("vk_error");
     if (!code || typeof code !== "string") return;
-    setOauthHint(VK_OAUTH_ERROR_HINTS[code] || `Ошибка входа через VK (${code}).`);
+    toast.error(VK_OAUTH_ERROR_HINTS[code] || `Ошибка входа через VK (${code}).`);
     const next = new URLSearchParams(searchParams);
     next.delete("vk_error");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  /** Открыть модалку Passkey по ссылке `?passkey=manage` или `?passkey=1` (удобно для проверки и шаринга). */
+  useEffect(() => {
+    const want = searchParams.get("passkey");
+    if (want !== "manage" && want !== "1") return undefined;
+    setSecurityStub("passkey");
+    const next = new URLSearchParams(searchParams);
+    next.delete("passkey");
+    setSearchParams(next, { replace: true });
+    return undefined;
+  }, [searchParams, setSearchParams]);
+
+  const handlePasskeyManageClick = useCallback(() => {
+    setSecurityStub("passkey");
+  }, []);
 
   const hasToken = typeof window !== "undefined" && !!localStorage.getItem("access_token");
   const loadingProfile = hasToken && user === null;
@@ -510,7 +567,6 @@ function Settings({ user, fetchUser, setUser }) {
       setOauthBusy(false);
       return;
     }
-    setOauthHint("");
     try {
       const response = await fetch(API_ENDPOINTS.tokenGoogle, {
         method: "POST",
@@ -520,7 +576,7 @@ function Settings({ user, fetchUser, setUser }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        setOauthHint(
+        toast.error(
           typeof data?.detail === "string" && data.detail
             ? data.detail
             : "Не удалось войти через Google. Попробуйте снова.",
@@ -537,7 +593,7 @@ function Settings({ user, fetchUser, setUser }) {
       persistReturningUserWelcome(data.user);
       navigate("/lk/partner");
     } catch {
-      setOauthHint("Произошла ошибка, попробуйте позже");
+      toast.error("Произошла ошибка, попробуйте позже");
     } finally {
       setOauthBusy(false);
     }
@@ -569,18 +625,17 @@ function Settings({ user, fetchUser, setUser }) {
   const handleSettingsGoogleClick = async () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId) {
-      setOauthHint(
+      toast.error(
         "Вход через Google не настроен: задайте REACT_APP_GOOGLE_CLIENT_ID (тот же Web client ID, что и GOOGLE_OAUTH_CLIENT_ID на сервере).",
       );
       return;
     }
-    setOauthHint("");
     try {
       if (typeof window === "undefined" || !window.google?.accounts?.id) {
         await loadGoogleIdentityScript();
       }
       if (typeof window === "undefined" || !window.google?.accounts?.id) {
-        setOauthHint("Не удалось загрузить вход Google. Проверьте сеть и обновите страницу.");
+        toast.error("Не удалось загрузить вход Google. Проверьте сеть и обновите страницу.");
         return;
       }
       window.google.accounts.id.initialize({
@@ -588,7 +643,7 @@ function Settings({ user, fetchUser, setUser }) {
         callback: (resp) => googleCredentialHandlerRef.current(resp),
       });
     } catch {
-      setOauthHint("Не удалось загрузить скрипт Google. Попробуйте позже.");
+      toast.error("Не удалось загрузить скрипт Google. Попробуйте позже.");
       return;
     }
 
@@ -607,14 +662,13 @@ function Settings({ user, fetchUser, setUser }) {
           missing_client_id: "Не задан Google Client ID.",
         };
         if (reason && hints[reason]) {
-          setOauthHint(hints[reason]);
+          toast.error(hints[reason]);
         }
       }
     });
   };
 
   const handleSettingsVkClick = () => {
-    setOauthHint("");
     const params = new URLSearchParams({
       next: "/lk/settings",
       scheme: "light",
@@ -623,9 +677,46 @@ function Settings({ user, fetchUser, setUser }) {
   };
 
   const handleSettingsTelegramClick = () => {
-    setOauthHint("");
     window.location.assign(API_ENDPOINTS.tokenTelegramStart);
   };
+
+  const handleOAuthUnlink = async (provider) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    if (!token) {
+      toast.error("Нет сессии.");
+      return;
+    }
+    try {
+      const res = await fetch(API_ENDPOINTS.oauthUnlink, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ provider }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(typeof data.detail === "string" ? data.detail : "Не удалось отвязать.");
+        return;
+      }
+      if (data.user && typeof setUser === "function") {
+        setUser(data.user);
+      }
+      if (typeof fetchUser === "function") {
+        await fetchUser();
+      }
+    } catch {
+      toast.error("Ошибка сети.");
+    }
+  };
+
+  const oauthVkLinked = Boolean(user?.oauth_providers?.vk?.linked);
+  const oauthTgLinked = Boolean(user?.oauth_providers?.telegram?.linked);
+  const oauthGoogleLinked = Boolean(user?.oauth_providers?.google?.linked);
+  const oauthChipTitle = user ? oauthChipFullName(user) : "";
+  const oauthChipShort = user ? oauthChipTruncated(user) : "";
 
   return (
     <div className="lk-settings" data-testid="lk-account-settings">
@@ -816,8 +907,11 @@ function Settings({ user, fetchUser, setUser }) {
                     <button
                       type="button"
                       className="lk-settings__manage-action"
+                      id="lk-settings-passkey-manage-btn"
                       data-testid="passkey-btn"
-                      onClick={() => setSecurityStub("passkey")}
+                      aria-haspopup="dialog"
+                      disabled={Boolean(hasToken && !loadingProfile && !user)}
+                      onClick={handlePasskeyManageClick}
                     >
                       Управлять
                     </button>
@@ -844,36 +938,89 @@ function Settings({ user, fetchUser, setUser }) {
                   <div className="lk-settings__control-content lk-settings__control-content_oauth">
                     <div className="lk-settings__oauth-login-wrap">
                       <div className="lk-settings__oauth-network-list" data-testid="oauth-types-list">
-                        <button
-                          type="button"
-                          className="lk-settings__oauth-network-btn lk-settings__oauth-network-btn_vk"
-                          aria-label="Войти через VK"
-                          onClick={handleSettingsVkClick}
-                        >
-                          <OauthVkBrandIcon />
-                          <span>ВК</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="lk-settings__oauth-network-btn lk-settings__oauth-network-btn_telegram"
-                          aria-label="Войти через Telegram"
-                          onClick={handleSettingsTelegramClick}
-                        >
-                          <LoginTelegramIcon />
-                          <span>Telegram</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="lk-settings__oauth-network-btn lk-settings__oauth-network-btn_google"
-                          aria-label="Войти через Google"
-                          disabled={oauthBusy}
-                          onClick={handleSettingsGoogleClick}
-                        >
-                          <LoginGoogleIcon />
-                          <span>Google</span>
-                        </button>
+                        {oauthVkLinked ? (
+                          <div
+                            className="lk-settings__oauth-chip lk-settings__oauth-chip_vk lk-settings__oauth-chip_linked"
+                            title={oauthChipTitle || undefined}
+                          >
+                            <OauthVkBrandIcon />
+                            <span className="lk-settings__oauth-chip__name">{oauthChipShort}</span>
+                            <button
+                              type="button"
+                              className="lk-settings__oauth-chip__unbind"
+                              aria-label="Отвязать ВКонтакте"
+                              onClick={() => handleOAuthUnlink("vk")}
+                            >
+                              <OauthUnbindIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="lk-settings__oauth-network-btn lk-settings__oauth-network-btn_vk"
+                            aria-label="Войти через VK"
+                            onClick={handleSettingsVkClick}
+                          >
+                            <OauthVkBrandIcon />
+                            <span>ВК</span>
+                          </button>
+                        )}
+                        {oauthTgLinked ? (
+                          <div
+                            className="lk-settings__oauth-chip lk-settings__oauth-chip_telegram lk-settings__oauth-chip_linked"
+                            title={oauthChipTitle || undefined}
+                          >
+                            <LoginTelegramIcon />
+                            <span className="lk-settings__oauth-chip__name">{oauthChipShort}</span>
+                            <button
+                              type="button"
+                              className="lk-settings__oauth-chip__unbind"
+                              aria-label="Отвязать Telegram"
+                              onClick={() => handleOAuthUnlink("telegram")}
+                            >
+                              <OauthUnbindIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="lk-settings__oauth-network-btn lk-settings__oauth-network-btn_telegram"
+                            aria-label="Войти через Telegram"
+                            onClick={handleSettingsTelegramClick}
+                          >
+                            <LoginTelegramIcon />
+                            <span>Telegram</span>
+                          </button>
+                        )}
+                        {oauthGoogleLinked ? (
+                          <div
+                            className="lk-settings__oauth-chip lk-settings__oauth-chip_google lk-settings__oauth-chip_linked"
+                            title={oauthChipTitle || undefined}
+                          >
+                            <LoginGoogleIcon />
+                            <span className="lk-settings__oauth-chip__name">{oauthChipShort}</span>
+                            <button
+                              type="button"
+                              className="lk-settings__oauth-chip__unbind"
+                              aria-label="Отвязать Google"
+                              onClick={() => handleOAuthUnlink("google")}
+                            >
+                              <OauthUnbindIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="lk-settings__oauth-network-btn lk-settings__oauth-network-btn_google"
+                            aria-label="Войти через Google"
+                            disabled={oauthBusy}
+                            onClick={handleSettingsGoogleClick}
+                          >
+                            <LoginGoogleIcon />
+                            <span>Google</span>
+                          </button>
+                        )}
                       </div>
-                      {oauthHint ? <p className="lk-settings__oauth-hint">{oauthHint}</p> : null}
                     </div>
                   </div>
                 </div>

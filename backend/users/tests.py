@@ -842,9 +842,71 @@ class PasskeyApiTests(TestCase):
         r = c.post("/users/me/passkeys/register/options/", {}, format="json")
         self.assertEqual(r.status_code, 401)
 
+    def test_register_options_accepts_authenticator_attachment(self):
+        api = APIClient()
+        api.force_authenticate(self.user)
+        r_platform = api.post(
+            "/users/me/passkeys/register/options/",
+            {"authenticator_attachment": "platform"},
+            format="json",
+        )
+        self.assertEqual(r_platform.status_code, 200)
+        sel = r_platform.data["options"].get("authenticatorSelection") or {}
+        self.assertEqual(sel.get("authenticatorAttachment"), "platform")
+
+        r_cross = api.post(
+            "/users/me/passkeys/register/options/",
+            {"authenticator_attachment": "cross-platform"},
+            format="json",
+        )
+        self.assertEqual(r_cross.status_code, 200)
+        sel_c = r_cross.data["options"].get("authenticatorSelection") or {}
+        self.assertEqual(sel_c.get("authenticatorAttachment"), "cross-platform")
+
     def test_passkeys_list_empty(self):
         api = APIClient()
         api.force_authenticate(self.user)
         r = api.get("/users/me/passkeys/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data.get("results"), [])
+
+
+class OAuthProvidersApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="oauth-me@example.com",
+            username="oauthme",
+            password="secret123",
+        )
+
+    def test_me_includes_oauth_providers_flags(self):
+        api = APIClient()
+        api.force_authenticate(self.user)
+        r = api.get("/users/me/")
+        self.assertEqual(r.status_code, 200)
+        op = r.data.get("oauth_providers")
+        self.assertIsInstance(op, dict)
+        self.assertEqual(op["vk"]["linked"], False)
+        self.assertEqual(op["telegram"]["linked"], False)
+        self.assertEqual(op["google"]["linked"], False)
+
+    def test_oauth_unlink_telegram_clears_telegram_id(self):
+        self.user.telegram_id = 424242
+        self.user.save(update_fields=["telegram_id"])
+        api = APIClient()
+        api.force_authenticate(self.user)
+        r = api.post("/users/me/oauth/unlink/", {"provider": "telegram"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.telegram_id)
+        self.assertEqual(r.data["user"]["oauth_providers"]["telegram"]["linked"], False)
+
+    def test_oauth_unlink_google_clears_sub(self):
+        self.user.oauth_google_sub = "google-sub-x"
+        self.user.save(update_fields=["oauth_google_sub"])
+        api = APIClient()
+        api.force_authenticate(self.user)
+        r = api.post("/users/me/oauth/unlink/", {"provider": "google"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.oauth_google_sub)

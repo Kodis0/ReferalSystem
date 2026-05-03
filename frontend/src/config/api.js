@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   /** Дополнительные пользователи аккаунта (учётные записи с привязкой к владельцу). */
   accountUsers: `${API_BASE}/users/me/account-users/`,
   changePassword: `${API_BASE}/users/me/password/`,
+  oauthUnlink: `${API_BASE}/users/me/oauth/unlink/`,
   supportTickets: `${API_BASE}/users/me/support-tickets/`,
   supportTicketDetail: (ticketId) =>
     `${API_BASE}/users/me/support-tickets/${encodeURIComponent(ticketId)}/`,
