@@ -162,6 +162,87 @@ html:has(.login-page:not(.registration-page)) body {
   background: var(--background-color);
 }
 
+/* Экран ошибки входа по Passkey (макет Timeweb /my/login) */
+.login-page__passkey-error {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+  padding: 48px 0 32px;
+  box-sizing: border-box;
+}
+
+.login-page__passkey-error-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: center;
+  gap: 0;
+}
+
+.login-page__passkey-error-icon-svg {
+  display: block;
+  flex-shrink: 0;
+  margin-bottom: 24px;
+}
+
+.login-page__passkey-error-title {
+  margin: 0 0 16px;
+  max-width: 100%;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 32px;
+  color: var(--title-color, var(--text-color));
+}
+
+.login-page__passkey-error-text {
+  margin: 0 0 28px;
+  max-width: 100%;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text-secondary-color);
+}
+
+.login-page__passkey-error-primary.login-page__base-button {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 16px;
+}
+
+.login-page__passkey-error-retry {
+  margin: 0;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--main-color);
+  text-decoration: none;
+  transition: color var(--transition-duration) var(--transition-function),
+    opacity var(--transition-duration) var(--transition-function);
+}
+
+.login-page__passkey-error-retry:hover {
+  color: var(--main-variant-color);
+}
+
+.login-page__passkey-error-retry:focus-visible {
+  outline: 2px solid var(--main-color-50);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-small);
+}
+
 .login-page__wrapper {
   flex: 0 1 auto;
   min-height: 0;

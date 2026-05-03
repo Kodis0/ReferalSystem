@@ -1,5 +1,6 @@
 import "./login.css";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
 import {
@@ -197,6 +198,31 @@ function PasskeyIcon() {
   );
 }
 
+/** Иконка ошибки входа по Passkey (человек + ключ + бейдж с крестиком). */
+function PasskeyAuthErrorIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={49}
+      height={45}
+      fill="none"
+      viewBox="0 0 49 45"
+      className="login-page__passkey-error-icon-svg"
+      aria-hidden
+    >
+      <path
+        fill="#454CEE"
+        d="M22.78 21.2a8.44 8.44 0 1 0 0-16.88 8.44 8.44 0 0 0 0 16.89Zm22.52 0a6.57 6.57 0 1 0-9.39 5.92v10.04l2.82 2.81 4.69-4.7-2.82-2.8 2.82-2.82-2.33-2.33a6.57 6.57 0 0 0 4.2-6.11Zm-6.57 0a1.88 1.88 0 1 1 0-3.75 1.88 1.88 0 0 1 0 3.76ZM30.17 25c-1.44-.64-3-.98-4.58-.98h-5.63A11.26 11.26 0 0 0 8.71 35.28v3.75H33.1V28.7a9.68 9.68 0 0 1-2.93-3.7Z"
+      />
+      <rect width="14.44" height="14.44" x="3" y="28" fill="#EA4335" rx="7.22" />
+      <path
+        fill="#fff"
+        d="m10.74 35.22 2.35-2.34a.37.37 0 1 0-.53-.53l-2.34 2.34-2.34-2.34a.37.37 0 1 0-.53.53l2.34 2.34-2.34 2.34a.37.37 0 0 0 .12.61.37.37 0 0 0 .4-.08l2.35-2.35 2.34 2.35a.37.37 0 1 0 .53-.53l-2.35-2.34Z"
+      />
+    </svg>
+  );
+}
+
 function TelegramIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" aria-hidden>
@@ -309,6 +335,7 @@ function Login() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [passkeyErrorScreen, setPasskeyErrorScreen] = useState(false);
   const [{ returning: isReturningUser, name: storedWelcomeName }] = useState(() => readLoginWelcomeFromStorage());
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -351,6 +378,16 @@ function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Системный диалог Passkey (Windows Hello и др.) после «Отмена» может вернуть фокус с задержкой; flushSync гарантирует показ экрана ошибки сразу. */
+  const showPasskeyFailureScreen = () => {
+    flushSync(() => {
+      setMessage("");
+      setPasskeyErrorScreen(true);
+      setLoading(false);
+    });
+    window.scrollTo(0, 0);
   };
 
   useEffect(() => {
@@ -448,11 +485,12 @@ function Login() {
   };
 
   const handlePasskeyClick = async () => {
+    setPasskeyErrorScreen(false);
     const emailRaw = email.trim();
     /** С email — только passkeys этого аккаунта (старые ключи без discoverable). Без email — выбор ключа в системе (Windows / телефон и т.д.). */
     const useLegacyEmailFlow = Boolean(emailRaw);
     if (!webAuthnSupported()) {
-      setMessage("Ваш браузер не поддерживает Passkey.");
+      showPasskeyFailureScreen();
       return;
     }
     setLoading(true);
@@ -466,37 +504,28 @@ function Login() {
       });
       const roData = await ro.json().catch(() => ({}));
       if (!ro.ok) {
-        setMessage(formatLoginApiErrors(roData) || "Не удалось начать вход по Passkey.");
-        setLoading(false);
+        showPasskeyFailureScreen();
         return;
       }
       const publicKey = preparePublicKeyCredentialRequestOptions(roData.options);
       if (!publicKey) {
-        setMessage("Некорректные параметры Passkey с сервера.");
-        setLoading(false);
+        showPasskeyFailureScreen();
         return;
       }
       let assertion;
       try {
         assertion = await navigator.credentials.get({ publicKey });
-      } catch (err) {
-        if (err && err.name === "NotAllowedError") {
-          setMessage("Вход отменён или устройство недоступно.");
-        } else {
-          setMessage("Не удалось использовать Passkey на этом устройстве.");
-        }
-        setLoading(false);
+      } catch {
+        showPasskeyFailureScreen();
         return;
       }
       if (!assertion || assertion.type !== "public-key") {
-        setMessage("Не удалось получить ответ Passkey.");
-        setLoading(false);
+        showPasskeyFailureScreen();
         return;
       }
       const credentialPayload = authenticationCredentialToJSON(assertion);
       if (!credentialPayload) {
-        setMessage("Не удалось сериализовать ответ Passkey.");
-        setLoading(false);
+        showPasskeyFailureScreen();
         return;
       }
       const verifyBody = {
@@ -514,8 +543,7 @@ function Login() {
       });
       const vd = await vr.json().catch(() => ({}));
       if (!vr.ok) {
-        setMessage(formatLoginApiErrors(vd) || "Не удалось завершить вход по Passkey.");
-        setLoading(false);
+        showPasskeyFailureScreen();
         return;
       }
       localStorage.setItem("access_token", vd.access);
@@ -528,7 +556,7 @@ function Login() {
       navigate("/lk/partner");
     } catch (err) {
       console.error("Passkey login:", err);
-      setMessage("Произошла ошибка, попробуйте позже");
+      showPasskeyFailureScreen();
     } finally {
       setLoading(false);
     }
@@ -583,6 +611,32 @@ function Login() {
         <Link to="/" className="login-page__brand" aria-label="На главную">
           <LoginBrandLogo />
         </Link>
+        {passkeyErrorScreen ? (
+          <div
+            className="login-page__passkey-error"
+            role="alert"
+            aria-live="assertive"
+          >
+            <div className="login-page__passkey-error-inner">
+              <PasskeyAuthErrorIcon />
+              <h1 className="login-page__passkey-error-title">Ошибка авторизации</h1>
+              <p className="login-page__passkey-error-text">
+                Проверьте, было ли добавлено устройство в личном кабинете, и убедитесь, что функция распознавания на
+                нем работает. Если ничего не помогло, войдите другим способом
+              </p>
+              <button
+                type="button"
+                className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__passkey-error-primary"
+                onClick={() => setPasskeyErrorScreen(false)}
+              >
+                Войти другим способом
+              </button>
+              <button type="button" className="login-page__passkey-error-retry" onClick={() => void handlePasskeyClick()}>
+                Попробовать повторно
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="login-page__wrapper">
           <div className="login-page__container">
             <div className="login-page__welcome">
@@ -730,6 +784,7 @@ function Login() {
             </p>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
