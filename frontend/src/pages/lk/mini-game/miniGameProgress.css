@@ -326,3 +326,456 @@
     transition: none;
   }
 }
+
+/* --- Достижения (вкладка «Достижения») --- */
+.mini-game-progress__tab-panel--achievements {
+  max-width: 960px;
+}
+
+.mini-game-achievements {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mini-game-achievements__status {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.mini-game-achievements__status--error {
+  color: rgba(255, 160, 160, 0.92);
+}
+
+[data-theme="light"] .mini-game-achievements__status {
+  color: rgba(38, 50, 92, 0.62);
+}
+
+[data-theme="light"] .mini-game-achievements__status--error {
+  color: rgba(180, 40, 40, 0.92);
+}
+
+.mini-game-achievements__summary {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #242f3d;
+  border: none;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.mini-game-achievements__summary-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mini-game-achievements__summary-line {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mini-game-achievements__summary-line strong {
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-achievements__summary-xp-value {
+  color: #a8adff;
+  font-weight: 800;
+}
+
+[data-theme="light"] .mini-game-achievements__summary {
+  background: #f3f5fc;
+}
+
+[data-theme="light"] .mini-game-achievements__summary-line {
+  color: rgba(38, 50, 92, 0.78);
+}
+
+[data-theme="light"] .mini-game-achievements__summary-line strong {
+  color: rgba(24, 32, 56, 0.96);
+}
+
+[data-theme="light"] .mini-game-achievements__summary-xp-value {
+  color: #5c62d6;
+}
+
+.mini-game-achievements__sections-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #242f3d;
+  border: none;
+  box-sizing: border-box;
+}
+
+[data-theme="light"] .mini-game-achievements__sections-nav {
+  background: #f3f5fc;
+}
+
+.mini-game-achievements__section-chip {
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mini-game-achievements__section-chip:hover {
+  background: rgba(113, 119, 248, 0.22);
+  border-color: rgba(113, 119, 248, 0.45);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-achievements__section-chip:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.85);
+  outline-offset: 2px;
+}
+
+.mini-game-achievements__section-chip--active {
+  background: rgba(113, 119, 248, 0.42);
+  border-color: rgba(113, 119, 248, 0.72);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+[data-theme="light"] .mini-game-achievements__section-chip {
+  border-color: rgba(38, 50, 92, 0.14);
+  background: #ffffff;
+  color: rgba(38, 50, 92, 0.78);
+}
+
+[data-theme="light"] .mini-game-achievements__section-chip:hover {
+  background: rgba(113, 119, 248, 0.12);
+  border-color: rgba(92, 98, 214, 0.45);
+  color: rgba(24, 32, 56, 0.92);
+}
+
+[data-theme="light"] .mini-game-achievements__section-chip--active {
+  background: rgba(113, 119, 248, 0.22);
+  border-color: rgba(92, 98, 214, 0.55);
+  color: rgba(24, 32, 56, 0.96);
+}
+
+@media (max-width: 560px) {
+  .mini-game-achievements__sections-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 10px;
+    margin-bottom: -4px;
+  }
+
+  .mini-game-achievements__section-chip {
+    flex-shrink: 0;
+  }
+}
+
+.mini-game-achievements__list {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #242f3d;
+  border: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+[data-theme="light"] .mini-game-achievements__list {
+  background: #f3f5fc;
+}
+
+.mini-game-achievements__section {
+  margin: 0;
+}
+
+.mini-game-achievements__section-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: rgba(168, 173, 255, 0.98);
+}
+
+[data-theme="light"] .mini-game-achievements__section-title {
+  color: #5c62d6;
+}
+
+.mini-game-achievements__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 360px) {
+  .mini-game-achievements__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mini-game-achievements__card-wrap {
+  margin: 0;
+  min-width: 0;
+}
+
+.mini-game-achievements__card {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 14px 16px 16px;
+  border-radius: 12px;
+  background: #1b2431;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mini-game-achievements__card--unlocked {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(139, 145, 255, 0.65);
+  box-shadow:
+    0 0 0 1px rgba(113, 119, 248, 0.2),
+    0 8px 28px rgba(0, 0, 0, 0.22);
+}
+
+.mini-game-achievements__card--locked {
+  opacity: 0.92;
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+[data-theme="light"] .mini-game-achievements__card {
+  background: #ffffff;
+  border: none;
+}
+
+[data-theme="light"] .mini-game-achievements__card--unlocked {
+  border-color: rgba(113, 119, 248, 0.58);
+  box-shadow: 0 6px 22px rgba(113, 119, 248, 0.16);
+}
+
+.mini-game-achievements__card-body {
+  transition: filter 0.2s ease;
+}
+
+.mini-game-achievements__card-body--blurred {
+  filter: blur(7px);
+  user-select: none;
+  pointer-events: none;
+}
+
+.mini-game-achievements__card-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-achievements__card--locked .mini-game-achievements__card-title {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+[data-theme="light"] .mini-game-achievements__card-title {
+  color: rgba(24, 32, 56, 0.96);
+}
+
+[data-theme="light"] .mini-game-achievements__card--locked .mini-game-achievements__card-title {
+  color: rgba(24, 32, 56, 0.78);
+}
+
+.mini-game-achievements__card-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.mini-game-achievements__card--locked .mini-game-achievements__card-desc {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+[data-theme="light"] .mini-game-achievements__card-desc {
+  color: rgba(38, 50, 92, 0.62);
+}
+
+[data-theme="light"] .mini-game-achievements__card--locked .mini-game-achievements__card-desc {
+  color: rgba(38, 50, 92, 0.5);
+}
+
+.mini-game-achievements__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.mini-game-achievements__fact {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.mini-game-achievements__fact-value {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.mini-game-achievements__card--locked .mini-game-achievements__fact {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.mini-game-achievements__card--locked .mini-game-achievements__fact-value {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+[data-theme="light"] .mini-game-achievements__fact {
+  color: rgba(38, 50, 92, 0.55);
+}
+
+[data-theme="light"] .mini-game-achievements__fact-value {
+  color: rgba(24, 32, 56, 0.88);
+}
+
+[data-theme="light"] .mini-game-achievements__card--locked .mini-game-achievements__fact {
+  color: rgba(38, 50, 92, 0.45);
+}
+
+[data-theme="light"] .mini-game-achievements__card--locked .mini-game-achievements__fact-value {
+  color: rgba(38, 50, 92, 0.72);
+}
+
+.mini-game-achievements__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mini-game-achievements__card--locked .mini-game-achievements__bar {
+  background: rgba(0, 0, 0, 0.42);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.mini-game-achievements__card--locked .mini-game-achievements__bar-fill {
+  opacity: 0.95;
+}
+
+[data-theme="light"] .mini-game-achievements__bar {
+  background: rgba(38, 50, 92, 0.08);
+  border-color: rgba(38, 50, 92, 0.08);
+}
+
+.mini-game-achievements__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7177f8, #9b9fff);
+  transition: width 0.25s ease;
+}
+
+.mini-game-achievements__card-complete-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 18, 0.18);
+}
+
+[data-theme="light"] .mini-game-achievements__card-complete-overlay {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.mini-game-achievements__card-complete-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.mini-game-achievements__card-complete-check-hit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.mini-game-achievements__card-complete-check-img {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.mini-game-achievements__card-complete-reveal {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 10px;
+  line-height: 0;
+  pointer-events: none;
+}
+
+.mini-game-achievements__card-complete-reveal:hover,
+.mini-game-achievements__card-complete-reveal:focus-visible {
+  background: rgba(113, 119, 248, 0.2);
+  outline: none;
+}
+
+.mini-game-achievements__card-complete-stack:hover .mini-game-achievements__card-complete-reveal,
+.mini-game-achievements__card-complete-stack:focus-within .mini-game-achievements__card-complete-reveal {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-theme="light"] .mini-game-achievements__card-complete-reveal {
+  background: rgba(38, 50, 92, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-game-achievements__bar-fill {
+    transition: none;
+  }
+
+  .mini-game-achievements__card-body {
+    transition: none;
+  }
+
+  .mini-game-achievements__card-complete-reveal {
+    transition: none;
+  }
+}

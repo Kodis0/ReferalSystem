@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { listAchievements } from "../../../achievements/listAchievements";
+import achievementDoneCheck from "../../../static/images/achievement-done-check.svg";
+import achievementRevealEye from "../../../static/images/achievement-reveal-eye.svg";
 import "../bug/bug.css";
 import "../dashboard/dashboard.css";
 import "../owner-programs/owner-programs.css";
@@ -7,7 +10,6 @@ import "./blockBlastGame.css";
 import "./miniGameLeagues.css";
 import "./miniGameProgress.css";
 import "./miniGameRating.css";
-import leagueStartBg from "../../../static/images/mini-game-league-start-bg.png";
 import { fetchGamificationSummary } from "./gamificationApi";
 import {
   MINI_GAME_LEAGUES,
@@ -17,13 +19,11 @@ import {
   computePlatinumTasksOverallPct,
   computeSilverTasksOverallPct,
   computeUltraTasksOverallPct,
+  getCurrentLeagueIndexFromSummary,
+  getLeagueCardInlineBgStyle,
   MiniGameLeagueUnlockCardForTargetLeague,
 } from "./miniGameLeagues";
 import { ProgressDonut } from "./ProgressDonut";
-
-/** Пока первая лига из списка; позже — из API. Фон карточки для лиги Start. */
-const currentLeague = MINI_GAME_LEAGUES[0];
-const currentLeagueName = currentLeague?.name ?? "Start";
 
 function formatLifeRestoreCountdown(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -50,6 +50,47 @@ function parseMultiplier(str) {
 
 function formatStreakMultiplier(mult) {
   return `x${mult.toFixed(1)}`;
+}
+
+/** Порядок блоков на вкладке «Достижения». */
+const ACHIEVEMENT_CATEGORY_ORDER = [
+  "start",
+  "links",
+  "leads",
+  "earnings",
+  "game",
+  "activity",
+  "rating",
+  "other",
+];
+
+function categoryBlockTitleRu(category) {
+  const c = String(category || "").toLowerCase();
+  if (c === "start") return "Стартовые достижения";
+  if (c === "links") return "Ссылки и трафик";
+  if (c === "leads") return "Клиенты и лиды";
+  if (c === "earnings") return "Доход";
+  if (c === "game") return "Игра";
+  if (c === "activity") return "Активность";
+  if (c === "rating") return "Рейтинг";
+  return category || "Другое";
+}
+
+function sortCategoryKeys(keys) {
+  const arr = [...keys];
+  arr.sort((a, b) => {
+    const ia = ACHIEVEMENT_CATEGORY_ORDER.indexOf(a);
+    const ib = ACHIEVEMENT_CATEGORY_ORDER.indexOf(b);
+    const sa = ia === -1 ? 999 : ia;
+    const sb = ib === -1 ? 999 : ib;
+    if (sa !== sb) return sa - sb;
+    return String(a).localeCompare(String(b));
+  });
+  return arr;
+}
+
+function sortAchievementsItems(list) {
+  return [...list].sort((a, b) => String(a.code).localeCompare(String(b.code)));
 }
 
 /**
@@ -101,6 +142,13 @@ export default function MiniGameProgressPage() {
   const [timerTick, setTimerTick] = useState(0);
   const [progressTab, setProgressTab] = useState("progress");
 
+  const [achievementsData, setAchievementsData] = useState(null);
+  const [achievementsLoadState, setAchievementsLoadState] = useState("idle");
+  const [achievementsError, setAchievementsError] = useState(null);
+  const [achievementsRetryNonce, setAchievementsRetryNonce] = useState(0);
+  const [achievementCategoryFilter, setAchievementCategoryFilter] = useState("all");
+  const [achievementDetailRevealed, setAchievementDetailRevealed] = useState(() => new Set());
+
   const loadGamificationSummary = useCallback(async () => {
     const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
     if (!token) {
@@ -128,6 +176,48 @@ export default function MiniGameProgressPage() {
     const id = setInterval(() => setTimerTick((x) => x + 1), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (progressTab !== "achievements") {
+      return undefined;
+    }
+    const ac = new AbortController();
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
+    if (!token) {
+      setAchievementsLoadState("error");
+      setAchievementsError("no_token");
+      setAchievementsData(null);
+      return undefined;
+    }
+    setAchievementsLoadState("loading");
+    setAchievementsError(null);
+    (async () => {
+      try {
+        const data = await listAchievements(token, { signal: ac.signal });
+        if (!ac.signal.aborted) {
+          setAchievementsData(data);
+          setAchievementsLoadState("ready");
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") return;
+        if (!ac.signal.aborted) {
+          setAchievementsLoadState("error");
+          setAchievementsError(e?.message || "fetch_failed");
+          setAchievementsData(null);
+        }
+      }
+    })();
+    return () => ac.abort();
+  }, [progressTab, achievementsRetryNonce]);
+
+  useEffect(() => {
+    if (achievementCategoryFilter === "all") return;
+    const items = Array.isArray(achievementsData?.items) ? achievementsData.items : [];
+    const cats = new Set(items.map((it) => String(it.category || "other")));
+    if (!cats.has(achievementCategoryFilter)) {
+      setAchievementCategoryFilter("all");
+    }
+  }, [achievementsData, achievementCategoryFilter]);
 
   const profile = gamificationSummary?.profile ?? {};
   const livesInfo = gamificationSummary?.lives ?? {};
@@ -170,6 +260,10 @@ export default function MiniGameProgressPage() {
 
   const tabClass = (active) =>
     `owner-programs__tab${active ? " owner-programs__tab_active" : ""}`.trim();
+
+  const currentLeagueCard =
+    MINI_GAME_LEAGUES[getCurrentLeagueIndexFromSummary(gamificationSummary)] ?? MINI_GAME_LEAGUES[0];
+  const currentLeagueName = currentLeagueCard?.name ?? "Start";
 
   return (
     <div className="lk-simple-page">
@@ -255,15 +349,13 @@ export default function MiniGameProgressPage() {
               <article
                 className={[
                   "block-blast-game__profile-card mini-game-progress__league-card",
-                  currentLeague?.id === "start" ? "mini-game-progress__league-card--start" : "",
+                  currentLeagueCard?.id
+                    ? `mini-game-progress__league-card--${currentLeagueCard.id}`
+                    : "mini-game-progress__league-card--start",
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                style={
-                  currentLeague?.id === "start"
-                    ? { "--mini-game-league-start-bg": `url(${leagueStartBg})` }
-                    : undefined
-                }
+                style={getLeagueCardInlineBgStyle(currentLeagueCard?.id)}
               >
                 <Link
                   className="mini-game-progress__leagues-list-link"
@@ -405,11 +497,198 @@ export default function MiniGameProgressPage() {
         role="tabpanel"
         aria-labelledby="mini-game-progress-tab-achievements"
         hidden={progressTab !== "achievements"}
-        className="mini-game-progress__tab-panel"
+        className="mini-game-progress__tab-panel mini-game-progress__tab-panel--achievements"
       >
-        <p className="mini-game-rating__note">
-          Здесь появятся достижения за игру и челлендж.
-        </p>
+        {achievementsLoadState === "loading" ? (
+          <p className="mini-game-achievements__status">Загружаем достижения…</p>
+        ) : null}
+        {achievementsLoadState === "error" ? (
+          <>
+            <p className="mini-game-achievements__status mini-game-achievements__status--error">
+              {achievementsError === "no_token"
+                ? "Войдите в аккаунт, чтобы видеть достижения."
+                : "Не удалось загрузить достижения."}
+            </p>
+            {achievementsError !== "no_token" ? (
+              <button
+                type="button"
+                className="lk-dashboard__my-programs-catalog-banner-cta"
+                onClick={() => setAchievementsRetryNonce((n) => n + 1)}
+              >
+                Повторить
+              </button>
+            ) : null}
+          </>
+        ) : null}
+        {achievementsLoadState === "ready" && achievementsData ? (
+          <div className="mini-game-achievements">
+            <header className="mini-game-achievements__summary">
+              {(() => {
+                const x = Number(achievementsData.summary?.unlocked ?? 0);
+                const y = Number(achievementsData.summary?.total ?? 0);
+                const xp = Number(achievementsData.summary?.xp_from_achievements ?? 0);
+                return (
+                  <div className="mini-game-achievements__summary-rows">
+                    <p className="mini-game-achievements__summary-line">
+                      Получено:{" "}
+                      <strong>
+                        {x.toLocaleString("ru-RU")} из {y.toLocaleString("ru-RU")}
+                      </strong>
+                    </p>
+                    <p className="mini-game-achievements__summary-line">
+                      XP собрано:{" "}
+                      <span className="mini-game-achievements__summary-xp-value">
+                        {xp.toLocaleString("ru-RU")} XP
+                      </span>
+                    </p>
+                  </div>
+                );
+              })()}
+            </header>
+
+            <nav className="mini-game-achievements__sections-nav" aria-label="Разделы достижений">
+              {(() => {
+                const items = Array.isArray(achievementsData.items) ? achievementsData.items : [];
+                const cats = new Set();
+                for (const it of items) {
+                  cats.add(String(it.category || "other"));
+                }
+                const ordered = sortCategoryKeys(Array.from(cats));
+                const chipClass = (active) =>
+                  `mini-game-achievements__section-chip${active ? " mini-game-achievements__section-chip--active" : ""}`;
+                return (
+                  <>
+                    <button
+                      type="button"
+                      className={chipClass(achievementCategoryFilter === "all")}
+                      aria-pressed={achievementCategoryFilter === "all"}
+                      onClick={() => setAchievementCategoryFilter("all")}
+                    >
+                      Все
+                    </button>
+                    {ordered.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={chipClass(achievementCategoryFilter === cat)}
+                        aria-pressed={achievementCategoryFilter === cat}
+                        onClick={() => setAchievementCategoryFilter(cat)}
+                      >
+                        {categoryBlockTitleRu(cat)}
+                      </button>
+                    ))}
+                  </>
+                );
+              })()}
+            </nav>
+
+            <div className="mini-game-achievements__list">
+              {(() => {
+                const items = Array.isArray(achievementsData.items) ? achievementsData.items : [];
+                const byCat = new Map();
+                for (const it of items) {
+                  const cat = String(it.category || "other");
+                  if (!byCat.has(cat)) byCat.set(cat, []);
+                  byCat.get(cat).push(it);
+                }
+                const keys = sortCategoryKeys(Array.from(byCat.keys()));
+                const sections = keys
+                  .map((cat) => [cat, sortAchievementsItems(byCat.get(cat) || [])])
+                  .filter(([cat]) => achievementCategoryFilter === "all" || achievementCategoryFilter === cat);
+                return sections.map(([cat, list]) => (
+                  <section key={cat} className="mini-game-achievements__section" aria-label={categoryBlockTitleRu(cat)}>
+                    <h2 className="mini-game-achievements__section-title">{categoryBlockTitleRu(cat)}</h2>
+                    <ul className="mini-game-achievements__grid">
+                      {list.map((a) => {
+                        const target = Math.max(1, Number(a.target) || 1);
+                        const current = Math.min(target, Math.max(0, Number(a.current) || 0));
+                        const pct = Math.round((current / target) * 100);
+                        const unlocked = Boolean(a.unlocked);
+                        const xpReward = Number(a.xp_reward ?? 0);
+                        const overlayDismissed = achievementDetailRevealed.has(a.code);
+                        const showCompleteOverlay = unlocked && !overlayDismissed;
+                        return (
+                          <li key={a.code} className="mini-game-achievements__card-wrap">
+                            <article
+                              className={[
+                                "mini-game-achievements__card",
+                                unlocked ? "mini-game-achievements__card--unlocked" : "mini-game-achievements__card--locked",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            >
+                              <div
+                                className={[
+                                  "mini-game-achievements__card-body",
+                                  showCompleteOverlay ? "mini-game-achievements__card-body--blurred" : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
+                              >
+                                <h3 className="mini-game-achievements__card-title">{a.title}</h3>
+                                <p className="mini-game-achievements__card-desc">{a.description}</p>
+                                <div className="mini-game-achievements__facts">
+                                  <p className="mini-game-achievements__fact">
+                                    Прогресс:{" "}
+                                    <span className="mini-game-achievements__fact-value">
+                                      {current.toLocaleString("ru-RU")} / {target.toLocaleString("ru-RU")}
+                                    </span>
+                                  </p>
+                                  <p className="mini-game-achievements__fact">
+                                    Награда:{" "}
+                                    <span className="mini-game-achievements__fact-value">
+                                      +{xpReward.toLocaleString("ru-RU")} XP
+                                    </span>
+                                  </p>
+                                </div>
+                                <div
+                                  className="mini-game-achievements__bar"
+                                  role="progressbar"
+                                  aria-valuemin={0}
+                                  aria-valuemax={100}
+                                  aria-valuenow={pct}
+                                  aria-valuetext={`Прогресс ${current} из ${target}`}
+                                >
+                                  <div className="mini-game-achievements__bar-fill" style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                              {showCompleteOverlay ? (
+                                <div className="mini-game-achievements__card-complete-overlay">
+                                  <div className="mini-game-achievements__card-complete-stack">
+                                    <div className="mini-game-achievements__card-complete-check-hit">
+                                      <img
+                                        src={achievementDoneCheck}
+                                        alt=""
+                                        className="mini-game-achievements__card-complete-check-img"
+                                        width={28}
+                                        height={28}
+                                        decoding="async"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="mini-game-achievements__card-complete-reveal"
+                                      aria-label="Показать детали достижения"
+                                      onClick={() => {
+                                        setAchievementDetailRevealed((prev) => new Set(prev).add(a.code));
+                                      }}
+                                    >
+                                      <img src={achievementRevealEye} alt="" width={22} height={15} decoding="async" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </article>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ));
+              })()}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

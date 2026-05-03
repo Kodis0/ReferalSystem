@@ -296,6 +296,13 @@ const LEAGUE_CARD_BG = {
   ultra: { cssVar: "--mini-game-league-ultra-bg", bg: leagueUltraBg },
 };
 
+/** Inline background for ``mini-game-progress__league-card--*`` (same assets as league tier cards). */
+export function getLeagueCardInlineBgStyle(leagueId) {
+  const meta = leagueId ? LEAGUE_CARD_BG[leagueId] : undefined;
+  if (!meta) return undefined;
+  return { [meta.cssVar]: `url(${meta.bg})` };
+}
+
 function MiniGameLeagueTierCard({ league }) {
   const meta = LEAGUE_CARD_BG[league.id];
   if (!meta) {

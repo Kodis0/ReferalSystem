@@ -626,6 +626,7 @@ class XPEvent(models.Model):
         LEAD_CREATED = "lead_created", "Lead created"
         LEAD_CONFIRMED = "lead_confirmed", "Lead confirmed"
         PURCHASE_CONFIRMED = "purchase_confirmed", "Purchase confirmed"
+        ACHIEVEMENT = "achievement", "Achievement"
         MANUAL = "manual", "Manual"
 
     user = models.ForeignKey(
@@ -654,6 +655,35 @@ class XPEvent(models.Model):
 
     def __str__(self) -> str:
         return f"XPEvent(user={self.user_id}, source={self.source!r}, amount={self.amount})"
+
+
+class UserAchievement(models.Model):
+    """Unlocked achievement row; criteria evaluated by ``achievement_service``."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="user_achievements",
+        db_index=True,
+    )
+    code = models.CharField(max_length=64, db_index=True)
+    unlocked_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    xp_awarded = models.PositiveIntegerField(default=0)
+    progress_current = models.PositiveIntegerField(default=0)
+    progress_target = models.PositiveIntegerField(default=1)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-unlocked_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "code"], name="uniq_user_achievement_code"),
+        ]
+        indexes = [
+            models.Index(fields=["user", "code"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"UserAchievement(user={self.user_id}, code={self.code!r})"
 
 
 class DailyChallengeAttempt(models.Model):

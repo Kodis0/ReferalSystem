@@ -12,9 +12,11 @@ from referrals.gamification import (
     calculate_daily_challenge_base_xp,
     get_streak_multiplier,
     local_today,
+    referral_league_from_sales_rub,
 )
 from referrals.gamification_game import replay_daily_challenge
-from referrals.models import DailyChallengeAttempt, GamificationProfile, XPEvent
+from referrals.models import DailyChallengeAttempt, GamificationProfile, Order, XPEvent
+from referrals.services import ensure_partner_profile
 from referrals.tests.gamification_autoplay import greedy_moves_until_game_over
 
 User = get_user_model()
@@ -63,6 +65,31 @@ class GamificationApiTests(TestCase):
         self.assertEqual(body["lives"]["max"], 5)
         self.assertIn("daily_challenge_xp_tiers", body)
         self.assertIn("streak_multiplier_tiers", body)
+
+    def test_summary_profile_league_id_start_without_sales(self):
+        r = self.client.get("/referrals/gamification/summary/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["profile"]["league_id"], "start")
+
+    def test_summary_profile_league_id_matches_referral_sales(self):
+        partner, _ = ensure_partner_profile(self.user)
+        now = timezone.now()
+        Order.objects.create(
+            dedupe_key=f"t:sum-lg-{uuid.uuid4().hex}",
+            source=Order.Source.TILDA,
+            external_id=f"ext-{uuid.uuid4().hex[:8]}",
+            payload_fingerprint=uuid.uuid4().hex[:64],
+            partner=partner,
+            amount=Decimal("80000.00"),
+            currency="RUB",
+            status=Order.Status.PAID,
+            paid_at=now,
+        )
+        sales_rub = 80000
+        expected = referral_league_from_sales_rub(sales_rub)
+        r = self.client.get("/referrals/gamification/summary/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["profile"]["league_id"], expected)
 
     @patch("referrals.gamification.local_today", return_value=date(2026, 5, 10))
     def test_start_creates_new_attempt_each_call_and_consumes_life(self, _mock):

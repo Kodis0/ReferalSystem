@@ -34,6 +34,8 @@ export const API_ENDPOINTS = {
   passwordResetRequest: `${API_BASE}/users/password-reset/request/`,
   passwordResetCodeRequest: `${API_BASE}/users/api/password-reset/request/`,
   passwordResetCodeConfirm: `${API_BASE}/users/api/password-reset/confirm/`,
+  /** GET — список достижений и сводка для ЛК (Bearer). */
+  usersAchievements: `${API_BASE}/users/api/achievements/`,
   passkeysRegisterOptions: `${API_BASE}/users/me/passkeys/register/options/`,
   passkeysRegisterVerify: `${API_BASE}/users/me/passkeys/register/verify/`,
   passkeysList: `${API_BASE}/users/me/passkeys/`,

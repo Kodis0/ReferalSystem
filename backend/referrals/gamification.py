@@ -292,6 +292,9 @@ def build_gamification_summary(user) -> dict[str, Any]:
         .first()
     )
 
+    referral_sales_rub = _referral_sales_rub_all_time(user)
+    league_id = referral_league_from_sales_rub(referral_sales_rub)
+
     return {
         "profile": {
             "xp_total": xp_total,
@@ -300,6 +303,7 @@ def build_gamification_summary(user) -> dict[str, Any]:
             "streak_days": profile.streak_days,
             "streak_multiplier": str(streak_mult),
             "best_challenge_score": profile.best_challenge_score,
+            "league_id": league_id,
         },
         "lives": {
             "current": profile.lives_current,
@@ -616,6 +620,18 @@ def _referral_paid_orders_qs(since: Any):
     if since is not None:
         qs = qs.filter(eff_ts__gte=since)
     return qs
+
+
+def _referral_sales_rub_all_time(user) -> int:
+    """
+    Total paid referral sales for ``user``'s partner, same aggregation as ``build_gamification_leaderboard``
+    with ``period=\"all\"`` (no lower bound on ``eff_ts``).
+    """
+    pp = PartnerProfile.objects.filter(user_id=user.pk).first()
+    if pp is None:
+        return 0
+    agg = _referral_paid_orders_qs(None).filter(partner_id=pp.id).aggregate(s=Sum("amount"))
+    return _rub_from_decimal(agg["s"])
 
 
 def build_gamification_leaderboard(request_user, period: str, *, now=None) -> dict[str, Any]:

@@ -291,6 +291,76 @@ def replay_daily_challenge(seed: int, moves: list[dict[str, Any]]) -> tuple[int 
     return total_score, ""
 
 
+def replay_daily_challenge_line_metrics(
+    seed: int, moves: list[dict[str, Any]]
+) -> tuple[int | None, int, int]:
+    """
+    Same replay rules as ``replay_daily_challenge``; returns ``(server_score | None, total_lines_cleared, max_lines_cleared_single_move)``.
+    ``max_lines_cleared_single_move`` is the maximum count of full rows+columns cleared in one resolve step.
+    """
+    if not isinstance(moves, list):
+        return None, 0, 0
+    if len(moves) > _MAX_MOVES:
+        return None, 0, 0
+
+    rng = mulberry32(seed)
+    pieces: list[list[tuple[int, int]] | None] = pick_random_shapes(3, rng)
+    tray_colors = pick_tray_color_indices_from_four(rng)
+    grid = create_empty_grid()
+    total_score = 0
+    total_lines_cleared = 0
+    max_lines_cleared_single_move = 0
+
+    for idx, mv in enumerate(moves):
+        if not isinstance(mv, dict):
+            return None, 0, 0
+        try:
+            slot = int(mv["piece_slot"])
+            row = int(mv["row"])
+            col = int(mv["col"])
+        except (KeyError, TypeError, ValueError):
+            return None, 0, 0
+        if slot not in (0, 1, 2):
+            return None, 0, 0
+        if row < 0 or row >= GRID_SIZE or col < 0 or col >= GRID_SIZE:
+            return None, 0, 0
+
+        cells = pieces[slot]
+        if cells is None:
+            return None, 0, 0
+        if not can_place(grid, cells, row, col):
+            return None, 0, 0
+
+        fill_val = tray_colors[slot] + 1
+        placed = apply_placement(grid, cells, row, col, fill_val)
+        rs, cs = get_full_line_indices(placed)
+        n_lines = len(rs) + len(cs)
+        total_lines_cleared += n_lines
+        if n_lines > max_lines_cleared_single_move:
+            max_lines_cleared_single_move = n_lines
+
+        placement_pts = score_for_placement(len(cells))
+        cleared, clear_pts = resolve_clears(placed)
+        delta = placement_pts + clear_pts
+        total_score += delta
+
+        grid = cleared
+        pieces[slot] = None
+        if pieces[0] is None and pieces[1] is None and pieces[2] is None:
+            pieces = pick_random_shapes(3, rng)
+            tray_colors = pick_tray_color_indices_from_four(rng)
+
+        if is_game_over_for_pieces(grid, pieces):
+            if idx < len(moves) - 1:
+                return None, 0, 0
+            return total_score, total_lines_cleared, max_lines_cleared_single_move
+
+    if not is_game_over_for_pieces(grid, pieces):
+        return None, 0, 0
+
+    return total_score, total_lines_cleared, max_lines_cleared_single_move
+
+
 def validate_finish_timing(
     moves: list[dict[str, Any]],
     server_score: int,
