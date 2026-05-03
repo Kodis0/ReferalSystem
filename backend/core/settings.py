@@ -61,12 +61,19 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "").strip()
 
-# Таймаут HTTP для кастомного бэкенда (напр. core.email_backends.BrevoApiEmailBackend) и единый ключ для SMTP.
+# Таймаут HTTP для кастомных бэкендов (Brevo / RuSender) и SMTP.
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
 
 # Brevo Transactional API (HTTPS), если SMTP с VPS недоступен: EMAIL_BACKEND=core.email_backends.BrevoApiEmailBackend
 BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
 BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email").strip()
+
+# RuSender External Mails API: EMAIL_BACKEND=core.email_backends.RuSenderApiEmailBackend
+RUSENDER_API_KEY = os.getenv("RUSENDER_API_KEY", "").strip()
+RUSENDER_API_URL = os.getenv(
+    "RUSENDER_API_URL",
+    "https://api.beta.rusender.ru/api/v1/external-mails/send",
+).strip()
 
 # WebAuthn (Passkey): RP id обычно = hostname фронта без порта; origins — точные URL браузера (схема+хост+порт).
 WEBAUTHN_RP_ID = os.getenv("WEBAUTHN_RP_ID", "").strip()
