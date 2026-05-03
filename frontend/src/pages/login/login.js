@@ -1,5 +1,5 @@
 import "./login.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
@@ -336,6 +336,20 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [passkeyErrorScreen, setPasskeyErrorScreen] = useState(false);
+  const [showRecoverAccess, setShowRecoverAccess] = useState(false);
+  const [recoverEmail, setRecoverEmail] = useState("");
+  const [captchaKey, setCaptchaKey] = useState("");
+  const [captchaImageSrc, setCaptchaImageSrc] = useState("");
+  const [captchaCode, setCaptchaCode] = useState("");
+  const [captchaLoading, setCaptchaLoading] = useState(false);
+  /** Восстановление: шаг 1 (email+капча) → шаг 2 (код+пароли) → success */
+  const [recoverPhase, setRecoverPhase] = useState("step1");
+  const [recoverConfirmError, setRecoverConfirmError] = useState("");
+  const [recoverCode, setRecoverCode] = useState("");
+  const [recoverNewPassword, setRecoverNewPassword] = useState("");
+  const [recoverNewPassword2, setRecoverNewPassword2] = useState("");
+  const [resendCooldownSec, setResendCooldownSec] = useState(0);
+  const [recoverResendExpanded, setRecoverResendExpanded] = useState(false);
   const [{ returning: isReturningUser, name: storedWelcomeName }] = useState(() => readLoginWelcomeFromStorage());
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -389,6 +403,50 @@ function Login() {
     });
     window.scrollTo(0, 0);
   };
+
+  const loadCaptcha = useCallback(async () => {
+    setCaptchaLoading(true);
+    try {
+      const res = await fetch(API_ENDPOINTS.passwordResetCaptcha, { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error("captcha_fetch");
+      }
+      setCaptchaKey(typeof data.captcha_key === "string" ? data.captcha_key : "");
+      setCaptchaImageSrc(typeof data.image_base64 === "string" ? data.image_base64 : "");
+      setCaptchaCode("");
+    } catch {
+      setMessage("Не удалось загрузить капчу. Обновите страницу.");
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, []);
+
+  const resetRecoverWizard = useCallback(() => {
+    setRecoverPhase("step1");
+    setRecoverConfirmError("");
+    setRecoverCode("");
+    setRecoverNewPassword("");
+    setRecoverNewPassword2("");
+    setResendCooldownSec(0);
+    setRecoverResendExpanded(false);
+    setCaptchaCode("");
+    setMessage("");
+  }, []);
+
+  useEffect(() => {
+    if (resendCooldownSec <= 0) return undefined;
+    const t = setTimeout(() => {
+      setResendCooldownSec((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldownSec]);
+
+  useEffect(() => {
+    if (!showRecoverAccess) return undefined;
+    loadCaptcha();
+    return undefined;
+  }, [showRecoverAccess, loadCaptcha]);
 
   useEffect(() => {
     const vkErr = searchParams.get("vk_error");
@@ -562,6 +620,122 @@ function Login() {
     }
   };
 
+  const handleRecoverSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage("");
+    try {
+      const res = await fetch(API_ENDPOINTS.passwordResetCodeRequest, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: recoverEmail.trim(),
+          captcha_key: captchaKey,
+          captcha: captchaCode.trim(),
+        }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errText =
+          formatLoginApiErrors(data) ||
+          (typeof data.detail === "string" ? data.detail : "") ||
+          "Не удалось отправить запрос.";
+        setMessage(errText);
+        if (data.code === "captcha_invalid" || data.code === "captcha_expired") {
+          await loadCaptcha();
+        }
+        setLoading(false);
+        return;
+      }
+      setMessage("");
+      setRecoverPhase("step2");
+      setResendCooldownSec(60);
+      setRecoverResendExpanded(false);
+      setRecoverConfirmError("");
+    } catch (err) {
+      console.error("Recover password:", err);
+      setMessage("Произошла ошибка, попробуйте позже");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecoverConfirmSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setRecoverConfirmError("");
+    try {
+      const res = await fetch(API_ENDPOINTS.passwordResetCodeConfirm, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: recoverEmail.trim(),
+          code: recoverCode.trim(),
+          new_password: recoverNewPassword,
+          new_password_confirm: recoverNewPassword2,
+        }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errText =
+          formatLoginApiErrors(data) ||
+          (typeof data.detail === "string" ? data.detail : "") ||
+          "Не удалось сменить пароль.";
+        setRecoverConfirmError(errText);
+        setLoading(false);
+        return;
+      }
+      setRecoverPhase("success");
+    } catch (err) {
+      console.error("Recover confirm:", err);
+      setRecoverConfirmError("Произошла ошибка, попробуйте позже");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecoverResendSubmit = async (e) => {
+    e.preventDefault();
+    if (!recoverResendExpanded) return;
+    setLoading(true);
+    setRecoverConfirmError("");
+    try {
+      const res = await fetch(API_ENDPOINTS.passwordResetCodeRequest, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: recoverEmail.trim(),
+          captcha_key: captchaKey,
+          captcha: captchaCode.trim(),
+        }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errText =
+          formatLoginApiErrors(data) ||
+          (typeof data.detail === "string" ? data.detail : "") ||
+          "Не удалось отправить код.";
+        setRecoverConfirmError(errText);
+        if (data.code === "captcha_invalid" || data.code === "captcha_expired") {
+          await loadCaptcha();
+        }
+        setLoading(false);
+        return;
+      }
+      setResendCooldownSec(60);
+      setRecoverResendExpanded(false);
+      setCaptchaCode("");
+    } catch (err) {
+      console.error("Recover resend:", err);
+      setRecoverConfirmError("Произошла ошибка, попробуйте позже");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -639,31 +813,349 @@ function Login() {
         ) : (
         <div className="login-page__wrapper">
           <div className="login-page__container">
-            <div className="login-page__welcome">
-              <div className="login-page__avatar-wrap">
-                <div className="login-page__avatar">
-                  <LoginWelcomeAvatarIcon />
+            {showRecoverAccess ? (
+              <>
+                {recoverPhase === "success" ? (
+                  <>
+                    <div className="login-page__welcome login-page__welcome--recover">
+                      <h1 className="login-page__title">Восстановление доступа</h1>
+                    </div>
+                    <div className="login-page__alert login-page__alert--success" role="status">
+                      Пароль успешно изменён.
+                    </div>
+                    <button
+                      type="button"
+                      className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__login-btn"
+                      onClick={() => {
+                        setShowRecoverAccess(false);
+                        resetRecoverWizard();
+                      }}
+                    >
+                      Вернуться к авторизации
+                    </button>
+                  </>
+                ) : recoverPhase === "step2" ? (
+                  <>
+                    <div className="login-page__welcome login-page__welcome--recover">
+                      <h1 className="login-page__title">Восстановление доступа</h1>
+                    </div>
+                    <p className="login-page__recover-step2-intro">
+                      Если аккаунт существует, мы отправили код восстановления на почту.
+                    </p>
+                    {recoverEmail.trim() ? (
+                      <p className="login-page__recover-email-hint">{recoverEmail.trim()}</p>
+                    ) : null}
+
+                    <form className="login-page__form" onSubmit={handleRecoverConfirmSubmit} noValidate>
+                      <div className="login-page__form-block">
+                        <p className="login-page__form-block-title">Код из письма</p>
+                        <div className="login-page__form-block-inner">
+                          <div className="login-page__input">
+                            <div className="login-page__input-wrapper">
+                              <input
+                                className="login-page__input-field"
+                                type="text"
+                                id="recover-mail-code"
+                                name="recover-mail-code"
+                                autoComplete="one-time-code"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={recoverCode}
+                                onChange={(e) => setRecoverCode(e.target.value)}
+                                placeholder="000000"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="login-page__form-block">
+                        <p className="login-page__form-block-title">Новый пароль</p>
+                        <div className="login-page__form-block-inner">
+                          <div className="login-page__input login-page__input--password">
+                            <div className="login-page__input-wrapper">
+                              <input
+                                className="login-page__input-field"
+                                type="password"
+                                id="recover-new-password"
+                                name="recover-new-password"
+                                autoComplete="new-password"
+                                value={recoverNewPassword}
+                                onChange={(e) => setRecoverNewPassword(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="login-page__form-block">
+                        <p className="login-page__form-block-title">Повторите пароль</p>
+                        <div className="login-page__form-block-inner">
+                          <div className="login-page__input login-page__input--password">
+                            <div className="login-page__input-wrapper">
+                              <input
+                                className="login-page__input-field"
+                                type="password"
+                                id="recover-new-password2"
+                                name="recover-new-password2"
+                                autoComplete="new-password"
+                                value={recoverNewPassword2}
+                                onChange={(e) => setRecoverNewPassword2(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {recoverConfirmError ? (
+                        <div
+                          className="login-page__alert login-page__alert--error login-page__recover-confirm-error"
+                          role="alert"
+                        >
+                          {recoverConfirmError}
+                        </div>
+                      ) : null}
+
+                      <button
+                        type="submit"
+                        className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__login-btn"
+                        disabled={loading}
+                      >
+                        {loading ? "Сохранение..." : "Сменить пароль"}
+                      </button>
+                    </form>
+
+                    <div className="login-page__recover-resend">
+                      {resendCooldownSec > 0 ? (
+                        <p className="login-page__recover-resend-muted">
+                          Повторная отправка через {resendCooldownSec} сек.
+                        </p>
+                      ) : !recoverResendExpanded ? (
+                        <button
+                          type="button"
+                          className="login-page__recover-footer-link login-page__recover-resend-trigger"
+                          onClick={() => {
+                            setRecoverConfirmError("");
+                            setRecoverResendExpanded(true);
+                            void loadCaptcha();
+                            setCaptchaCode("");
+                          }}
+                          disabled={loading || captchaLoading}
+                        >
+                          Отправить код повторно
+                        </button>
+                      ) : (
+                        <form className="login-page__form login-page__recover-resend-form" onSubmit={handleRecoverResendSubmit} noValidate>
+                          <p className="login-page__form-block-title">Введите код с картинки</p>
+                          <div className="login-page__form-block-inner login-page__form-block-inner--captcha">
+                            <div className="login-page__captcha-visual">
+                              <div className="login-page__captcha-frame">
+                                {captchaImageSrc ? (
+                                  <img
+                                    src={captchaImageSrc}
+                                    alt=""
+                                    className="login-page__captcha-img"
+                                  />
+                                ) : (
+                                  <div className="login-page__captcha-skel" aria-hidden />
+                                )}
+                                <button
+                                  type="button"
+                                  className="login-page__captcha-refresh"
+                                  onClick={() => void loadCaptcha()}
+                                  disabled={captchaLoading || loading}
+                                  aria-label="Обновить капчу"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20" aria-hidden>
+                                    <path
+                                      fill="#454CEE"
+                                      fillRule="evenodd"
+                                      d="M4 2a1 1 0 0 1 1 1v2.1a7 7 0 0 1 11.6 2.57 1 1 0 1 1-1.88.66A5 5 0 0 0 6 7h3a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm0 9.06a1 1 0 0 1 1.28.6A5 5 0 0 0 14 13h-3a1 1 0 0 1 0-2h5a1 1 0 0 1 1 1v5a1 1 0 0 1-2 0v-2.1a7 7 0 0 1-11.6-2.57 1 1 0 0 1 .6-1.27Z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                            <div className="login-page__input">
+                              <div className="login-page__input-wrapper">
+                                <input
+                                  className="login-page__input-field"
+                                  type="text"
+                                  id="recover-resend-captcha"
+                                  name="recover_resend_captcha"
+                                  autoComplete="off"
+                                  autoCapitalize="none"
+                                  value={captchaCode}
+                                  onChange={(e) => setCaptchaCode(e.target.value)}
+                                  placeholder="Код с картинки"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="submit"
+                            className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__login-btn"
+                            disabled={loading || captchaLoading}
+                          >
+                            {loading ? "Отправка..." : "Отправить код повторно"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+
+                    <p className="login-page__recover-footer-text">
+                      Есть аккаунт?{" "}
+                      <button
+                        type="button"
+                        className="login-page__recover-footer-link"
+                        onClick={() => {
+                          setShowRecoverAccess(false);
+                          resetRecoverWizard();
+                        }}
+                      >
+                        Вернуться к авторизации
+                      </button>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="login-page__welcome login-page__welcome--recover">
+                      <h1 className="login-page__title">Восстановление доступа</h1>
+                    </div>
+
+                    {message ? (
+                      <div
+                        className={`login-page__alert ${messageIsSuccess ? "login-page__alert--success" : "login-page__alert--error"}`}
+                        role="alert"
+                      >
+                        {message}
+                      </div>
+                    ) : null}
+
+                    <form className="login-page__form" onSubmit={handleRecoverSubmit} noValidate>
+                      <div className="login-page__form-block">
+                        <p className="login-page__form-block-title">Email</p>
+                        <div className="login-page__form-block-inner">
+                          <div className="login-page__input">
+                            <div className="login-page__input-wrapper">
+                              <input
+                                className="login-page__input-field"
+                                type="email"
+                                id="recover-email"
+                                name="recover-email"
+                                autoComplete="email"
+                                autoCapitalize="none"
+                                inputMode="email"
+                                value={recoverEmail}
+                                onChange={(e) => setRecoverEmail(e.target.value)}
+                                required
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="login-page__form-block">
+                        <p className="login-page__form-block-title">Введите код с картинки</p>
+                        <div className="login-page__form-block-inner login-page__form-block-inner--captcha">
+                          <div className="login-page__captcha-visual">
+                            <div className="login-page__captcha-frame">
+                              {captchaImageSrc ? (
+                                <img
+                                  src={captchaImageSrc}
+                                  alt=""
+                                  className="login-page__captcha-img"
+                                />
+                              ) : (
+                                <div className="login-page__captcha-skel" aria-hidden />
+                              )}
+                              <button
+                                type="button"
+                                className="login-page__captcha-refresh"
+                                onClick={() => void loadCaptcha()}
+                                disabled={captchaLoading || loading}
+                                aria-label="Обновить капчу"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 20 20" aria-hidden>
+                                  <path
+                                    fill="#454CEE"
+                                    fillRule="evenodd"
+                                    d="M4 2a1 1 0 0 1 1 1v2.1a7 7 0 0 1 11.6 2.57 1 1 0 1 1-1.88.66A5 5 0 0 0 6 7h3a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm0 9.06a1 1 0 0 1 1.28.6A5 5 0 0 0 14 13h-3a1 1 0 0 1 0-2h5a1 1 0 0 1 1 1v5a1 1 0 0 1-2 0v-2.1a7 7 0 0 1-11.6-2.57 1 1 0 0 1 .6-1.27Z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div className="login-page__input">
+                            <div className="login-page__input-wrapper">
+                              <input
+                                className="login-page__input-field"
+                                type="text"
+                                id="recover-captcha"
+                                name="captcha_code"
+                                autoComplete="off"
+                                autoCapitalize="none"
+                                value={captchaCode}
+                                onChange={(e) => setCaptchaCode(e.target.value)}
+                                placeholder="Код с картинки"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__login-btn"
+                        disabled={loading || captchaLoading}
+                      >
+                        {loading ? "Отправка..." : "Отправить"}
+                      </button>
+                    </form>
+
+                    <p className="login-page__recover-footer-text">
+                      Есть аккаунт?{" "}
+                      <button
+                        type="button"
+                        className="login-page__recover-footer-link"
+                        onClick={() => {
+                          setShowRecoverAccess(false);
+                          resetRecoverWizard();
+                        }}
+                      >
+                        Вернуться к авторизации
+                      </button>
+                    </p>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="login-page__welcome">
+                  <div className="login-page__avatar-wrap">
+                    <div className="login-page__avatar">
+                      <LoginWelcomeAvatarIcon />
+                    </div>
+                  </div>
+                  <h1 className="login-page__title">
+                    {isReturningUser && storedWelcomeName
+                      ? `С возвращением, ${storedWelcomeName}`
+                      : isReturningUser
+                        ? "С возвращением"
+                        : "Вход"}
+                  </h1>
                 </div>
-              </div>
-              <h1 className="login-page__title">
-                {isReturningUser && storedWelcomeName
-                  ? `С возвращением, ${storedWelcomeName}`
-                  : isReturningUser
-                    ? "С возвращением"
-                    : "Вход"}
-              </h1>
-            </div>
 
-            {message ? (
-              <div
-                className={`login-page__alert ${messageIsSuccess ? "login-page__alert--success" : "login-page__alert--error"}`}
-                role="alert"
-              >
-                {message}
-              </div>
-            ) : null}
+                {message ? (
+                  <div
+                    className={`login-page__alert ${messageIsSuccess ? "login-page__alert--success" : "login-page__alert--error"}`}
+                    role="alert"
+                  >
+                    {message}
+                  </div>
+                ) : null}
 
-            <form className="login-page__form" onSubmit={handleSubmit} noValidate>
+                <form className="login-page__form" onSubmit={handleSubmit} noValidate>
               <div className="login-page__form-block">
                 <p className="login-page__form-block-title">Логин или емейл</p>
                 <div className="login-page__form-block-inner">
@@ -689,7 +1181,15 @@ function Login() {
               <div className="login-page__form-block">
                 <div className="login-page__form-block-title-row">
                   <p className="login-page__form-block-title">Пароль</p>
-                  <button type="button" className="login-page__recover-link">
+                  <button
+                    type="button"
+                    className="login-page__recover-link"
+                    onClick={() => {
+                      resetRecoverWizard();
+                      setRecoverEmail(email.trim());
+                      setShowRecoverAccess(true);
+                    }}
+                  >
                     Восстановить
                   </button>
                 </div>
@@ -782,6 +1282,8 @@ function Login() {
                 Зарегистрируйтесь
               </Link>
             </p>
+              </>
+            )}
           </div>
         </div>
         )}

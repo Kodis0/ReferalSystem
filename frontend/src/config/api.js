@@ -29,6 +29,11 @@ export const API_ENDPOINTS = {
   tokenTelegramWidget: `${API_BASE}/users/token/telegram/widget/`,
   tokenPasskeyLoginOptions: `${API_BASE}/users/token/passkey/login/options/`,
   tokenPasskeyLoginVerify: `${API_BASE}/users/token/passkey/login/verify/`,
+  passwordResetCaptcha: `${API_BASE}/users/password-reset/captcha/`,
+  /** Legacy: ссылка по uid/token в письме (если используется отдельно). */
+  passwordResetRequest: `${API_BASE}/users/password-reset/request/`,
+  passwordResetCodeRequest: `${API_BASE}/users/api/password-reset/request/`,
+  passwordResetCodeConfirm: `${API_BASE}/users/api/password-reset/confirm/`,
   passkeysRegisterOptions: `${API_BASE}/users/me/passkeys/register/options/`,
   passkeysRegisterVerify: `${API_BASE}/users/me/passkeys/register/verify/`,
   passkeysList: `${API_BASE}/users/me/passkeys/`,

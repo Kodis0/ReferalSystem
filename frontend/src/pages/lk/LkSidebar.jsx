@@ -732,7 +732,7 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
         </div>
 
         <div className="lk-sidebar__panel lk-sidebar__panel_section2 lk-sidebar__panel_nav">
-        <nav className="lk-sidebar__nav" aria-label="Разделы">
+        <nav className="lk-sidebar__nav" aria-label="Разделы и мини-игра">
           <Link
             to="/lk/programs"
             className={itemClass(programsListActive)}
@@ -905,36 +905,32 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             </span>
             <span className="lk-sidebar__nav-text">Предложить идею</span>
           </button>
-        </nav>
-        </div>
 
-        <div className="lk-sidebar__panel lk-sidebar__panel_mini-game lk-sidebar__panel_nav">
-          <nav className="lk-sidebar__nav" aria-label="Мини игра">
-            <Link
-              to="/lk/mini-game"
-              className={itemClass(miniGamePlayActive)}
-              aria-current={miniGamePlayActive ? "page" : undefined}
-            >
-              <MiniGameNavIcon />
-              <span className="lk-sidebar__nav-text">Мини игра</span>
-            </Link>
-            <Link
-              to="/lk/mini-game/progress"
-              className={itemClass(miniGameProgressActive)}
-              aria-current={miniGameProgressActive ? "page" : undefined}
-            >
-              <MiniGameProgressNavIcon />
-              <span className="lk-sidebar__nav-text">Прогресс</span>
-            </Link>
-            <Link
-              to="/lk/mini-game/rating"
-              className={itemClass(miniGameRatingActive)}
-              aria-current={miniGameRatingActive ? "page" : undefined}
-            >
-              <MiniGameRatingNavIcon />
-              <span className="lk-sidebar__nav-text">Рейтинг</span>
-            </Link>
-          </nav>
+          <Link
+            to="/lk/mini-game"
+            className={itemClass(miniGamePlayActive)}
+            aria-current={miniGamePlayActive ? "page" : undefined}
+          >
+            <MiniGameNavIcon />
+            <span className="lk-sidebar__nav-text">Мини игра</span>
+          </Link>
+          <Link
+            to="/lk/mini-game/progress"
+            className={itemClass(miniGameProgressActive)}
+            aria-current={miniGameProgressActive ? "page" : undefined}
+          >
+            <MiniGameProgressNavIcon />
+            <span className="lk-sidebar__nav-text">Прогресс</span>
+          </Link>
+          <Link
+            to="/lk/mini-game/rating"
+            className={itemClass(miniGameRatingActive)}
+            aria-current={miniGameRatingActive ? "page" : undefined}
+          >
+            <MiniGameRatingNavIcon />
+            <span className="lk-sidebar__nav-text">Рейтинг</span>
+          </Link>
+        </nav>
         </div>
       </div>
     </aside>

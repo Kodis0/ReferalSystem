@@ -2,17 +2,24 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import time
+from datetime import timedelta
 from unittest.mock import patch
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.hashers import make_password
+from django.core import mail
+from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from referrals.models import Project
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME
 
-from .models import SupportTicket, WebAuthnCredential
+from .models import PasswordResetCode, SupportTicket, WebAuthnCredential
+from .password_reset_views import CAPTCHA_CACHE_PREFIX
 from .support_attachments import attachment_disk_path
 
 
@@ -919,3 +926,361 @@ class OAuthProvidersApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.user.refresh_from_db()
         self.assertIsNone(self.user.oauth_google_sub)
+
+
+class PasswordResetApiTests(TestCase):
+    def test_captcha_get_returns_png_data_url(self):
+        c = APIClient()
+        r = c.get("/users/password-reset/captcha/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("captcha_key", r.data)
+        self.assertIn("image_base64", r.data)
+        self.assertTrue(str(r.data["image_base64"]).startswith("data:image/png;base64,"))
+
+    def test_reset_request_invalid_captcha(self):
+        c = APIClient()
+        cap = c.get("/users/password-reset/captcha/")
+        r = c.post(
+            "/users/password-reset/request/",
+            {"email": "x@example.com", "captcha_key": cap.data["captcha_key"], "captcha_code": "wrong"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "captcha_invalid")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_reset_request_sends_mail_when_user_exists(self):
+        User.objects.create_user(email="reset-me@example.com", username="resetme", password="secret123")
+        c = APIClient()
+        cap = c.get("/users/password-reset/captcha/")
+        key = cap.data["captcha_key"]
+        code = cache.get(f"{CAPTCHA_CACHE_PREFIX}{key}")
+        self.assertIsNotNone(code)
+        r = c.post(
+            "/users/password-reset/request/",
+            {"email": "reset-me@example.com", "captcha_key": key, "captcha_code": code},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("code"), "password_reset_requested")
+        self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_reset_request_unknown_email_same_response_no_mail(self):
+        c = APIClient()
+        cap = c.get("/users/password-reset/captcha/")
+        key = cap.data["captcha_key"]
+        code = cache.get(f"{CAPTCHA_CACHE_PREFIX}{key}")
+        r = c.post(
+            "/users/password-reset/request/",
+            {"email": "nobody@example.com", "captcha_key": key, "captcha_code": code},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("code"), "password_reset_requested")
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class PasswordResetCodeApiTests(TestCase):
+    GENERIC_DETAIL = "Если аккаунт существует, мы отправили код восстановления."
+
+    def _fresh_captcha(self, client):
+        cap = client.get("/users/password-reset/captcha/")
+        key = cap.data["captcha_key"]
+        code = cache.get(f"{CAPTCHA_CACHE_PREFIX}{key}")
+        self.assertIsNotNone(code)
+        return key, code
+
+    def _code_request(self, client, email):
+        key, cap_code = self._fresh_captcha(client)
+        return client.post(
+            "/users/api/password-reset/request/",
+            {"email": email, "captcha_key": key, "captcha": cap_code},
+            format="json",
+        )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_mail_failure_still_returns_generic_200(self):
+        User.objects.create_user(email="smtp-fail@example.com", username="smtpfail", password="Secret123!")
+        c = APIClient()
+        with (
+            patch(
+                "users.password_reset_code_views.issue_code_for_user",
+                side_effect=RuntimeError("smtp"),
+            ),
+            patch("users.password_reset_code_views.logger.exception") as log_exc,
+        ):
+            r = self._code_request(c, "smtp-fail@example.com")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("detail"), self.GENERIC_DETAIL)
+        log_exc.assert_called_once()
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_code_request_existing_returns_generic_success(self):
+        User.objects.create_user(email="code-u@example.com", username="codeu", password="OldSecret123!")
+        c = APIClient()
+        r = self._code_request(c, "code-u@example.com")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("detail"), self.GENERIC_DETAIL)
+        self.assertEqual(PasswordResetCode.objects.count(), 1)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_code_request_unknown_returns_generic_success_no_row(self):
+        c = APIClient()
+        r = self._code_request(c, "missing@example.com")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("detail"), self.GENERIC_DETAIL)
+        self.assertEqual(PasswordResetCode.objects.count(), 0)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_code_row_only_when_user_exists(self):
+        User.objects.create_user(email="only-exists@example.com", username="only", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "only-exists@example.com")
+        self.assertEqual(PasswordResetCode.objects.count(), 1)
+        self._code_request(c, "ghost@example.com")
+        self.assertEqual(PasswordResetCode.objects.count(), 1)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_mail_contains_six_digit_code(self):
+        User.objects.create_user(email="mailcode@example.com", username="mailcode", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "mailcode@example.com")
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        m = re.search(r"\b\d{6}\b", body)
+        self.assertIsNotNone(m)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_wrong_code_increments_attempts(self):
+        User.objects.create_user(email="attempts@example.com", username="attempts", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "attempts@example.com")
+        prc = PasswordResetCode.objects.get()
+        self.assertEqual(prc.attempts, 0)
+        c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "attempts@example.com",
+                "code": "000000",
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret123!",
+            },
+            format="json",
+        )
+        prc.refresh_from_db()
+        self.assertEqual(prc.attempts, 1)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_five_wrong_attempts_blocks_even_correct_code(self):
+        User.objects.create_user(email="five@example.com", username="five", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "five@example.com")
+        body = mail.outbox[0].body
+        good = re.search(r"\b\d{6}\b", body).group(0)
+        for _ in range(5):
+            r = c.post(
+                "/users/api/password-reset/confirm/",
+                {
+                    "email": "five@example.com",
+                    "code": "111111",
+                    "new_password": "NewSecret123!",
+                    "new_password_confirm": "NewSecret123!",
+                },
+                format="json",
+            )
+            self.assertEqual(r.status_code, 400)
+        r6 = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "five@example.com",
+                "code": good,
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret123!",
+            },
+            format="json",
+        )
+        self.assertEqual(r6.status_code, 400)
+        self.assertEqual(r6.data.get("code"), "password_reset_max_attempts")
+
+    def test_expired_code_rejected(self):
+        User.objects.create_user(email="exp@example.com", username="exp", password="Secret123!")
+        prc = PasswordResetCode.objects.create(
+            user=User.objects.get(email="exp@example.com"),
+            email="exp@example.com",
+            code_hash=make_password("654321"),
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+        PasswordResetCode.objects.filter(pk=prc.pk).update(
+            expires_at=timezone.now() - timedelta(minutes=1),
+        )
+        c = APIClient()
+        r = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "exp@example.com",
+                "code": "654321",
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret123!",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "password_reset_code_invalid")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_successful_confirm_invalidates_code_repeat_fails(self):
+        User.objects.create_user(email="reuse@example.com", username="reuse", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "reuse@example.com")
+        good = re.search(r"\b\d{6}\b", mail.outbox[0].body).group(0)
+        r1 = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "reuse@example.com",
+                "code": good,
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret123!",
+            },
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "reuse@example.com",
+                "code": good,
+                "new_password": "OtherSecret123!",
+                "new_password_confirm": "OtherSecret123!",
+            },
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 400)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_confirm_changes_password(self):
+        User.objects.create_user(email="chg@example.com", username="chg", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "chg@example.com")
+        good = re.search(r"\b\d{6}\b", mail.outbox[0].body).group(0)
+        r = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "chg@example.com",
+                "code": good,
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret123!",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        user = User.objects.get(email="chg@example.com")
+        self.assertTrue(user.check_password("NewSecret123!"))
+        self.assertIsNotNone(
+            authenticate(username="chg@example.com", password="NewSecret123!")
+        )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_confirm_marks_code_used_at(self):
+        User.objects.create_user(email="used@example.com", username="used", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "used@example.com")
+        good = re.search(r"\b\d{6}\b", mail.outbox[0].body).group(0)
+        prc = PasswordResetCode.objects.get()
+        self.assertIsNone(prc.used_at)
+        c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "used@example.com",
+                "code": good,
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret123!",
+            },
+            format="json",
+        )
+        prc.refresh_from_db()
+        self.assertIsNotNone(prc.used_at)
+
+    def test_confirm_password_mismatch(self):
+        User.objects.create_user(email="mm@example.com", username="mm", password="Secret123!")
+        c = APIClient()
+        r = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "mm@example.com",
+                "code": "123456",
+                "new_password": "NewSecret123!",
+                "new_password_confirm": "NewSecret124!",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "password_mismatch")
+
+    def test_confirm_password_validators(self):
+        User.objects.create_user(email="weak@example.com", username="weak", password="Secret123!")
+        PasswordResetCode.objects.create(
+            user=User.objects.get(email="weak@example.com"),
+            email="weak@example.com",
+            code_hash=make_password("123456"),
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+        c = APIClient()
+        r = c.post(
+            "/users/api/password-reset/confirm/",
+            {
+                "email": "weak@example.com",
+                "code": "123456",
+                "new_password": "123",
+                "new_password_confirm": "123",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "password_validation_failed")
+
+    def test_invalid_captcha_blocks_code_request(self):
+        User.objects.create_user(email="cap@example.com", username="cap", password="Secret123!")
+        c = APIClient()
+        cap = c.get("/users/password-reset/captcha/")
+        r = c.post(
+            "/users/api/password-reset/request/",
+            {
+                "email": "cap@example.com",
+                "captcha_key": cap.data["captcha_key"],
+                "captcha": "wrongwrong",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "captcha_invalid")
+        self.assertEqual(PasswordResetCode.objects.count(), 0)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_resend_cooldown_second_request_no_extra_row(self):
+        User.objects.create_user(email="cool@example.com", username="cool", password="Secret123!")
+        c = APIClient()
+        r1 = self._code_request(c, "cool@example.com")
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(PasswordResetCode.objects.count(), 1)
+        r2 = self._code_request(c, "cool@example.com")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data.get("detail"), self.GENERIC_DETAIL)
+        self.assertEqual(PasswordResetCode.objects.count(), 1)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_max_codes_per_hour_blocks_extra_row(self):
+        user = User.objects.create_user(email="hour@example.com", username="hour", password="Secret123!")
+        norm = "hour@example.com"
+        now = timezone.now()
+        for _ in range(5):
+            PasswordResetCode.objects.create(
+                user=user,
+                email=norm,
+                code_hash=make_password("111111"),
+                expires_at=now + timedelta(minutes=15),
+            )
+        c = APIClient()
+        r = self._code_request(c, "hour@example.com")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(PasswordResetCode.objects.count(), 5)

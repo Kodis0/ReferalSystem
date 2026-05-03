@@ -243,6 +243,183 @@ html:has(.login-page:not(.registration-page)) body {
   border-radius: var(--border-radius-small);
 }
 
+.login-page__welcome--recover {
+  margin-bottom: 28px;
+}
+
+.login-page__welcome--recover .login-page__title {
+  margin: 0;
+}
+
+.login-page__form-block-inner--captcha {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-page__form-block-inner--captcha > .login-page__captcha-visual {
+  flex-shrink: 0;
+}
+
+.login-page__form-block-inner--captcha > .login-page__input {
+  flex: 1 1 160px;
+  width: auto;
+  min-width: 120px;
+}
+
+.login-page__captcha-visual {
+  width: auto;
+}
+
+.login-page__captcha-frame {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  line-height: 0;
+}
+
+.login-page__captcha-img {
+  display: block;
+  height: 48px;
+  width: auto;
+  max-height: 48px;
+  aspect-ratio: 168 / 56;
+  object-fit: contain;
+  border-radius: var(--border-radius-medium);
+  background: #fff;
+  border: 1px solid var(--line-color);
+  box-sizing: border-box;
+}
+
+.login-page__captcha-skel {
+  display: block;
+  height: 48px;
+  width: 144px;
+  border-radius: var(--border-radius-medium);
+  background: #fff;
+  border: 1px solid var(--line-color);
+  box-sizing: border-box;
+  opacity: 0.85;
+}
+
+.login-page__captcha-refresh {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--border-radius-medium);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(5, 12, 38, 0.12);
+  color: var(--main-color-inverted);
+  cursor: pointer;
+  transition:
+    background var(--transition-duration) var(--transition-function),
+    opacity var(--transition-duration) var(--transition-function),
+    box-shadow var(--transition-duration) var(--transition-function);
+}
+
+.login-page__captcha-refresh:hover:not(:disabled) {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(5, 12, 38, 0.14);
+}
+
+.login-page__captcha-refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.login-page__recover-footer-text {
+  margin: 24px 0 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-secondary-color);
+}
+
+.login-page__recover-footer-link {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: 500;
+  color: var(--main-color);
+  text-decoration: none;
+  transition: color var(--transition-duration) var(--transition-function);
+}
+
+.login-page__recover-footer-link:hover {
+  color: var(--main-variant-color);
+}
+
+.login-page__recover-footer-link:focus-visible {
+  outline: 2px solid var(--main-color-50);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-small);
+}
+
+.login-page__recover-step2-intro {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary-color);
+}
+
+.login-page__recover-email-hint {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--grey-color);
+  word-break: break-all;
+}
+
+.login-page__recover-confirm-error {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.login-page__recover-resend {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-color);
+}
+
+.login-page__recover-resend-muted {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-secondary-color);
+  text-align: center;
+}
+
+.login-page__recover-resend-trigger {
+  display: block;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.login-page__recover-resend-form {
+  margin-top: 8px;
+}
+
+.login-page__recover-resend-form .login-page__login-btn {
+  margin-top: 16px;
+}
+
 .login-page__wrapper {
   flex: 0 1 auto;
   min-height: 0;

@@ -48,6 +48,19 @@ ALLOWED_HOSTS = [
 _cors_raw = os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").strip()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+# Письма: стандартные Django EMAIL_* + DEFAULT_FROM_EMAIL (без привязки к провайдеру SMTP).
+DEFAULT_FROM_EMAIL = (
+    os.getenv("DEFAULT_FROM_EMAIL", "").strip()
+    or os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "").strip()
+    or "webmaster@localhost"
+)
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "").strip()
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "").strip()
+
 # WebAuthn (Passkey): RP id обычно = hostname фронта без порта; origins — точные URL браузера (схема+хост+порт).
 WEBAUTHN_RP_ID = os.getenv("WEBAUTHN_RP_ID", "").strip()
 WEBAUTHN_RP_NAME = os.getenv("WEBAUTHN_RP_NAME", "LumoRef").strip() or "LumoRef"

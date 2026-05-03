@@ -127,3 +127,31 @@ class SupportTicket(models.Model):
 
     def __str__(self) -> str:
         return f"SupportTicket({self.id}) user={self.user_id}"
+
+
+class PasswordResetCode(models.Model):
+    """Одноразовый цифровой код восстановления пароля (hash в БД, plaintext только в письме)."""
+
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="password_reset_codes",
+    )
+    email = models.EmailField(db_index=True)
+    code_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    request_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(fields=["email", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"PasswordResetCode({self.pk}) user={self.user_id}"

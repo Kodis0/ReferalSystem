@@ -37,6 +37,8 @@ from .support_views import (
     SupportTicketListCreateView,
     SupportTicketRetrieveView,
 )
+from .password_reset_views import PasswordResetCaptchaView, PasswordResetRequestView
+from .password_reset_code_views import PasswordResetCodeConfirmView, PasswordResetCodeRequestView
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -53,6 +55,10 @@ urlpatterns = [
     path('token/telegram/widget/', TelegramWidgetLoginView.as_view(), name='telegram_widget_login'),
     path('token/passkey/login/options/', PasskeyLoginOptionsView.as_view(), name='passkey_login_options'),
     path('token/passkey/login/verify/', PasskeyLoginVerifyView.as_view(), name='passkey_login_verify'),
+    path('password-reset/captcha/', PasswordResetCaptchaView.as_view(), name='password_reset_captcha'),
+    path('password-reset/request/', PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('api/password-reset/request/', PasswordResetCodeRequestView.as_view(), name='password_reset_code_request'),
+    path('api/password-reset/confirm/', PasswordResetCodeConfirmView.as_view(), name='password_reset_code_confirm'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('me/passkeys/register/options/', PasskeyRegisterOptionsView.as_view(), name='passkey_register_options'),
     path('me/passkeys/register/verify/', PasskeyRegisterVerifyView.as_view(), name='passkey_register_verify'),
