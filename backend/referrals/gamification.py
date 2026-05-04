@@ -20,7 +20,14 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .gamification_game import replay_daily_challenge, validate_finish_timing
-from .models import DailyChallengeAttempt, GamificationProfile, Order, PartnerProfile, XPEvent
+from .models import (
+    DailyChallengeAttempt,
+    GamificationProfile,
+    Order,
+    PartnerProfile,
+    ReferralPointTransaction,
+    XPEvent,
+)
 
 # Sanity cap for submitted game scores (anti-abuse).
 MAX_CHALLENGE_SCORE = 100_000
@@ -310,6 +317,11 @@ def build_gamification_summary(user) -> dict[str, Any]:
             "best_challenge_score": profile.best_challenge_score,
             "league_id": league_id,
         },
+        "points": {
+            "balance": int(profile.points_balance),
+            "lifetime_earned": int(profile.points_lifetime_earned),
+            "lifetime_spent": int(profile.points_lifetime_spent),
+        },
         "lives": {
             "current": profile.lives_current,
             "max": profile.lives_max,
@@ -584,6 +596,18 @@ def calculate_referral_league_id(sales_rub: int, level: int, streak_days: int) -
     return "start"
 
 
+# Referral shop points multiplier by league (same tier names as ``calculate_referral_league_id``).
+REFERRAL_LEAGUE_POINT_MULTIPLIERS: dict[str, Decimal] = {
+    "start": Decimal("1"),
+    "bronze": Decimal("1.25"),
+    "silver": Decimal("1.5"),
+    "gold": Decimal("2"),
+    "platinum": Decimal("2.5"),
+    "diamond": Decimal("3"),
+    "ultra": Decimal("4"),
+}
+
+
 def grant_purchase_xp_for_paid_referral_order(order: Order) -> int:
     """
     Idempotent XP into ``GamificationProfile.xp_total`` for a paid referral sale (same eligibility
@@ -644,6 +668,85 @@ def grant_purchase_xp_for_paid_referral_order(order: Order) -> int:
         return xp_amt
 
 
+def grant_purchase_points_for_paid_referral_order(order: Order) -> int:
+    """
+    Idempotent referral shop points for a paid referral sale.
+
+    League multiplier uses partner state *before* XP from this order: all-time paid sales
+    excluding this order, current ``xp_total``, and current streak — via ``calculate_referral_league_id``.
+    """
+    if order.status != Order.Status.PAID:
+        return 0
+    if not order.partner_id:
+        return 0
+    if order.amount is None or order.amount <= 0:
+        return 0
+
+    currency = (order.currency or "").strip()
+    if currency and currency != "RUB":
+        return 0
+
+    partner = order.partner
+    if partner.status != PartnerProfile.Status.ACTIVE:
+        return 0
+
+    from referrals.services import would_be_self_referral
+
+    buyer = order.customer_user if order.customer_user_id else None
+    if would_be_self_referral(
+        partner,
+        customer_user=buyer,
+        customer_email=order.customer_email or "",
+    ):
+        return 0
+
+    amount_rub = int(Decimal(order.amount).quantize(Decimal("1"), rounding=ROUND_FLOOR))
+    base_points = amount_rub // 100
+    if base_points <= 0:
+        return 0
+
+    partner_user = partner.user
+    idem = f"referral_points:purchase_confirmed:{order.pk}"
+
+    with transaction.atomic():
+        profile, _ = GamificationProfile.objects.select_for_update().get_or_create(user=partner_user)
+
+        sales_rub = _referral_sales_rub_partner_all_time_excluding_order(order.partner_id, order.pk)
+        level = calculate_level(profile.xp_total)
+        league_id = calculate_referral_league_id(sales_rub, level, int(profile.streak_days))
+        mult = REFERRAL_LEAGUE_POINT_MULTIPLIERS.get(league_id, Decimal("1"))
+        points_amt = _award_decimal_to_int(base_points, mult)
+        if points_amt <= 0:
+            return 0
+
+        try:
+            with transaction.atomic():
+                ReferralPointTransaction.objects.create(
+                    user=partner_user,
+                    transaction_type=ReferralPointTransaction.Type.PURCHASE_CONFIRMED,
+                    amount=points_amt,
+                    idempotency_key=idem,
+                    balance_after=int(profile.points_balance) + points_amt,
+                    metadata={
+                        "order_id": order.pk,
+                        "league_id": league_id,
+                        "base_points": base_points,
+                        "multiplier": str(mult),
+                    },
+                )
+        except IntegrityError as exc:
+            if ReferralPointTransaction.objects.filter(idempotency_key=idem).exists():
+                return 0
+            raise exc
+
+        profile.points_balance += points_amt
+        profile.points_lifetime_earned += points_amt
+        profile.save(
+            update_fields=["points_balance", "points_lifetime_earned", "updated_at"],
+        )
+        return points_amt
+
+
 def _looks_like_email(value: str) -> bool:
     return "@" in value
 
@@ -701,6 +804,15 @@ def _referral_sales_rub_all_time(user) -> int:
     if pp is None:
         return 0
     agg = _referral_paid_orders_qs(None).filter(partner_id=pp.id).aggregate(s=Sum("amount"))
+    return _rub_from_decimal(agg["s"])
+
+
+def _referral_sales_rub_partner_all_time_excluding_order(partner_id: int, exclude_order_id: int | None) -> int:
+    """Paid referral RUB sales for partner, optionally excluding one order (for pre-order league)."""
+    qs = _referral_paid_orders_qs(None).filter(partner_id=partner_id)
+    if exclude_order_id is not None:
+        qs = qs.exclude(pk=exclude_order_id)
+    agg = qs.aggregate(s=Sum("amount"))
     return _rub_from_decimal(agg["s"])
 
 

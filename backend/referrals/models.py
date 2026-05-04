@@ -601,6 +601,9 @@ class GamificationProfile(models.Model):
         related_name="gamification_profile",
     )
     xp_total = models.PositiveIntegerField(default=0)
+    points_balance = models.PositiveIntegerField(default=0)
+    points_lifetime_earned = models.PositiveIntegerField(default=0)
+    points_lifetime_spent = models.PositiveIntegerField(default=0)
     streak_days = models.PositiveIntegerField(default=0)
     last_activity_date = models.DateField(null=True, blank=True)
     last_streak_increment_date = models.DateField(null=True, blank=True)
@@ -617,6 +620,46 @@ class GamificationProfile(models.Model):
 
     def __str__(self) -> str:
         return f"GamificationProfile(user={self.user_id})"
+
+
+class ReferralPointTransaction(models.Model):
+    """Ledger for referral shop points (separate from XP)."""
+
+    class Type(models.TextChoices):
+        PURCHASE_CONFIRMED = "purchase_confirmed", "Purchase confirmed"
+        MANUAL_ADJUSTMENT = "manual_adjustment", "Manual adjustment"
+        REWARD_SPEND = "reward_spend", "Reward spend"
+        REWARD_REFUND = "reward_refund", "Reward refund"
+        ORDER_REFUND_REVERSAL = "order_refund_reversal", "Order refund reversal"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="referral_point_transactions",
+        db_index=True,
+    )
+    transaction_type = models.CharField(
+        max_length=32,
+        choices=Type.choices,
+        db_index=True,
+    )
+    amount = models.IntegerField()
+    idempotency_key = models.CharField(max_length=192, unique=True, null=True, blank=True)
+    balance_after = models.IntegerField()
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ReferralPointTransaction(user={self.user_id}, type={self.transaction_type!r}, "
+            f"amount={self.amount})"
+        )
 
 
 class XPEvent(models.Model):

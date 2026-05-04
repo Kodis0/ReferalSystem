@@ -4,21 +4,30 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from referrals.gamification import (
+    build_gamification_summary,
     calculate_daily_challenge_base_xp,
     calculate_level,
     calculate_referral_league_id,
     get_streak_multiplier,
+    grant_purchase_points_for_paid_referral_order,
     grant_purchase_xp_for_paid_referral_order,
     local_today,
     xp_threshold_for_level,
 )
 from referrals.gamification_game import replay_daily_challenge
-from referrals.models import DailyChallengeAttempt, GamificationProfile, Order, XPEvent
+from referrals.models import (
+    DailyChallengeAttempt,
+    GamificationProfile,
+    Order,
+    ReferralPointTransaction,
+    XPEvent,
+)
 from referrals.services import ensure_partner_profile
 from referrals.tests.gamification_autoplay import greedy_moves_until_game_over
 
@@ -64,6 +73,9 @@ class GamificationApiTests(TestCase):
         body = r.json()
         self.assertEqual(body["profile"]["xp_total"], 0)
         self.assertEqual(body["profile"]["streak_days"], 0)
+        self.assertEqual(body["points"]["balance"], 0)
+        self.assertEqual(body["points"]["lifetime_earned"], 0)
+        self.assertEqual(body["points"]["lifetime_spent"], 0)
         self.assertEqual(body["lives"]["current"], 5)
         self.assertEqual(body["lives"]["max"], 5)
         self.assertIn("daily_challenge_xp_tiers", body)
@@ -503,6 +515,128 @@ class PurchaseReferralXpGrantTests(TestCase):
     def test_self_referral_skips_xp(self):
         order = self._paid_order(customer_email=self.user.email)
         self.assertEqual(grant_purchase_xp_for_paid_referral_order(order), 0)
+
+
+class ReferralPurchasePointsGrantTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="points_seller",
+            email="points_seller@example.com",
+            password="secret12",
+        )
+        self.partner, _ = ensure_partner_profile(self.user)
+
+    def _paid_order(self, **kwargs):
+        defaults = {
+            "dedupe_key": f"t:pts-{uuid.uuid4().hex}",
+            "source": Order.Source.TILDA,
+            "external_id": f"ext-{uuid.uuid4().hex[:8]}",
+            "payload_fingerprint": uuid.uuid4().hex[:64],
+            "partner": self.partner,
+            "amount": Decimal("10000.00"),
+            "currency": "RUB",
+            "status": Order.Status.PAID,
+            "paid_at": timezone.now(),
+            "customer_email": "buyer_pts@example.com",
+        }
+        defaults.update(kwargs)
+        return Order.objects.create(**defaults)
+
+    def test_purchase_points_accrual_and_ledger(self):
+        order = self._paid_order(amount=Decimal("10000.00"))
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 100)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.points_balance, 100)
+        self.assertEqual(gp.points_lifetime_earned, 100)
+        self.assertEqual(gp.points_lifetime_spent, 0)
+        row = ReferralPointTransaction.objects.get(user=self.user)
+        self.assertEqual(row.transaction_type, ReferralPointTransaction.Type.PURCHASE_CONFIRMED)
+        self.assertEqual(row.amount, 100)
+        self.assertEqual(row.balance_after, 100)
+        self.assertEqual(row.idempotency_key, f"referral_points:purchase_confirmed:{order.pk}")
+
+    def test_purchase_points_idempotent(self):
+        order = self._paid_order()
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 100)
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 0)
+        self.assertEqual(ReferralPointTransaction.objects.filter(user=self.user).count(), 1)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.points_balance, 100)
+
+    def test_non_rub_no_points_no_ledger(self):
+        order = self._paid_order(currency="USD")
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 0)
+        self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
+
+    def test_no_partner_no_points(self):
+        order = self._paid_order(partner=None)
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 0)
+        self.assertFalse(GamificationProfile.objects.filter(user=self.user).exists())
+
+    def test_self_referral_no_points(self):
+        order = self._paid_order(customer_email=self.user.email)
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 0)
+        self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
+
+    def test_start_multiplier_100k_rub_order(self):
+        order = self._paid_order(amount=Decimal("100000.00"))
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(order), 1000)
+
+    def test_silver_multiplier_large_order_after_prior_sales(self):
+        GamificationProfile.objects.create(user=self.user, xp_total=3000, streak_days=8)
+        now = timezone.now()
+        self._paid_order(
+            dedupe_key=f"t:prior-{uuid.uuid4().hex}",
+            amount=Decimal("80000.00"),
+            paid_at=now,
+        )
+        big = self._paid_order(
+            dedupe_key=f"t:big-{uuid.uuid4().hex}",
+            amount=Decimal("100000.00"),
+            paid_at=now,
+        )
+        self.assertEqual(calculate_referral_league_id(80000, 5, 8), "silver")
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(big), 1500)
+
+    def test_points_use_sales_excluding_current_order_for_league(self):
+        """Without exclusion, total sales would reach silver; excluded sales stay bronze."""
+        GamificationProfile.objects.create(user=self.user, xp_total=3000, streak_days=8)
+        now = timezone.now()
+        self._paid_order(
+            dedupe_key=f"t:edge-{uuid.uuid4().hex}",
+            amount=Decimal("70000.00"),
+            paid_at=now,
+        )
+        edge = self._paid_order(
+            dedupe_key=f"t:edge2-{uuid.uuid4().hex}",
+            amount=Decimal("10000.00"),
+            paid_at=now,
+        )
+        self.assertEqual(calculate_referral_league_id(70000, 5, 8), "bronze")
+        self.assertEqual(calculate_referral_league_id(80000, 5, 8), "silver")
+        self.assertEqual(grant_purchase_points_for_paid_referral_order(edge), 125)
+
+    def test_build_gamification_summary_points_block(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=11,
+            points_lifetime_earned=22,
+            points_lifetime_spent=3,
+        )
+        s = build_gamification_summary(self.user)
+        self.assertEqual(s["points"]["balance"], 11)
+        self.assertEqual(s["points"]["lifetime_earned"], 22)
+        self.assertEqual(s["points"]["lifetime_spent"], 3)
+
+    @patch.object(ReferralPointTransaction.objects, "create", side_effect=IntegrityError("other"))
+    def test_integrity_error_without_idempotent_row_reraises(self, _mock):
+        GamificationProfile.objects.create(user=self.user)
+        order = self._paid_order()
+        with self.assertRaises(IntegrityError):
+            grant_purchase_points_for_paid_referral_order(order)
+        self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.points_balance, 0)
 
 
 class LocalTodayPatchTests(TestCase):
