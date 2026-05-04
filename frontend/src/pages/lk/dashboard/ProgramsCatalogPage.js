@@ -6,6 +6,8 @@ import { API_ENDPOINTS } from "../../../config/api";
 import { LK_PROGRAM_LISTS_REFETCH_EVENT, LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import programsCatalogHeroArt from "../../../static/images/programs-catalog-hero-megaphone.png";
+import achievementRevealEye from "../../../static/images/achievement-reveal-eye.svg";
+import programsCatalogHeroHiddenEye from "../../../static/images/programs-catalog-hero-hidden-eye.svg";
 import "../lk.css";
 import "../owner-programs/owner-programs.css";
 import "./dashboard.css";
@@ -22,6 +24,38 @@ import {
   programCatalogExternalSiteHref,
   programCatalogSiteOriginLabel,
 } from "./programsCatalogModel";
+import {
+  eyePosUnchanged,
+  floatingEyePosHeroHidden,
+  floatingEyeTopLeftFromBannerInset,
+  rectCenterToFixedEyeTopLeft,
+  roundFixedEyePos,
+} from "./catalogHeroEyeGeometry";
+
+/** Скрытие hero-баннера каталога (версия ключа — при смене текста баннера поднять :v2). */
+const REFERRAL_PROGRAMS_HERO_HIDDEN_KEY = "referralProgramsHeroHidden:v1";
+
+function readCatalogHeroHiddenFromStorage() {
+  try {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(REFERRAL_PROGRAMS_HERO_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistCatalogHeroHidden(hidden) {
+  try {
+    if (typeof window === "undefined") return;
+    if (hidden) {
+      window.localStorage.setItem(REFERRAL_PROGRAMS_HERO_HIDDEN_KEY, "1");
+    } else {
+      window.localStorage.removeItem(REFERRAL_PROGRAMS_HERO_HIDDEN_KEY);
+    }
+  } catch {
+    /* storage недоступен — состояние только в памяти сессии */
+  }
+}
 
 function ServiceActionsIcon() {
   return (
@@ -94,6 +128,134 @@ export default function ProgramsCatalogPage() {
   const [leavingSiteId, setLeavingSiteId] = useState("");
   const menuDropdownPortalRef = useRef(null);
   const [menuAnchorRect, setMenuAnchorRect] = useState(null);
+  const [catalogHeroHidden, setCatalogHeroHidden] = useState(readCatalogHeroHiddenFromStorage);
+  const [catalogHeroEyePos, setCatalogHeroEyePos] = useState(null);
+  const catalogHeroEyeRoRafRef = useRef(null);
+  /** После «Скрыть» при открытом баннере — полный {top,left} угла hero (как в открытом состоянии); не пересчитывать по строке заголовка */
+  const catalogHeroEyeFrozenPosRef = useRef(null);
+  const catalogHeroCornerAnchorRef = useRef(null);
+  const catalogHeroBannerRef = useRef(null);
+  const catalogHeroCollapseRef = useRef(null);
+  const catalogHeroHeadingRowRef = useRef(null);
+  const catalogHeroHeadingRef = useRef(null);
+  /** Резерв ширины справа у строки заголовка (inline flex) */
+  const catalogHeroHeadingEyeAnchorRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (catalogHeroEyeRoRafRef.current != null) {
+        window.cancelAnimationFrame(catalogHeroEyeRoRafRef.current);
+      }
+    };
+  }, []);
+
+  /**
+   * Один портал: открыто — угол баннера; скрыто — замороженная позиция угла на момент «Скрыть», иначе слот строки (только LS).
+   */
+  const syncCatalogHeroFloatingEye = useCallback(() => {
+    const commitEyePos = (raw) => {
+      const pos = raw ? roundFixedEyePos(raw) : null;
+      if (!pos) return;
+      setCatalogHeroEyePos((prev) => (eyePosUnchanged(prev, pos) ? prev : pos));
+    };
+
+    if (!catalogHeroHidden) {
+      const fromBanner = floatingEyeTopLeftFromBannerInset(catalogHeroBannerRef.current);
+      if (fromBanner) {
+        commitEyePos(fromBanner);
+      } else {
+        const corner = catalogHeroCornerAnchorRef.current;
+        const cornerRect = corner?.getBoundingClientRect();
+        if (cornerRect && cornerRect.width >= 1 && cornerRect.height >= 1) {
+          commitEyePos(rectCenterToFixedEyeTopLeft(cornerRect));
+        }
+      }
+      return;
+    }
+
+    const frozen = catalogHeroEyeFrozenPosRef.current;
+    if (frozen) {
+      commitEyePos(frozen);
+      return;
+    }
+
+    const slotPos = floatingEyePosHeroHidden(catalogHeroHeadingEyeAnchorRef.current, catalogHeroHeadingRowRef.current);
+    if (slotPos) {
+      commitEyePos(slotPos);
+    }
+  }, [catalogHeroHidden]);
+
+  const hideCatalogHero = useCallback(() => {
+    const fromBanner = floatingEyeTopLeftFromBannerInset(catalogHeroBannerRef.current);
+    if (fromBanner) {
+      catalogHeroEyeFrozenPosRef.current = fromBanner;
+    } else {
+      const corner = catalogHeroCornerAnchorRef.current;
+      const cr = corner?.getBoundingClientRect();
+      if (cr && cr.width >= 1 && cr.height >= 1) {
+        catalogHeroEyeFrozenPosRef.current = rectCenterToFixedEyeTopLeft(cr);
+      } else {
+        const slotPos = floatingEyePosHeroHidden(
+          catalogHeroHeadingEyeAnchorRef.current,
+          catalogHeroHeadingRowRef.current,
+        );
+        if (slotPos) {
+          catalogHeroEyeFrozenPosRef.current = slotPos;
+        }
+      }
+    }
+    setCatalogHeroHidden(true);
+    persistCatalogHeroHidden(true);
+  }, []);
+
+  const showCatalogHero = useCallback(() => {
+    catalogHeroEyeFrozenPosRef.current = null;
+    setCatalogHeroHidden(false);
+    persistCatalogHeroHidden(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    syncCatalogHeroFloatingEye();
+  }, [syncCatalogHeroFloatingEye]);
+
+  useLayoutEffect(() => {
+    if (typeof ResizeObserver !== "function") {
+      return undefined;
+    }
+    const row = catalogHeroHeadingRowRef.current;
+    const collapse = catalogHeroCollapseRef.current;
+    const scheduleSync = () => {
+      if (catalogHeroEyeRoRafRef.current != null) {
+        window.cancelAnimationFrame(catalogHeroEyeRoRafRef.current);
+      }
+      catalogHeroEyeRoRafRef.current = window.requestAnimationFrame(() => {
+        catalogHeroEyeRoRafRef.current = null;
+        syncCatalogHeroFloatingEye();
+      });
+    };
+    const ro = new ResizeObserver(scheduleSync);
+    if (row) ro.observe(row);
+    if (collapse) ro.observe(collapse);
+    return () => {
+      ro.disconnect();
+      if (catalogHeroEyeRoRafRef.current != null) {
+        window.cancelAnimationFrame(catalogHeroEyeRoRafRef.current);
+        catalogHeroEyeRoRafRef.current = null;
+      }
+    };
+  }, [syncCatalogHeroFloatingEye]);
+
+  useEffect(() => {
+    function onViewportChange() {
+      syncCatalogHeroFloatingEye();
+    }
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [syncCatalogHeroFloatingEye]);
 
   useEffect(() => {
     if (!filtersPanelOpen) return undefined;
@@ -440,25 +602,51 @@ export default function ProgramsCatalogPage() {
         aria-labelledby="programs-catalog-heading"
         aria-busy={programs === null && !error ? true : undefined}
       >
-        <div className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero">
-          <div className="lk-dashboard__my-programs-catalog-banner-inner">
-            <div className="lk-dashboard__my-programs-catalog-banner-copy">
-              <p className="lk-dashboard__my-programs-catalog-banner-title">
-                Начните зарабатывать на рекомендациях
-              </p>
-              <p className="lk-dashboard__my-programs-catalog-banner-sub">
-                Выберите подходящую программу, вступите в неё и получите персональную ссылку. Делитесь ссылкой с
-                аудиторией — все привлечённые клиенты будут закрепляться за вами.
-              </p>
-            </div>
-            <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">
-              <img src={programsCatalogHeroArt} alt="" decoding="async" />
+        <div
+          ref={catalogHeroCollapseRef}
+          className={
+            "lk-dashboard__programs-catalog-hero-collapse" +
+            (catalogHeroHidden ? "" : " lk-dashboard__programs-catalog-hero-collapse--open")
+          }
+          aria-hidden={catalogHeroHidden}
+        >
+          <div className="lk-dashboard__programs-catalog-hero-collapse-sizer">
+            <div
+              ref={catalogHeroBannerRef}
+              className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero"
+            >
+              <span
+                ref={catalogHeroCornerAnchorRef}
+                className="lk-dashboard__programs-catalog-hero-eye-anchor lk-dashboard__programs-catalog-hero-eye-anchor--corner"
+                aria-hidden="true"
+              />
+              <div className="lk-dashboard__my-programs-catalog-banner-inner">
+                <div className="lk-dashboard__my-programs-catalog-banner-copy">
+                  <p className="lk-dashboard__my-programs-catalog-banner-title">
+                    Начните зарабатывать на рекомендациях
+                  </p>
+                  <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                    Выберите подходящую программу, вступите в неё и получите персональную ссылку. Делитесь ссылкой с
+                    аудиторией — все привлечённые клиенты будут закрепляться за вами.
+                  </p>
+                </div>
+                <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">
+                  <img src={programsCatalogHeroArt} alt="" decoding="async" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <h1 id="programs-catalog-heading" className="lk-dashboard__programs-title">
-          Каталог реферальных программ
-        </h1>
+        <div ref={catalogHeroHeadingRowRef} className="lk-dashboard__programs-catalog-heading-row">
+          <h1 ref={catalogHeroHeadingRef} id="programs-catalog-heading" className="lk-dashboard__programs-title">
+            Каталог реферальных программ
+          </h1>
+          <span
+            ref={catalogHeroHeadingEyeAnchorRef}
+            className="lk-dashboard__programs-catalog-hero-eye-anchor lk-dashboard__programs-catalog-hero-eye-anchor--inline"
+            aria-hidden="true"
+          />
+        </div>
 
         {programs !== null && !error && programsExcludingJoined && programsExcludingJoined.length > 0 ? (
           <>
@@ -655,6 +843,33 @@ export default function ProgramsCatalogPage() {
         ) : null}
       </section>
     </div>
+    {catalogHeroEyePos && typeof document !== "undefined"
+      ? createPortal(
+          <button
+            type="button"
+            className="lk-dashboard__programs-catalog-floating-eye lk-dashboard__programs-catalog-hero-eye"
+            style={{
+              top: catalogHeroEyePos.top,
+              left: catalogHeroEyePos.left,
+            }}
+            onClick={catalogHeroHidden ? showCatalogHero : hideCatalogHero}
+            aria-label={
+              catalogHeroHidden
+                ? "Показать подсказку по каталогу программ"
+                : "Скрыть подсказку по каталогу программ"
+            }
+          >
+            <img
+              src={catalogHeroHidden ? programsCatalogHeroHiddenEye : achievementRevealEye}
+              alt=""
+              width={catalogHeroHidden ? 23 : 26}
+              height={catalogHeroHidden ? 20 : 18}
+              decoding="async"
+            />
+          </button>,
+          document.body,
+        )
+      : null}
     {menuPortal}
     </>
   );

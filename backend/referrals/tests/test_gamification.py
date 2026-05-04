@@ -4,6 +4,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
@@ -18,6 +19,7 @@ from referrals.gamification import (
     grant_purchase_points_for_paid_referral_order,
     grant_purchase_xp_for_paid_referral_order,
     local_today,
+    redeem_referral_shop_reward,
     xp_threshold_for_level,
 )
 from referrals.gamification_game import replay_daily_challenge
@@ -26,6 +28,7 @@ from referrals.models import (
     GamificationProfile,
     Order,
     ReferralPointTransaction,
+    ReferralShopOwnedItem,
     XPEvent,
 )
 from referrals.services import ensure_partner_profile
@@ -73,11 +76,15 @@ class GamificationApiTests(TestCase):
         body = r.json()
         self.assertEqual(body["profile"]["xp_total"], 0)
         self.assertEqual(body["profile"]["streak_days"], 0)
+        self.assertEqual(body["profile"]["streak_shields_available"], 0)
+        self.assertEqual(body["profile"]["streak_shields_max"], 3)
         self.assertEqual(body["points"]["balance"], 0)
         self.assertEqual(body["points"]["lifetime_earned"], 0)
         self.assertEqual(body["points"]["lifetime_spent"], 0)
         self.assertEqual(body["lives"]["current"], 5)
         self.assertEqual(body["lives"]["max"], 5)
+        self.assertIsNone(body["profile"].get("fast_life_regen_until"))
+        self.assertEqual(body["profile"].get("active_minigame_frame"), "")
         self.assertIn("daily_challenge_xp_tiers", body)
         self.assertIn("streak_multiplier_tiers", body)
 
@@ -255,6 +262,36 @@ class GamificationApiTests(TestCase):
         self.client.post("/referrals/gamification/daily-challenge/finish/", payload2, format="json")
         profile = GamificationProfile.objects.get(user=self.user)
         self.assertEqual(profile.streak_days, 1)
+
+    @patch("referrals.gamification.local_today")
+    def test_streak_shield_consumes_one_missed_day(self, mock_today):
+        d0 = date(2026, 10, 5)
+        mock_today.return_value = d0
+        payload, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        GamificationProfile.objects.filter(user=self.user).update(streak_shields_available=1)
+
+        mock_today.return_value = d0 + timedelta(days=2)
+        payload2, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload2, format="json")
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.streak_days, 2)
+        self.assertEqual(profile.streak_shields_available, 0)
+
+    @patch("referrals.gamification.local_today")
+    def test_streak_shield_not_used_when_gap_exceeds_one_day(self, mock_today):
+        d0 = date(2026, 10, 6)
+        mock_today.return_value = d0
+        payload, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload, format="json")
+        GamificationProfile.objects.filter(user=self.user).update(streak_shields_available=1)
+
+        mock_today.return_value = d0 + timedelta(days=3)
+        payload2, _ = self._start_and_autoplay_payload()
+        self.client.post("/referrals/gamification/daily-challenge/finish/", payload2, format="json")
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.streak_days, 1)
+        self.assertEqual(profile.streak_shields_available, 1)
 
     def test_streak_multiplier_table(self):
         self.assertEqual(get_streak_multiplier(1), Decimal("1.0"))
@@ -637,6 +674,795 @@ class ReferralPurchasePointsGrantTests(TestCase):
         self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
         gp = GamificationProfile.objects.get(user=self.user)
         self.assertEqual(gp.points_balance, 0)
+
+
+class ReferralShopApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="shopper",
+            email="shopper@example.com",
+            password="secret12",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_shop_get_structure(self):
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("points", body)
+        self.assertIn("profile", body)
+        self.assertIn("items", body)
+        self.assertEqual(len(body["items"]), 10)
+        extra = next(x for x in body["items"] if x["code"] == "extra_life")
+        self.assertFalse(extra["can_redeem"])
+        self.assertEqual(extra["disabled_reason"], "not_enough_points")
+
+    def test_shop_get_can_redeem_extra_life(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=400,
+            lives_current=2,
+            lives_max=5,
+        )
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        extra = next(x for x in r.json()["items"] if x["code"] == "extra_life")
+        self.assertTrue(extra["can_redeem"])
+        self.assertIsNone(extra["disabled_reason"])
+
+    def test_shop_redeem_extra_life(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=500,
+            lives_current=2,
+            lives_max=5,
+        )
+        rid = str(uuid.uuid4())
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "extra_life", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        out = r.json()
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["spent_points"], 300)
+        self.assertEqual(out["points"]["balance"], 200)
+        self.assertEqual(out["profile"]["lives_current"], 3)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.lives_current, 3)
+        self.assertEqual(gp.points_balance, 200)
+        self.assertEqual(gp.points_lifetime_spent, 300)
+        row = ReferralPointTransaction.objects.get(user=self.user)
+        self.assertEqual(row.transaction_type, ReferralPointTransaction.Type.REWARD_SPEND)
+        self.assertEqual(row.amount, -300)
+        self.assertEqual(row.balance_after, 200)
+
+    def test_shop_redeem_extra_life_lives_full_noop(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=500,
+            lives_current=5,
+            lives_max=5,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "extra_life", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "lives_full")
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.points_balance, 500)
+        self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
+
+    def test_shop_redeem_full_refill(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=2000,
+            lives_current=1,
+            lives_max=5,
+            next_life_at=timezone.now() + timedelta(hours=1),
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "full_lives_refill", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.lives_current, 5)
+        self.assertEqual(gp.points_balance, 1000)
+        self.assertIsNone(gp.next_life_at)
+
+    def test_shop_redeem_streak_shield_and_limit(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=10000,
+            streak_shields_available=3,
+            streak_shields_max=3,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "streak_shield_1_day", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "streak_shields_limit")
+
+        GamificationProfile.objects.filter(user=self.user).update(
+            streak_shields_available=0, points_balance=5000
+        )
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "streak_shield_1_day", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.streak_shields_available, 1)
+        self.assertEqual(gp.points_balance, 3500)
+
+    def test_shop_redeem_not_enough_points(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=100, lives_current=1)
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "extra_life", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "not_enough_points")
+
+    def test_shop_redeem_idempotent(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=800,
+            lives_current=1,
+            lives_max=5,
+        )
+        rid = str(uuid.uuid4())
+        r1 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "extra_life", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "extra_life", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.points_balance, 500)
+        self.assertEqual(gp.lives_current, 2)
+        self.assertEqual(ReferralPointTransaction.objects.filter(user=self.user).count(), 1)
+
+    def test_redeem_unknown_reward_raises(self):
+        with self.assertRaises(ValidationError) as ctx:
+            redeem_referral_shop_reward(self.user, "nope", None)
+        self.assertEqual(ctx.exception.code, "unknown_reward")
+
+    def test_increase_lives_max_success(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=30_000,
+            lives_current=4,
+            lives_max=5,
+        )
+        rid = str(uuid.uuid4())
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_lives_max", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        out = r.json()
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["spent_points"], 25_000)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.lives_max, 6)
+        self.assertEqual(gp.lives_current, 5)
+        self.assertEqual(gp.points_balance, 5_000)
+        self.assertEqual(gp.points_lifetime_spent, 25_000)
+        row = ReferralPointTransaction.objects.get(user=self.user)
+        self.assertEqual(row.amount, -25_000)
+
+    def test_increase_lives_max_next_tier_price(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=100_000,
+            lives_current=5,
+            lives_max=6,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_lives_max", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.lives_max, 7)
+        self.assertEqual(gp.points_lifetime_spent, 75_000)
+
+    def test_increase_lives_max_limit(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=9_000_000,
+            lives_current=10,
+            lives_max=10,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_lives_max", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "max_lives_limit")
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.points_balance, 9_000_000)
+        self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
+
+    def test_increase_streak_shields_max_success(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=60_000,
+            streak_shields_available=1,
+            streak_shields_max=3,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_streak_shields_max", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.streak_shields_max, 4)
+        self.assertEqual(gp.streak_shields_available, 2)
+        self.assertEqual(gp.points_lifetime_spent, 50_000)
+
+    def test_increase_streak_shields_max_limit(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=9_000_000,
+            streak_shields_available=7,
+            streak_shields_max=7,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_streak_shields_max", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "streak_shields_max_limit")
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_balance, 9_000_000)
+
+    def test_streak_shield_respects_dynamic_max(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=5000,
+            streak_shields_available=3,
+            streak_shields_max=4,
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "streak_shield_1_day", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).streak_shields_available, 4)
+
+        GamificationProfile.objects.filter(user=self.user).update(streak_shields_available=4)
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "streak_shield_1_day", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 400)
+        self.assertEqual(r2.json()["code"], "streak_shields_limit")
+
+    def test_increase_lives_max_idempotent(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=50_000,
+            lives_current=4,
+            lives_max=5,
+        )
+        rid = str(uuid.uuid4())
+        r1 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_lives_max", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "increase_lives_max", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.lives_max, 6)
+        self.assertEqual(gp.points_lifetime_spent, 25_000)
+        self.assertEqual(ReferralPointTransaction.objects.filter(user=self.user).count(), 1)
+
+    def test_shop_get_upgrade_items_and_limits(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=100_000,
+            lives_max=10,
+            streak_shields_max=7,
+        )
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        live_up = next(x for x in body["items"] if x["code"] == "increase_lives_max")
+        self.assertFalse(live_up["can_redeem"])
+        self.assertEqual(live_up["disabled_reason"], "max_lives_limit")
+        sh_up = next(x for x in body["items"] if x["code"] == "increase_streak_shields_max")
+        self.assertFalse(sh_up["can_redeem"])
+        self.assertEqual(sh_up["disabled_reason"], "streak_shields_max_limit")
+
+    def test_shop_get_fast_life_regen_item(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=100)
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        it = next(x for x in r.json()["items"] if x["code"] == "fast_life_regen_24h")
+        self.assertEqual(it["cost_points"], 15_000)
+        self.assertFalse(it["is_active"])
+        self.assertFalse(it["can_redeem"])
+        self.assertEqual(it["disabled_reason"], "not_enough_points")
+
+    def test_fast_life_regen_redeem_success(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=20_000)
+        rid = str(uuid.uuid4())
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "fast_life_regen_24h", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        out = r.json()
+        self.assertEqual(out["spent_points"], 15_000)
+        self.assertEqual(out["points"]["balance"], 5000)
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertIsNotNone(gp.fast_life_regen_until)
+        self.assertGreater(gp.fast_life_regen_until, timezone.now())
+        self.assertEqual(gp.points_lifetime_spent, 15_000)
+        row = ReferralPointTransaction.objects.get(user=self.user)
+        self.assertEqual(row.amount, -15_000)
+        self.assertEqual(row.metadata.get("reward_code"), "fast_life_regen_24h")
+
+    def test_fast_life_regen_extend_active(self):
+        base = timezone.now() + timedelta(hours=6)
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=20_000,
+            fast_life_regen_until=base,
+        )
+        before = GamificationProfile.objects.get(user=self.user).fast_life_regen_until
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "fast_life_regen_24h", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        after = GamificationProfile.objects.get(user=self.user).fast_life_regen_until
+        self.assertGreater(after, before)
+        self.assertAlmostEqual((after - before).total_seconds(), 24 * 3600, delta=2)
+
+    def test_fast_life_regen_cap_returns_limit(self):
+        fixed_now = timezone.now().replace(microsecond=0)
+        cap_until = fixed_now + timedelta(days=7)
+        with patch("referrals.gamification.timezone.now", return_value=fixed_now):
+            GamificationProfile.objects.create(
+                user=self.user,
+                points_balance=20_000,
+                fast_life_regen_until=cap_until,
+            )
+            r = self.client.post(
+                "/referrals/gamification/shop/redeem/",
+                {"reward_code": "fast_life_regen_24h", "client_request_id": str(uuid.uuid4())},
+                format="json",
+            )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "fast_life_regen_limit")
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_balance, 20_000)
+        self.assertFalse(ReferralPointTransaction.objects.filter(user=self.user).exists())
+
+    def test_fast_life_regen_not_enough_points(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=100)
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "fast_life_regen_24h", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "not_enough_points")
+
+    def test_fast_life_regen_idempotent(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=20_000)
+        rid = str(uuid.uuid4())
+        r1 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "fast_life_regen_24h", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "fast_life_regen_24h", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(ReferralPointTransaction.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_lifetime_spent, 15_000)
+
+    def test_shop_get_frame_neon_line_before_purchase(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=5000)
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["profile"].get("active_minigame_frame"), "")
+        it = next(x for x in body["items"] if x["code"] == "frame_neon_line")
+        self.assertEqual(it["cost_points"], 10_000)
+        self.assertEqual(it["effect"], "cosmetic_frame")
+        self.assertEqual(it["item_type"], "cosmetic_frame")
+        self.assertTrue(it["permanent"])
+        self.assertFalse(it["owned"])
+        self.assertFalse(it["active"])
+        self.assertFalse(it["can_redeem"])
+        self.assertEqual(it["disabled_reason"], "not_enough_points")
+
+    def test_frame_neon_line_buy_success(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=12_000)
+        rid = str(uuid.uuid4())
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_neon_line", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        out = r.json()
+        self.assertEqual(out["spent_points"], 10_000)
+        self.assertEqual(out["points"]["balance"], 2000)
+        self.assertEqual(out["profile"]["active_minigame_frame"], "frame_neon_line")
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.active_minigame_frame, "frame_neon_line")
+        self.assertEqual(gp.points_lifetime_spent, 10_000)
+        self.assertTrue(
+            ReferralShopOwnedItem.objects.filter(user=self.user, item_code="frame_neon_line").exists()
+        )
+        row = ReferralPointTransaction.objects.get(user=self.user)
+        self.assertEqual(row.amount, -10_000)
+        self.assertEqual(row.metadata.get("reward_code"), "frame_neon_line")
+        self.assertEqual(row.metadata.get("item_type"), "frame")
+        self.assertEqual(row.metadata.get("reward_title"), "Neon Line")
+
+    def test_frame_neon_line_not_enough_points(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=100)
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_neon_line", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "not_enough_points")
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_balance, 100)
+        self.assertFalse(ReferralShopOwnedItem.objects.filter(user=self.user).exists())
+
+    def test_frame_neon_line_already_owned(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=50_000,
+            active_minigame_frame="frame_neon_line",
+        )
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_neon_line",
+            item_type="frame",
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_neon_line", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "already_owned")
+        self.assertEqual(ReferralShopOwnedItem.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_balance, 50_000)
+
+    def test_frame_neon_line_idempotent(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=25_000)
+        rid = str(uuid.uuid4())
+        r1 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_neon_line", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_neon_line", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(ReferralPointTransaction.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(ReferralShopOwnedItem.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_lifetime_spent, 10_000)
+
+    def test_shop_get_frame_pixel_arcade_before_purchase(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=5000)
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        it = next(x for x in body["items"] if x["code"] == "frame_pixel_arcade")
+        self.assertEqual(it["cost_points"], 30_000)
+        self.assertEqual(it["effect"], "cosmetic_frame")
+        self.assertEqual(it["item_type"], "cosmetic_frame")
+        self.assertTrue(it["permanent"])
+        self.assertFalse(it["owned"])
+        self.assertFalse(it["active"])
+        self.assertFalse(it["can_redeem"])
+        self.assertEqual(it["disabled_reason"], "not_enough_points")
+
+    def test_shop_get_frame_pacman_chase_before_purchase(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=5000)
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        it = next(x for x in body["items"] if x["code"] == "frame_pacman_chase")
+        self.assertEqual(it["cost_points"], 30_000)
+        self.assertEqual(it["effect"], "cosmetic_frame")
+        self.assertEqual(it["item_type"], "cosmetic_frame")
+        self.assertTrue(it["permanent"])
+        self.assertFalse(it["owned"])
+        self.assertFalse(it["active"])
+        self.assertFalse(it["can_redeem"])
+        self.assertEqual(it["disabled_reason"], "not_enough_points")
+
+    def test_frame_pixel_arcade_buy_success(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=35_000)
+        rid = str(uuid.uuid4())
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_pixel_arcade", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        out = r.json()
+        self.assertEqual(out["spent_points"], 30_000)
+        self.assertEqual(out["points"]["balance"], 5000)
+        self.assertEqual(out["profile"]["active_minigame_frame"], "frame_pixel_arcade")
+        gp = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(gp.active_minigame_frame, "frame_pixel_arcade")
+        self.assertEqual(gp.points_lifetime_spent, 30_000)
+        self.assertTrue(
+            ReferralShopOwnedItem.objects.filter(user=self.user, item_code="frame_pixel_arcade").exists()
+        )
+        row = ReferralPointTransaction.objects.get(user=self.user)
+        self.assertEqual(row.amount, -30_000)
+        self.assertEqual(row.metadata.get("reward_code"), "frame_pixel_arcade")
+        self.assertEqual(row.metadata.get("item_type"), "frame")
+        self.assertEqual(row.metadata.get("reward_title"), "Pixel Arcade")
+
+    def test_frame_pixel_arcade_not_enough_points(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=100)
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_pixel_arcade", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "not_enough_points")
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_balance, 100)
+        self.assertFalse(ReferralShopOwnedItem.objects.filter(user=self.user).exists())
+
+    def test_frame_pixel_arcade_already_owned(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=50_000,
+            active_minigame_frame="frame_pixel_arcade",
+        )
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_pixel_arcade",
+            item_type="frame",
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_pixel_arcade", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "already_owned")
+        self.assertEqual(ReferralShopOwnedItem.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_balance, 50_000)
+
+    def test_frame_pixel_arcade_idempotent(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=45_000)
+        rid = str(uuid.uuid4())
+        r1 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_pixel_arcade", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, 200)
+        r2 = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_pixel_arcade", "client_request_id": rid},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(ReferralPointTransaction.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(ReferralShopOwnedItem.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).points_lifetime_spent, 30_000)
+
+    def test_select_frame_pixel_arcade_success(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=0)
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_pixel_arcade",
+            item_type="frame",
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/select-frame/",
+            {"frame_code": "frame_pixel_arcade"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["frame_code"], "frame_pixel_arcade")
+        self.assertEqual(
+            GamificationProfile.objects.get(user=self.user).active_minigame_frame,
+            "frame_pixel_arcade",
+        )
+
+    def test_select_frame_pixel_arcade_not_owned(self):
+        GamificationProfile.objects.create(user=self.user)
+        r = self.client.post(
+            "/referrals/gamification/shop/select-frame/",
+            {"frame_code": "frame_pixel_arcade"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "frame_not_owned")
+
+    def test_select_frame_success(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=0)
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_neon_line",
+            item_type="frame",
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/select-frame/",
+            {"frame_code": "frame_neon_line"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["frame_code"], "frame_neon_line")
+        self.assertEqual(
+            GamificationProfile.objects.get(user=self.user).active_minigame_frame,
+            "frame_neon_line",
+        )
+
+    def test_select_frame_not_owned(self):
+        GamificationProfile.objects.create(user=self.user)
+        r = self.client.post(
+            "/referrals/gamification/shop/select-frame/",
+            {"frame_code": "frame_neon_line"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "frame_not_owned")
+
+    def test_select_frame_unknown(self):
+        GamificationProfile.objects.create(user=self.user)
+        r = self.client.post(
+            "/referrals/gamification/shop/select-frame/",
+            {"frame_code": "nope_frame"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "unknown_frame")
+
+    def test_shop_get_frame_owned_active_after_purchase(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            points_balance=5000,
+            active_minigame_frame="frame_neon_line",
+        )
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_neon_line",
+            item_type="frame",
+        )
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["profile"]["active_minigame_frame"], "frame_neon_line")
+        it = next(x for x in body["items"] if x["code"] == "frame_neon_line")
+        self.assertTrue(it["owned"])
+        self.assertTrue(it["active"])
+        self.assertFalse(it["can_redeem"])
+
+    def test_shop_frame_garland_default_owned(self):
+        GamificationProfile.objects.create(user=self.user)
+        r = self.client.get("/referrals/gamification/shop/")
+        self.assertEqual(r.status_code, 200)
+        it = next(x for x in r.json()["items"] if x["code"] == "frame_garland")
+        self.assertTrue(it["owned"])
+        self.assertTrue(it.get("default_owned"))
+        self.assertTrue(it["active"])
+        self.assertFalse(it["can_redeem"])
+
+    def test_shop_frame_garland_inactive_when_neon_selected(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            active_minigame_frame="frame_neon_line",
+        )
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_neon_line",
+            item_type="frame",
+        )
+        r = self.client.get("/referrals/gamification/shop/")
+        g = next(x for x in r.json()["items"] if x["code"] == "frame_garland")
+        self.assertTrue(g["owned"])
+        self.assertFalse(g["active"])
+
+    def test_frame_garland_redeem_not_purchasable(self):
+        GamificationProfile.objects.create(user=self.user, points_balance=10_000)
+        r = self.client.post(
+            "/referrals/gamification/shop/redeem/",
+            {"reward_code": "frame_garland", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "not_purchasable")
+
+    def test_select_frame_garland_clears_premium_frame(self):
+        GamificationProfile.objects.create(
+            user=self.user,
+            active_minigame_frame="frame_neon_line",
+        )
+        ReferralShopOwnedItem.objects.create(
+            user=self.user,
+            item_code="frame_neon_line",
+            item_type="frame",
+        )
+        r = self.client.post(
+            "/referrals/gamification/shop/select-frame/",
+            {"frame_code": "frame_garland"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["frame_code"], "frame_garland")
+        self.assertEqual(GamificationProfile.objects.get(user=self.user).active_minigame_frame, "")
+
+    def test_refresh_lives_respects_fast_regen_interval(self):
+        from referrals.gamification import refresh_challenge_lives
+
+        now = timezone.now()
+        GamificationProfile.objects.create(
+            user=self.user,
+            lives_current=4,
+            lives_max=5,
+            next_life_at=now + timedelta(hours=4),
+        )
+        slow = GamificationProfile.objects.get(user=self.user)
+        refresh_challenge_lives(slow, now + timedelta(hours=2))
+        self.assertEqual(slow.lives_current, 4)
+
+        GamificationProfile.objects.filter(user=self.user).update(
+            lives_current=4,
+            next_life_at=now + timedelta(hours=2),
+            fast_life_regen_until=now + timedelta(hours=24),
+        )
+        fast = GamificationProfile.objects.get(user=self.user)
+        refresh_challenge_lives(fast, now + timedelta(hours=2))
+        self.assertEqual(fast.lives_current, 5)
 
 
 class LocalTodayPatchTests(TestCase):

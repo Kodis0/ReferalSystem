@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DiamondIcon } from "./DiamondIcon";
+import PixelHeartGlyph from "./PixelHeartGlyph";
 import {
   applyPlacement,
   canPlace,
@@ -23,6 +24,10 @@ import {
   postGamificationDailyChallengeFinish,
   postGamificationDailyChallengeStart,
 } from "./gamificationApi";
+import { buildPerimeterGarlandBulbs } from "./garlandBulbs";
+import { PixelArcadeFrameTravelSvg } from "./PixelArcadeFrameTravelSvg";
+import { NeonLineFrameTravelSvg } from "./NeonLineFrameTravelSvg";
+import { PacmanChaseFrameTravelSvg } from "./PacmanChaseFrameTravelSvg";
 
 /** Число слотов сердец по умолчанию (совпадает с `lives.max` из API). */
 const DEFAULT_LIVES_MAX = 5;
@@ -86,81 +91,8 @@ function formatStreakMultiplier(mult) {
   return `x${mult.toFixed(1)}`;
 }
 
-/** Сетка 10×6 для пиксельного сердца (viewBox), симметричный контур. */
-const PIXEL_HEART_PATTERN = [
-  "0011001100",
-  "0111111110",
-  "0111111110",
-  "0011111100",
-  "0001111000",
-  "0000110000",
-];
-
-function PixelHeartGlyph() {
-  const rects = [];
-  for (let r = 0; r < PIXEL_HEART_PATTERN.length; r++) {
-    const row = PIXEL_HEART_PATTERN[r];
-    for (let c = 0; c < row.length; c++) {
-      if (row[c] === "1") {
-        rects.push(<rect key={`${r}-${c}`} x={c} y={r} width={1} height={1} />);
-      }
-    }
-  }
-  return (
-    <svg
-      className="block-blast-game__pixel-heart-svg"
-      viewBox="0 0 10 6"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden="true"
-    >
-      {rects}
-    </svg>
-  );
-}
-
 /** Пиксели сердца в сетке 10×6 (viewBox), ортогональный «8-bit» контур. */
 const PALETTE_SIZE = 4;
-
-/** Базовая линия лампочек по полосе рамки (%): выше — ближе к игровому полю и к видимой рамке. */
-const GARLAND_BULB_TRACK_INSET_PCT = 2.05;
-/** Внутренняя «коробка» поля в тех же % — центры лампочек не заходят на клетки. */
-const GARLAND_BULB_FIELD_INSET_PCT = 5.35;
-/** Лёгкий разброс по двум осям в пределах полосы рамки. */
-const GARLAND_BULB_JITTER_PCT = 0.65;
-/** Выталкивание из коробки поля в полосу рамки. */
-const GARLAND_BULB_EPS_OUT_PCT = 0.35;
-
-/** Детерминированный [0, 1) для стабильных позиций между рендерами. */
-function garlandBulbSeeded01(seed, salt) {
-  const t = Math.sin(seed * 12.9898 + salt * 78.233 + 19.173) * 43758.5453123;
-  return t - Math.floor(t);
-}
-
-/** Точка внутри прямоугольника игрового поля (по тем же %, что и гирлянда). */
-function garlandBulbInsideField(x, y, innerL, innerT, innerR, innerB) {
-  return x > innerL && x < innerR && y > innerT && y < innerB;
-}
-
-/** Если попали на поле — сдвиг к ближайшему краю полосы рамки наружу. */
-function garlandBulbProjectToFrameStrip(x, y, innerL, innerT, innerR, innerB, epsOut) {
-  if (!garlandBulbInsideField(x, y, innerL, innerT, innerR, innerB)) {
-    return { x, y };
-  }
-  const dL = x - innerL;
-  const dR = innerR - x;
-  const dT = y - innerT;
-  const dB = innerB - y;
-  const m = Math.min(dL, dR, dT, dB);
-  if (m === dL) return { x: innerL - epsOut, y };
-  if (m === dR) return { x: innerR + epsOut, y };
-  if (m === dT) return { x, y: innerT - epsOut };
-  return { x, y: innerB + epsOut };
-}
-
-/** Скругление к процентах слоя после джиттера и проекции. */
-function garlandBulbClampPct(v) {
-  return Math.min(99.75, Math.max(0.25, v));
-}
 
 /** Активные цвета игры: синий, красный, жёлтый, зелёный (palette-1…4). */
 const GAME_PALETTE = ["#2563eb", "#dc2626", "#eab308", "#16a34a"];
@@ -1079,54 +1011,7 @@ export default function BlockBlastGame() {
     return cells;
   }, [demoGrid, demoLineClearAnim]);
 
-  /** Лампочки по периметру рамки с хаотичным сдвигом по двум осям; не заходят на игровое поле. */
-  const demoGarlandBulbs = useMemo(() => {
-    const inset = GARLAND_BULB_TRACK_INSET_PCT;
-    const span = 100 - 2 * inset;
-    const nEdge = 6;
-    const innerL = GARLAND_BULB_FIELD_INSET_PCT;
-    const innerR = 100 - GARLAND_BULB_FIELD_INSET_PCT;
-    const innerT = innerL;
-    const innerB = innerR;
-    const jit = GARLAND_BULB_JITTER_PCT;
-    const eps = GARLAND_BULB_EPS_OUT_PCT;
-    const bulbs = [];
-    let ord = 0;
-
-    const pushJittered = (baseLeft, baseTop) => {
-      const jx = (garlandBulbSeeded01(ord, 1) - 0.5) * 2 * jit;
-      const jy = (garlandBulbSeeded01(ord, 2) - 0.5) * 2 * jit;
-      let x = baseLeft + jx;
-      let y = baseTop + jy;
-      const p = garlandBulbProjectToFrameStrip(x, y, innerL, innerT, innerR, innerB, eps);
-      bulbs.push({
-        key: `garland-${ord}`,
-        ord,
-        leftPct: garlandBulbClampPct(p.x),
-        topPct: garlandBulbClampPct(p.y),
-        colorMod: ord % 4,
-      });
-      ord += 1;
-    };
-
-    for (let k = 1; k <= nEdge; k++) {
-      const t = k / (nEdge + 1);
-      pushJittered(inset + t * span, inset);
-    }
-    for (let k = 1; k <= nEdge; k++) {
-      const t = k / (nEdge + 1);
-      pushJittered(100 - inset, inset + t * span);
-    }
-    for (let k = 1; k <= nEdge; k++) {
-      const t = k / (nEdge + 1);
-      pushJittered(100 - inset - t * span, 100 - inset);
-    }
-    for (let k = 1; k <= nEdge; k++) {
-      const t = k / (nEdge + 1);
-      pushJittered(inset, 100 - inset - t * span);
-    }
-    return bulbs;
-  }, []);
+  const demoGarlandBulbs = useMemo(() => buildPerimeterGarlandBulbs(), []);
 
   const lineClearParticles = useMemo(() => {
     const anim = lineClearAnim ?? (!gameStarted ? demoLineClearAnim : null);
@@ -1161,6 +1046,18 @@ export default function BlockBlastGame() {
   };
 
   const profile = gamificationSummary?.profile ?? {};
+  const activeMinigameFrame = String(profile.active_minigame_frame || "").trim();
+  const boardFrameClass =
+    activeMinigameFrame === "frame_neon_line"
+      ? "mini-game-frame--neon-line"
+      : activeMinigameFrame === "frame_pixel_arcade"
+        ? "mini-game-frame--pixel-arcade"
+        : activeMinigameFrame === "frame_pacman_chase"
+          ? "mini-game-frame--pacman-chase"
+          : "";
+  /** Гирлянда на доске только для рамки «гирлянда»; при «Неон» API хранит frame_neon_line — лампочки не показываем. */
+  const showBoardGarlandBulbs =
+    activeMinigameFrame === "" || activeMinigameFrame === "frame_garland";
   const livesInfo = gamificationSummary?.lives ?? {};
   const xpInto = Number(profile.level_progress?.xp_into_level) || 0;
   const xpSpanRaw = Number(profile.level_progress?.xp_for_current_level_span);
@@ -1215,6 +1112,7 @@ export default function BlockBlastGame() {
           <div
             className={[
               "block-blast-game__board-wrap",
+              boardFrameClass,
               !gameStarted ? "block-blast-game__board-wrap_pre-start" : "",
               gameStarted ? "block-blast-game__board-wrap_game-active" : "",
               lineClearAnim || (!gameStarted && demoLineClearAnim)
@@ -1368,20 +1266,25 @@ export default function BlockBlastGame() {
                 ) : null}
               </div>
             ) : null}
-            <div className="block-blast-game__garland-bulbs" aria-hidden="true">
-              {demoGarlandBulbs.map((b) => (
-                <span
-                  key={b.key}
-                  className={`block-blast-game__garland-bulb block-blast-game__garland-bulb--c${b.colorMod}`}
-                  style={{
-                    left: `${b.leftPct}%`,
-                    top: `${b.topPct}%`,
-                    transform: "translate(-50%, -50%)",
-                    ["--garland-delay"]: `${b.ord * 0.068}s`,
-                  }}
-                />
-              ))}
-            </div>
+            {showBoardGarlandBulbs ? (
+              <div className="block-blast-game__garland-bulbs" aria-hidden="true">
+                {demoGarlandBulbs.map((b) => (
+                  <span
+                    key={b.key}
+                    className={`block-blast-game__garland-bulb block-blast-game__garland-bulb--c${b.colorMod}`}
+                    style={{
+                      left: `${b.leftPct}%`,
+                      top: `${b.topPct}%`,
+                      transform: "translate(-50%, -50%)",
+                      ["--garland-delay"]: `${b.ord * 0.068}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {activeMinigameFrame === "frame_pixel_arcade" ? <PixelArcadeFrameTravelSvg variant="game" /> : null}
+            {activeMinigameFrame === "frame_pacman_chase" ? <PacmanChaseFrameTravelSvg variant="game" /> : null}
+            {activeMinigameFrame === "frame_neon_line" ? <NeonLineFrameTravelSvg variant="game" /> : null}
           </div>
           {gameStarted ? (
             <div className="block-blast-game__tray">

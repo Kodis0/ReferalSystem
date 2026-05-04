@@ -610,8 +610,12 @@ class GamificationProfile(models.Model):
     best_challenge_score = models.PositiveIntegerField(default=0)
     lives_current = models.PositiveSmallIntegerField(default=5)
     lives_max = models.PositiveSmallIntegerField(default=5)
+    streak_shields_available = models.PositiveSmallIntegerField(default=0)
+    streak_shields_max = models.PositiveSmallIntegerField(default=3)
     next_life_at = models.DateTimeField(null=True, blank=True)
     last_life_refill_at = models.DateTimeField(null=True, blank=True)
+    fast_life_regen_until = models.DateTimeField(null=True, blank=True)
+    active_minigame_frame = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -620,6 +624,33 @@ class GamificationProfile(models.Model):
 
     def __str__(self) -> str:
         return f"GamificationProfile(user={self.user_id})"
+
+
+class ReferralShopOwnedItem(models.Model):
+    """Persisted referral-shop cosmetic / unlock rows (e.g. mini-game frames)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="referral_shop_owned_items",
+        db_index=True,
+    )
+    item_code = models.CharField(max_length=64, db_index=True)
+    item_type = models.CharField(max_length=32, db_index=True)
+    acquired_at = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "item_code"],
+                name="referrals_shop_owned_user_item_uq",
+            ),
+        ]
+        ordering = ["-acquired_at"]
+
+    def __str__(self) -> str:
+        return f"ReferralShopOwnedItem(user={self.user_id}, code={self.item_code!r})"
 
 
 class ReferralPointTransaction(models.Model):

@@ -107,6 +107,9 @@ html:has(.LK) {
   margin: 0;
   padding: 0;
   flex-shrink: 0;
+  /* z-index шапки задаётся inline в lk.js (выше portaled «глаза» ~120). */
+  position: relative;
+  z-index: 250;
 }
 
 /* Одна сетка на всю ширину вьюпорта — иначе по бокам остаются пустые fr-дорожки с фоном .LK (#17212b). */
@@ -667,10 +670,14 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   left: 50%;
   top: calc(100% + 10px);
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.72);
-  color: rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+  background: #ffffff;
+  color: #000000;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(5, 12, 38, 0.15);
+  font-family: "Inter", "Stem-Regular", Arial, sans-serif;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -678,7 +685,7 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   visibility: hidden;
   transition: opacity 0.15s ease, visibility 0.15s ease;
   pointer-events: none;
-  z-index: 250;
+  z-index: 100000;
 }
 
 .lk-header__nav-btn:hover .lk-header__tooltip {

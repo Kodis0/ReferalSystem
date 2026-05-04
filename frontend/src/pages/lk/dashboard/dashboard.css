@@ -96,6 +96,141 @@
 
 /* Обложка каталога: те же классы/отступы, что у баннера на «Мои программы» (.lk-dashboard__my-programs-catalog-banner) */
 
+.lk-dashboard__programs-catalog-hero.lk-dashboard__my-programs-catalog-banner {
+  position: relative;
+}
+
+/* Плавное сворачивание hero (grid 0fr → 1fr) */
+.lk-dashboard__programs-catalog-hero-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+  transition: grid-template-rows 0.42s ease, margin-bottom 0.42s ease;
+}
+
+.lk-dashboard__programs-catalog-hero-collapse--open {
+  grid-template-rows: 1fr;
+  margin-bottom: 16px;
+}
+
+.lk-dashboard__programs-catalog-hero-collapse-sizer {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Только каталог: баннер — прямой ребёнок sizer. На «Мои программы» баннер внутри .lk-dashboard__my-programs-hero-stack — сохраняем margin снизу до карточек. */
+.lk-dashboard__programs-catalog-hero-collapse-sizer > .lk-dashboard__my-programs-catalog-banner.lk-dashboard__programs-catalog-hero {
+  margin-bottom: 0;
+}
+
+.lk-dashboard__my-programs-hero-stack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Якоря для позиции одного плавающего «глаза» (портал в document.body) */
+.lk-dashboard__programs-catalog-hero-eye-anchor {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.lk-dashboard__programs-catalog-hero-eye-anchor--corner {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 0;
+}
+
+/* Резерв справа: inset 10px + кнопка 30px (как у углового якоря на баннере) */
+.lk-dashboard__programs-catalog-hero-eye-anchor--inline {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 40px;
+  min-width: 40px;
+}
+
+.lk-dashboard__programs-catalog-floating-eye {
+  position: fixed;
+  z-index: 120;
+}
+
+.lk-dashboard__programs-catalog-hero-eye {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  line-height: 0;
+  transition: background 0.18s ease;
+}
+
+.lk-dashboard__programs-catalog-hero-eye:hover,
+.lk-dashboard__programs-catalog-hero-eye:focus-visible {
+  background: rgba(113, 119, 248, 0.28);
+}
+
+.lk-dashboard__programs-catalog-hero-eye:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.55);
+  outline-offset: 2px;
+}
+
+.lk-dashboard__programs-catalog-hero-eye img {
+  display: block;
+  width: 22px;
+  height: auto;
+  max-height: 16px;
+  object-fit: contain;
+}
+
+[data-theme="light"] .lk-dashboard__programs-catalog-hero-eye {
+  background: rgba(38, 50, 92, 0.1);
+}
+
+[data-theme="light"] .lk-dashboard__programs-catalog-hero-eye:hover,
+[data-theme="light"] .lk-dashboard__programs-catalog-hero-eye:focus-visible {
+  background: rgba(113, 119, 248, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-dashboard__programs-catalog-hero-collapse {
+    transition: none;
+  }
+}
+
+.lk-dashboard__programs-catalog-heading-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.lk-dashboard__programs-catalog-heading-row .lk-dashboard__programs-title {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Текст под кнопкой-«глаз» в правом верхнем углу */
+.lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-copy {
+  padding-right: 46px;
+}
+
 .lk-dashboard__programs-catalog-hero .lk-dashboard__my-programs-catalog-banner-title {
   white-space: nowrap;
   font-size: clamp(15px, 2.35vw, 24px);
@@ -305,6 +440,7 @@
     height: min(128%, 320px);
     right: -10%;
   }
+
 }
 
 .lk-dashboard_my-programs-page .lk-dashboard__my-programs-toolbar {
@@ -331,10 +467,12 @@
 }
 
 /* Каталог программ: шаг до строки поиска как у тулбаров разделов (24px, см. owner-programs__services-toolbar) */
-.lk-dashboard__programs_catalog > .lk-dashboard__programs-title {
+.lk-dashboard__programs_catalog > .lk-dashboard__programs-catalog-heading-row {
+  margin-top: 9px;
   margin-bottom: 24px;
 }
 
+/* «Мои программы»: тот же отступ сверху у первого блока (баннер «Начните с каталога»), что у строки заголовка на /lk/programs */
 .lk-dashboard__programs-lead {
   margin: 0 0 14px;
   color: rgba(255, 255, 255, 0.62);
@@ -675,6 +813,33 @@
   color: rgba(255, 255, 255, 0.65);
   font-size: 15px;
   line-height: 1.5;
+}
+
+.lk-dashboard__programs-empty-card {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 24px;
+  border-radius: 12px;
+  background: #242f3d;
+}
+
+.lk-dashboard__programs-empty-copy {
+  max-width: 640px;
+}
+
+.lk-dashboard__programs-empty-title {
+  margin: 0 0 6px;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.lk-dashboard__programs-empty-sub {
+  margin: 0;
+  color: #7f91a4;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .lk-dashboard__programs-list {

@@ -698,6 +698,137 @@
   overflow: visible;
 }
 
+/* Neon Line: узкая линия (3px), свечение как у рамки */
+.block-blast-game__board-wrap.mini-game-frame--neon-line.block-blast-game__board-wrap_pre-start,
+.block-blast-game__board-wrap.mini-game-frame--neon-line.block-blast-game__board-wrap_game-active {
+  border-width: 3px;
+  border-color: rgba(192, 174, 252, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.45),
+    0 0 18px rgba(139, 92, 246, 0.48),
+    0 0 40px rgba(99, 102, 241, 0.26);
+}
+
+.block-blast-game__board-wrap_game-active.mini-game-frame--neon-line .block-blast-game__board {
+  border-radius: max(0px, calc(12px - 3px));
+}
+
+.block-blast-game__board-wrap_pre-start.mini-game-frame--neon-line .block-blast-game__board_demo {
+  border-radius: max(0px, calc(12px - 3px));
+}
+
+.block-blast-game__neon-travel-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 76;
+  overflow: visible;
+}
+
+.block-blast-game__neon-travel-wave {
+  filter: blur(0.55px) drop-shadow(0 0 5px rgba(192, 174, 252, 0.65));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block-blast-game__neon-travel-svg {
+    display: none;
+  }
+}
+
+/* Cosmetic frame: Pixel Arcade — классическая пиксельная змейка по периметру */
+.block-blast-game__board-wrap.mini-game-frame--pixel-arcade.block-blast-game__board-wrap_pre-start,
+.block-blast-game__board-wrap.mini-game-frame--pixel-arcade.block-blast-game__board-wrap_game-active {
+  border-color: #2f3b52;
+  box-shadow: none;
+}
+
+.block-blast-game__pixel-arcade-travel-svg {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: calc(100% + 20px);
+  height: calc(100% + 20px);
+  pointer-events: none;
+  z-index: 77;
+  overflow: visible;
+}
+
+.block-blast-game__pixel-arcade-snake {
+  fill: #65a30d;
+}
+
+.block-blast-game__pixel-arcade-snake-head {
+  fill: #84cc16;
+}
+
+.block-blast-game__pixel-arcade-snake-eye {
+  fill: rgba(15, 23, 42, 0.95);
+}
+
+.block-blast-game__pixel-arcade-snake-tongue {
+  fill: #ef4444;
+}
+
+.block-blast-game__pixel-arcade-apple {
+  fill: #ef4444;
+}
+
+.block-blast-game__board-wrap.mini-game-frame--pacman-chase.block-blast-game__board-wrap_pre-start,
+.block-blast-game__board-wrap.mini-game-frame--pacman-chase.block-blast-game__board-wrap_game-active {
+  border-color: #2563eb;
+  box-shadow: none;
+}
+
+.block-blast-game__pacman-chase-travel-svg {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: calc(100% + 20px);
+  height: calc(100% + 20px);
+  pointer-events: none;
+  z-index: 77;
+  overflow: visible;
+}
+
+.block-blast-game__pacman-chase-pacman {
+  fill: #facc15;
+}
+
+.block-blast-game__pacman-chase-ghost {
+  fill: #ef4444;
+}
+
+.block-blast-game__pacman-chase-eye {
+  fill: #ffffff;
+}
+
+.block-blast-game__pacman-chase-pupil {
+  fill: #111827;
+}
+
+.block-blast-game__pacman-chase-dot {
+  fill: #facc15;
+  transition: opacity 0.18s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block-blast-game__pixel-arcade-travel-svg {
+    display: none;
+  }
+
+  .block-blast-game__board-wrap.mini-game-frame--pixel-arcade.block-blast-game__board-wrap_pre-start,
+  .block-blast-game__board-wrap.mini-game-frame--pixel-arcade.block-blast-game__board-wrap_game-active {
+    box-shadow: none;
+  }
+
+  .block-blast-game__board-wrap.mini-game-frame--pacman-chase.block-blast-game__board-wrap_pre-start,
+  .block-blast-game__board-wrap.mini-game-frame--pacman-chase.block-blast-game__board-wrap_game-active {
+    box-shadow: none;
+  }
+}
+
 .block-blast-game__board-wrap_pre-start {
   overflow: visible;
   padding: 0;

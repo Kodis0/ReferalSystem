@@ -5,6 +5,9 @@ from .gamification_views import (
     DailyChallengeLeaderboardView,
     DailyChallengeStartView,
     GamificationReferralLeaderboardView,
+    GamificationShopRedeemView,
+    GamificationShopSelectFrameView,
+    GamificationShopView,
     GamificationSummaryView,
 )
 from .views import (
@@ -55,6 +58,21 @@ urlpatterns = [
         "gamification/leaderboard/",
         GamificationReferralLeaderboardView.as_view(),
         name="gamification-referral-leaderboard",
+    ),
+    path(
+        "gamification/shop/",
+        GamificationShopView.as_view(),
+        name="gamification-shop",
+    ),
+    path(
+        "gamification/shop/redeem/",
+        GamificationShopRedeemView.as_view(),
+        name="gamification-shop-redeem",
+    ),
+    path(
+        "gamification/shop/select-frame/",
+        GamificationShopSelectFrameView.as_view(),
+        name="gamification-shop-select-frame",
     ),
     path(
         "platform-service-status/",

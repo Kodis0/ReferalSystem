@@ -43,6 +43,31 @@ function projectTargetHref(project) {
   return "/lk/partner";
 }
 
+const DEFAULT_PROJECT_BOOT_RETRY_DELAYS_MS = [250, 700, 1400];
+const OWNER_PROJECTS_BOOT_RETRY_KEY = "lkOwnerProjectsBootRetryAfterRegistration:v1";
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function hasProjectsBootRetryFlag() {
+  try {
+    return window.localStorage.getItem(OWNER_PROJECTS_BOOT_RETRY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function clearProjectsBootRetryFlag() {
+  try {
+    window.localStorage.removeItem(OWNER_PROJECTS_BOOT_RETRY_KEY);
+  } catch {
+    // ignore storage access errors
+  }
+}
+
 function DefaultProjectAvatar() {
   const clipId = `owner-proj-av-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
@@ -129,18 +154,35 @@ export default function OwnerSitesListPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    const shouldRetryEmptyBoot = hasProjectsBootRetryFlag();
     try {
-      const { ok, projects: nextProjects = [], error: err } = await fetchOwnerSitesList();
+      let lastResult = null;
+      const maxAttempts = shouldRetryEmptyBoot ? DEFAULT_PROJECT_BOOT_RETRY_DELAYS_MS.length : 0;
+      for (let attempt = 0; attempt <= maxAttempts; attempt += 1) {
+        const result = await fetchOwnerSitesList();
+        lastResult = result;
+        if (!result.ok || (result.projects || []).length > 0) {
+          break;
+        }
+        const delay = DEFAULT_PROJECT_BOOT_RETRY_DELAYS_MS[attempt];
+        if (delay == null) break;
+        await sleep(delay);
+      }
+
+      const { ok, projects: nextProjects = [], error: err } = lastResult || {};
       if (!ok) {
         setProjects([]);
         setError(err || "Ошибка загрузки");
+        if (shouldRetryEmptyBoot) clearProjectsBootRetryFlag();
         return;
       }
       setProjects(nextProjects);
+      if (shouldRetryEmptyBoot) clearProjectsBootRetryFlag();
     } catch (e) {
       console.error(e);
       setProjects([]);
       setError("Сетевая ошибка, попробуйте позже");
+      if (shouldRetryEmptyBoot) clearProjectsBootRetryFlag();
     } finally {
       setLoading(false);
     }

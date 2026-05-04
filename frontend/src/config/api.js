@@ -86,6 +86,9 @@ export const API_ENDPOINTS = {
   gamificationDailyChallengeLeaderboard: `${API_BASE}/referrals/gamification/daily-challenge/leaderboard/`,
   /** GET ?period=week|month|all — рейтинг рефералов по подтверждённым продажам */
   gamificationReferralLeaderboard: `${API_BASE}/referrals/gamification/leaderboard/`,
+  gamificationShop: `${API_BASE}/referrals/gamification/shop/`,
+  gamificationShopRedeem: `${API_BASE}/referrals/gamification/shop/redeem/`,
+  gamificationShopSelectFrame: `${API_BASE}/referrals/gamification/shop/select-frame/`,
 };
 
 export { API_BASE };

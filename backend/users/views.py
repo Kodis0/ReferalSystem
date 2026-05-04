@@ -232,7 +232,7 @@ class RegisterView(generics.CreateAPIView):
             "refresh": str(refresh),
             "user": CurrentUserSerializer(user).data,
             # Маршрут SPA (React), не Django template /users/login-page/
-            "redirect_url": "/lk/dashboard",
+            "redirect_url": "/lk/partner",
         }
         if cta_join is not None:
             body["cta_join"] = cta_join

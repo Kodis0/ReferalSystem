@@ -4128,14 +4128,15 @@
 
 .owner-programs__site-dash-tooltip {
   position: absolute;
-  z-index: 5;
+  z-index: 100000;
   min-width: 140px;
   max-width: min(260px, calc(100vw - 32px));
   padding: 10px 12px;
-  border-radius: var(--border-radius-medium);
-  border: 1px solid var(--line-color);
-  background: var(--background-color);
-  box-shadow: var(--box-shadow);
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(5, 12, 38, 0.12);
+  font-family: "Inter", "Stem-Regular", Arial, sans-serif;
   pointer-events: none;
   transform: translate(-50%, calc(-100% - 10px));
   text-align: left;
@@ -4148,7 +4149,7 @@
 .owner-programs__site-dash-tooltip-date {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-color);
+  color: #000000;
   line-height: 1.35;
   margin-bottom: 4px;
 }
@@ -4156,7 +4157,7 @@
 .owner-programs__site-dash-tooltip-metric {
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-secondary-color);
+  color: rgba(0, 0, 0, 0.58);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 2px;
@@ -4165,7 +4166,7 @@
 .owner-programs__site-dash-tooltip-value {
   font-size: 15px;
   font-weight: 700;
-  color: var(--main-color);
+  color: #000000;
   line-height: 1.25;
 }
 
@@ -4238,24 +4239,6 @@
 
 [data-theme="light"] .owner-programs__site-dash-svg-axis-ticks text {
   fill: var(--text-color);
-}
-
-[data-theme="light"] .owner-programs__site-dash-tooltip {
-  background: #fff;
-  border-color: var(--line-color);
-  box-shadow: 0 8px 24px rgba(5, 12, 38, 0.12);
-}
-
-[data-theme="light"] .owner-programs__site-dash-tooltip-date {
-  color: var(--text-color);
-}
-
-[data-theme="light"] .owner-programs__site-dash-tooltip-metric {
-  color: var(--text-secondary-color);
-}
-
-[data-theme="light"] .owner-programs__site-dash-tooltip-value {
-  color: var(--main-color);
 }
 
 [data-theme="light"] .owner-programs__site-dash-svg-hover-dot {

@@ -61,6 +61,7 @@ from .services import (
     check_site_http_reachability,
     capture_referral_attribution,
     create_project_for_site,
+    ensure_default_owner_project,
     ensure_project_avatar_data_url,
     ensure_partner_profile,
     generate_publishable_key,
@@ -416,6 +417,7 @@ class SiteOwnerSitesListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        ensure_default_owner_project(request.user)
         sites = _owner_site_options(request.user)
         return Response(
             {

@@ -409,7 +409,8 @@ function LK() {
         style={{
           position: "sticky",
           top: 0,
-          zIndex: 100,
+          /* Выше portaled «глаза» каталога / Мои программы (.lk-dashboard__programs-catalog-floating-eye { z-index: 120 }). */
+          zIndex: 250,
           height: 76,
           padding: 0,
           background: lkHeaderBg,

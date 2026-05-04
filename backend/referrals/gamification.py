@@ -26,6 +26,7 @@ from .models import (
     Order,
     PartnerProfile,
     ReferralPointTransaction,
+    ReferralShopOwnedItem,
     XPEvent,
 )
 
@@ -196,25 +197,43 @@ def _validate_optional_client_score(score: Any) -> int | None:
 def _apply_streak_on_activity(profile: GamificationProfile, activity_date: date) -> None:
     """
     Update streak for an activity on ``activity_date`` (idempotent same calendar day).
+
+    If exactly one calendar day was missed since ``last_activity_date`` and the user has a streak
+    shield, the streak continues and one shield is consumed.
     """
     if profile.last_activity_date == activity_date:
         return
     if profile.last_activity_date is None:
         profile.streak_days = 1
     else:
-        yesterday = activity_date - timedelta(days=1)
-        if profile.last_activity_date == yesterday:
+        gap_days = (activity_date - profile.last_activity_date).days
+        if gap_days == 1:
             profile.streak_days += 1
+        elif gap_days == 2 and profile.streak_shields_available > 0:
+            profile.streak_days += 1
+            profile.streak_shields_available -= 1
         else:
             profile.streak_days = 1
     profile.last_activity_date = activity_date
+
+
+def is_fast_life_regen_active(profile: GamificationProfile, now) -> bool:
+    u = profile.fast_life_regen_until
+    return u is not None and u > now
+
+
+def _effective_life_recovery_interval(profile: GamificationProfile, now) -> timedelta:
+    base = CHALLENGE_LIFE_RECOVERY_INTERVAL
+    if is_fast_life_regen_active(profile, now):
+        return base / 2
+    return base
 
 
 def refresh_challenge_lives(profile: GamificationProfile, now) -> None:
     """
     Apply elapsed recovery intervals; ensure a timer exists when below max lives.
     """
-    interval = CHALLENGE_LIFE_RECOVERY_INTERVAL
+    interval = _effective_life_recovery_interval(profile, now)
     while profile.lives_current < profile.lives_max:
         if profile.next_life_at is None:
             break
@@ -248,7 +267,7 @@ def can_start_challenge_run(profile: GamificationProfile, now) -> bool:
 
 
 def consume_challenge_life(profile: GamificationProfile, now) -> None:
-    interval = CHALLENGE_LIFE_RECOVERY_INTERVAL
+    interval = _effective_life_recovery_interval(profile, now)
     profile.lives_current -= 1
     if profile.lives_current < profile.lives_max and profile.next_life_at is None:
         profile.next_life_at = now + interval
@@ -292,6 +311,9 @@ def build_gamification_summary(user) -> dict[str, Any]:
     streak_mult = get_streak_multiplier(profile.streak_days)
     recovery_seconds = get_life_recovery_seconds(profile, now)
     next_iso = profile.next_life_at.isoformat() if profile.next_life_at else None
+    fast_regen_iso = profile.fast_life_regen_until.isoformat() if profile.fast_life_regen_until else None
+    eff_hours = 2 if is_fast_life_regen_active(profile, now) else 4
+    active_frame = (getattr(profile, "active_minigame_frame", None) or "").strip()
 
     active = (
         DailyChallengeAttempt.objects.filter(user=user, status=DailyChallengeAttempt.Status.STARTED)
@@ -316,6 +338,10 @@ def build_gamification_summary(user) -> dict[str, Any]:
             "streak_multiplier": str(streak_mult),
             "best_challenge_score": profile.best_challenge_score,
             "league_id": league_id,
+            "streak_shields_available": int(profile.streak_shields_available),
+            "streak_shields_max": int(profile.streak_shields_max),
+            "fast_life_regen_until": fast_regen_iso,
+            "active_minigame_frame": active_frame,
         },
         "points": {
             "balance": int(profile.points_balance),
@@ -327,7 +353,7 @@ def build_gamification_summary(user) -> dict[str, Any]:
             "max": profile.lives_max,
             "next_life_at": next_iso,
             "recovery_seconds": recovery_seconds,
-            "recovery_interval_hours": 4,
+            "recovery_interval_hours": eff_hours,
         },
         "active_attempt": _active_attempt_dict(active),
         "daily_challenge_xp_tiers": list(DAILY_CHALLENGE_XP_TIERS),
@@ -524,6 +550,7 @@ def finish_daily_challenge(
                 "streak_days",
                 "last_activity_date",
                 "last_streak_increment_date",
+                "streak_shields_available",
                 "xp_total",
                 "best_challenge_score",
                 "updated_at",
@@ -594,6 +621,594 @@ def calculate_referral_league_id(sales_rub: int, level: int, streak_days: int) -
         if s >= sales_min and lv >= level_min and st >= streak_min:
             return league_id
     return "start"
+
+
+# MVP referral shop catalog (no DB model).
+REFERRAL_SHOP_LIVES_MAX_CAP = 10
+
+REFERRAL_SHOP_LIVES_MAX_UPGRADE_COSTS: dict[int, int] = {
+    5: 25_000,
+    6: 75_000,
+    7: 200_000,
+    8: 500_000,
+    9: 1_000_000,
+}
+
+REFERRAL_SHOP_STREAK_SHIELDS_MAX_CAP = 7
+
+REFERRAL_SHOP_STREAK_SHIELDS_MAX_UPGRADE_COSTS: dict[int, int] = {
+    3: 50_000,
+    4: 150_000,
+    5: 400_000,
+    6: 900_000,
+}
+
+# Cosmetic mini-game frame codes (shop catalog + select validation).
+REFERRAL_SHOP_COSMETIC_FRAME_CODES: frozenset[str] = frozenset(
+    {"frame_garland", "frame_neon_line", "frame_pixel_arcade", "frame_pacman_chase"}
+)
+
+
+def _lives_max_upgrade_cost_for_current(lives_max: int) -> int | None:
+    return REFERRAL_SHOP_LIVES_MAX_UPGRADE_COSTS.get(int(lives_max))
+
+
+def _streak_shields_max_upgrade_cost_for_current(streak_shields_max: int) -> int | None:
+    return REFERRAL_SHOP_STREAK_SHIELDS_MAX_UPGRADE_COSTS.get(int(streak_shields_max))
+
+
+REFERRAL_SHOP_REWARDS: dict[str, dict[str, Any]] = {
+    "extra_life": {
+        "title": "+1 жизнь",
+        "description": "Восстанавливает одну жизнь, но не выше максимума.",
+        "cost_points": 300,
+        "effect": "extra_life",
+    },
+    "full_lives_refill": {
+        "title": "Полное восстановление жизней",
+        "description": "Восстанавливает все жизни до максимума.",
+        "cost_points": 1000,
+        "effect": "full_lives_refill",
+    },
+    "streak_shield_1_day": {
+        "title": "Защита серии на 1 день",
+        "description": "Один раз защищает серию, если пропустить день.",
+        "cost_points": 1500,
+        "effect": "streak_shield",
+    },
+    "increase_lives_max": {
+        "title": "Расширить запас жизней",
+        "description": "Увеличивает максимум жизней на 1.",
+        "effect": "increase_lives_max",
+    },
+    "increase_streak_shields_max": {
+        "title": "Расширить запас защит",
+        "description": "Увеличивает максимум защит серии на 1.",
+        "effect": "increase_streak_shields_max",
+    },
+    "fast_life_regen_24h": {
+        "title": "Ускоренное восстановление",
+        "description": "Жизни восстанавливаются в 2 раза быстрее в течение 24 часов.",
+        "cost_points": 15_000,
+        "effect": "fast_life_regen",
+    },
+    "frame_garland": {
+        "title": "Гирлянда",
+        "description": "Классическое оформление поля мини-игры с гирляндой вокруг доски.",
+        "cost_points": 0,
+        "effect": "cosmetic_frame",
+        "permanent": True,
+        "default_owned": True,
+    },
+    "frame_neon_line": {
+        "title": "Neon Line",
+        "description": "Минималистичная неоновая рамка для мини-игры.",
+        "cost_points": 10_000,
+        "effect": "cosmetic_frame",
+        "permanent": True,
+    },
+    "frame_pixel_arcade": {
+        "title": "Змейка",
+        "description": "Классическая пиксельная рамка со змейкой, которая ползёт по периметру поля.",
+        "cost_points": 30_000,
+        "effect": "cosmetic_frame",
+        "permanent": True,
+    },
+    "frame_pacman_chase": {
+        "title": "Pac-Man Chase",
+        "description": "Аркадная рамка: Пакман гонится за призраком по периметру поля.",
+        "cost_points": 30_000,
+        "effect": "cosmetic_frame",
+        "permanent": True,
+    },
+}
+
+
+def _referral_shop_profile_block(summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "lives_current": int(summary["lives"]["current"]),
+        "lives_max": int(summary["lives"]["max"]),
+        "streak_days": int(summary["profile"]["streak_days"]),
+        "streak_shields_available": int(summary["profile"]["streak_shields_available"]),
+        "streak_shields_max": int(summary["profile"]["streak_shields_max"]),
+        "next_life_at": summary["lives"].get("next_life_at"),
+        "fast_life_regen_until": summary["profile"].get("fast_life_regen_until"),
+        "active_minigame_frame": summary["profile"].get("active_minigame_frame") or "",
+    }
+
+
+def _referral_shop_item_can_redeem(
+    balance: int, profile: GamificationProfile, meta: dict[str, Any]
+) -> tuple[bool, str | None]:
+    cost = int(meta["cost_points"])
+    effect = meta["effect"]
+    if balance < cost:
+        return False, "not_enough_points"
+    if effect == "extra_life":
+        if profile.lives_current >= profile.lives_max:
+            return False, "lives_full"
+    elif effect == "full_lives_refill":
+        if profile.lives_current >= profile.lives_max:
+            return False, "lives_full"
+    elif effect == "streak_shield":
+        if profile.streak_shields_available >= int(profile.streak_shields_max):
+            return False, "streak_shields_limit"
+    elif effect == "fast_life_regen":
+        pass
+    elif effect == "cosmetic_frame":
+        pass
+    else:
+        return False, "unknown_reward"
+    return True, None
+
+
+def build_referral_shop_payload(user) -> dict[str, Any]:
+    summary = build_gamification_summary(user)
+    profile = GamificationProfile.objects.get(user=user)
+    balance = int(summary["points"]["balance"])
+    owned_codes = set(
+        ReferralShopOwnedItem.objects.filter(user=user).values_list("item_code", flat=True)
+    )
+    items: list[dict[str, Any]] = []
+    for code, meta in REFERRAL_SHOP_REWARDS.items():
+        effect = meta["effect"]
+        if effect == "increase_lives_max":
+            lm = int(profile.lives_max)
+            if lm >= REFERRAL_SHOP_LIVES_MAX_CAP:
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": 0,
+                        "can_redeem": False,
+                        "disabled_reason": "max_lives_limit",
+                        "current_value": lm,
+                    }
+                )
+                continue
+            cost_opt = _lives_max_upgrade_cost_for_current(lm)
+            if cost_opt is None:
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": 0,
+                        "can_redeem": False,
+                        "disabled_reason": "max_lives_limit",
+                        "current_value": lm,
+                    }
+                )
+                continue
+            can, reason = True, None
+            if balance < cost_opt:
+                can, reason = False, "not_enough_points"
+            items.append(
+                {
+                    "code": code,
+                    "title": meta["title"],
+                    "description": meta["description"],
+                    "cost_points": cost_opt,
+                    "can_redeem": can,
+                    "disabled_reason": reason,
+                    "current_value": lm,
+                    "next_value": lm + 1,
+                }
+            )
+            continue
+        if effect == "increase_streak_shields_max":
+            sm = int(profile.streak_shields_max)
+            if sm >= REFERRAL_SHOP_STREAK_SHIELDS_MAX_CAP:
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": 0,
+                        "can_redeem": False,
+                        "disabled_reason": "streak_shields_max_limit",
+                        "current_value": sm,
+                    }
+                )
+                continue
+            cost_opt = _streak_shields_max_upgrade_cost_for_current(sm)
+            if cost_opt is None:
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": 0,
+                        "can_redeem": False,
+                        "disabled_reason": "streak_shields_max_limit",
+                        "current_value": sm,
+                    }
+                )
+                continue
+            can, reason = True, None
+            if balance < cost_opt:
+                can, reason = False, "not_enough_points"
+            items.append(
+                {
+                    "code": code,
+                    "title": meta["title"],
+                    "description": meta["description"],
+                    "cost_points": cost_opt,
+                    "can_redeem": can,
+                    "disabled_reason": reason,
+                    "current_value": sm,
+                    "next_value": sm + 1,
+                }
+            )
+            continue
+
+        if effect == "cosmetic_frame":
+            cost = int(meta["cost_points"])
+            if meta.get("default_owned"):
+                active_cur = (profile.active_minigame_frame or "").strip()
+                active = active_cur == "" or active_cur == code
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": cost,
+                        "effect": effect,
+                        "item_type": "cosmetic_frame",
+                        "permanent": bool(meta.get("permanent", True)),
+                        "default_owned": True,
+                        "owned": True,
+                        "active": active,
+                        "can_redeem": False,
+                        "disabled_reason": None,
+                    }
+                )
+                continue
+
+            owned = code in owned_codes
+            active = (profile.active_minigame_frame or "") == code
+            if owned:
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": cost,
+                        "effect": effect,
+                        "item_type": "cosmetic_frame",
+                        "permanent": bool(meta.get("permanent", True)),
+                        "owned": True,
+                        "active": active,
+                        "can_redeem": False,
+                        "disabled_reason": None,
+                    }
+                )
+            else:
+                can_buy = balance >= cost
+                items.append(
+                    {
+                        "code": code,
+                        "title": meta["title"],
+                        "description": meta["description"],
+                        "cost_points": cost,
+                        "effect": effect,
+                        "item_type": "cosmetic_frame",
+                        "permanent": bool(meta.get("permanent", True)),
+                        "owned": False,
+                        "active": False,
+                        "can_redeem": can_buy,
+                        "disabled_reason": None if can_buy else "not_enough_points",
+                    }
+                )
+            continue
+
+        if effect == "fast_life_regen":
+            fu = profile.fast_life_regen_until
+            now_shop = timezone.now()
+            is_act = fu is not None and fu > now_shop
+            can, reason = _referral_shop_item_can_redeem(balance, profile, meta)
+            items.append(
+                {
+                    "code": code,
+                    "title": meta["title"],
+                    "description": meta["description"],
+                    "cost_points": int(meta["cost_points"]),
+                    "can_redeem": can,
+                    "disabled_reason": reason,
+                    "active_until": fu.isoformat() if fu else None,
+                    "is_active": is_act,
+                }
+            )
+            continue
+
+        can, reason = _referral_shop_item_can_redeem(balance, profile, meta)
+        items.append(
+            {
+                "code": code,
+                "title": meta["title"],
+                "description": meta["description"],
+                "cost_points": int(meta["cost_points"]),
+                "can_redeem": can,
+                "disabled_reason": reason,
+            }
+        )
+    return {
+        "points": summary["points"],
+        "profile": _referral_shop_profile_block(summary),
+        "items": items,
+    }
+
+
+def redeem_referral_shop_reward(
+    user,
+    reward_code: str,
+    client_request_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    Spend referral shop points for a catalog reward. Idempotent when ``client_request_id`` is set.
+    """
+    reward_code = (reward_code or "").strip()
+    meta = REFERRAL_SHOP_REWARDS.get(reward_code)
+    if meta is None:
+        raise ValidationError("unknown_reward", code="unknown_reward")
+
+    effect = meta["effect"]
+    now = timezone.now()
+
+    if effect == "cosmetic_frame" and meta.get("default_owned"):
+        raise ValidationError("not_purchasable", code="not_purchasable")
+
+    with transaction.atomic():
+        profile, _ = GamificationProfile.objects.select_for_update().get_or_create(user=user)
+        refresh_challenge_lives(profile, now)
+
+        if effect == "increase_lives_max":
+            lm = int(profile.lives_max)
+            if lm >= REFERRAL_SHOP_LIVES_MAX_CAP:
+                raise ValidationError("max_lives_limit", code="max_lives_limit")
+            cost_opt = _lives_max_upgrade_cost_for_current(lm)
+            if cost_opt is None:
+                raise ValidationError("max_lives_limit", code="max_lives_limit")
+            cost = cost_opt
+        elif effect == "increase_streak_shields_max":
+            sm = int(profile.streak_shields_max)
+            if sm >= REFERRAL_SHOP_STREAK_SHIELDS_MAX_CAP:
+                raise ValidationError("streak_shields_max_limit", code="streak_shields_max_limit")
+            cost_opt = _streak_shields_max_upgrade_cost_for_current(sm)
+            if cost_opt is None:
+                raise ValidationError("streak_shields_max_limit", code="streak_shields_max_limit")
+            cost = cost_opt
+        else:
+            cost = int(meta["cost_points"])
+
+        idem_key: str | None = None
+        if client_request_id is not None:
+            cid = str(client_request_id).strip()
+            if not cid:
+                raise ValidationError("invalid_client_request_id", code="invalid_client_request_id")
+            idem_key = f"reward_spend:{user.pk}:{cid}"
+            existing = (
+                ReferralPointTransaction.objects.select_for_update()
+                .filter(idempotency_key=idem_key)
+                .first()
+            )
+            if existing is not None:
+                profile.refresh_from_db()
+                summary = build_gamification_summary(user)
+                return {
+                    "ok": True,
+                    "reward_code": str(existing.metadata.get("reward_code") or reward_code),
+                    "spent_points": abs(int(existing.amount)),
+                    "points": summary["points"],
+                    "profile": _referral_shop_profile_block(summary),
+                }
+
+        if effect == "cosmetic_frame":
+            if ReferralShopOwnedItem.objects.filter(user=user, item_code=reward_code).exists():
+                raise ValidationError("already_owned", code="already_owned")
+
+        if int(profile.points_balance) < cost:
+            raise ValidationError("not_enough_points", code="not_enough_points")
+
+        if effect == "extra_life":
+            if profile.lives_current >= profile.lives_max:
+                raise ValidationError("lives_full", code="lives_full")
+            profile.lives_current += 1
+            md: dict[str, Any] = {
+                "reward_code": reward_code,
+                "reward_title": meta["title"],
+                "effect": effect,
+                "cost_points": cost,
+            }
+        elif effect == "full_lives_refill":
+            if profile.lives_current >= profile.lives_max:
+                raise ValidationError("lives_full", code="lives_full")
+            profile.lives_current = profile.lives_max
+            profile.next_life_at = None
+            profile.last_life_refill_at = now
+            md = {
+                "reward_code": reward_code,
+                "reward_title": meta["title"],
+                "effect": effect,
+                "cost_points": cost,
+            }
+        elif effect == "streak_shield":
+            if profile.streak_shields_available >= int(profile.streak_shields_max):
+                raise ValidationError("streak_shields_limit", code="streak_shields_limit")
+            profile.streak_shields_available += 1
+            md = {
+                "reward_code": reward_code,
+                "reward_title": meta["title"],
+                "effect": effect,
+                "cost_points": cost,
+            }
+        elif effect == "increase_lives_max":
+            old_lm = int(profile.lives_max)
+            new_lm = old_lm + 1
+            profile.lives_max = new_lm
+            profile.lives_current = min(int(profile.lives_current) + 1, new_lm)
+            md = {
+                "reward_code": reward_code,
+                "old_lives_max": old_lm,
+                "new_lives_max": new_lm,
+                "cost_points": cost,
+            }
+        elif effect == "increase_streak_shields_max":
+            old_sm = int(profile.streak_shields_max)
+            new_sm = old_sm + 1
+            profile.streak_shields_max = new_sm
+            profile.streak_shields_available = min(int(profile.streak_shields_available) + 1, new_sm)
+            md = {
+                "reward_code": reward_code,
+                "old_streak_shields_max": old_sm,
+                "new_streak_shields_max": new_sm,
+                "cost_points": cost,
+            }
+        elif effect == "fast_life_regen":
+            max_until = now + timedelta(days=7)
+            old_until = profile.fast_life_regen_until
+            if old_until and old_until > now:
+                new_uncapped = old_until + timedelta(hours=24)
+            else:
+                new_uncapped = now + timedelta(hours=24)
+            new_until = min(new_uncapped, max_until)
+            if old_until and old_until > now and new_until <= old_until:
+                raise ValidationError("fast_life_regen_limit", code="fast_life_regen_limit")
+            profile.fast_life_regen_until = new_until
+            refresh_challenge_lives(profile, now)
+            md = {
+                "reward_code": reward_code,
+                "old_fast_life_regen_until": old_until.isoformat() if old_until else None,
+                "new_fast_life_regen_until": new_until.isoformat(),
+                "duration_hours": 24,
+                "cost_points": cost,
+            }
+        elif effect == "cosmetic_frame":
+            ReferralShopOwnedItem.objects.create(
+                user=user,
+                item_code=reward_code,
+                item_type="frame",
+                metadata={},
+            )
+            profile.active_minigame_frame = reward_code
+            md = {
+                "reward_code": reward_code,
+                "item_type": "frame",
+                "reward_title": meta["title"],
+                "cost_points": cost,
+            }
+        else:
+            raise ValidationError("unknown_reward", code="unknown_reward")
+
+        new_balance = int(profile.points_balance) - cost
+        if new_balance < 0:
+            raise ValidationError("not_enough_points", code="not_enough_points")
+
+        profile.points_balance = new_balance
+        profile.points_lifetime_spent += cost
+
+        try:
+            with transaction.atomic():
+                ReferralPointTransaction.objects.create(
+                    user=user,
+                    transaction_type=ReferralPointTransaction.Type.REWARD_SPEND,
+                    amount=-cost,
+                    idempotency_key=idem_key,
+                    balance_after=new_balance,
+                    metadata=md,
+                )
+        except IntegrityError as exc:
+            if idem_key and ReferralPointTransaction.objects.filter(idempotency_key=idem_key).exists():
+                profile.refresh_from_db()
+                summary = build_gamification_summary(user)
+                existing = ReferralPointTransaction.objects.get(idempotency_key=idem_key)
+                return {
+                    "ok": True,
+                    "reward_code": str(existing.metadata.get("reward_code") or reward_code),
+                    "spent_points": abs(int(existing.amount)),
+                    "points": summary["points"],
+                    "profile": _referral_shop_profile_block(summary),
+                }
+            raise exc
+
+        uf = {"points_balance", "points_lifetime_spent", "updated_at"}
+        if effect == "extra_life":
+            uf |= {"lives_current"}
+        elif effect == "full_lives_refill":
+            uf |= {"lives_current", "next_life_at", "last_life_refill_at"}
+        elif effect == "streak_shield":
+            uf |= {"streak_shields_available"}
+        elif effect == "increase_lives_max":
+            uf |= {"lives_current", "lives_max"}
+        elif effect == "increase_streak_shields_max":
+            uf |= {"streak_shields_available", "streak_shields_max"}
+        elif effect == "fast_life_regen":
+            uf |= {
+                "fast_life_regen_until",
+                "lives_current",
+                "next_life_at",
+                "last_life_refill_at",
+            }
+        elif effect == "cosmetic_frame":
+            uf |= {"active_minigame_frame"}
+        profile.save(update_fields=sorted(uf))
+
+    summary = build_gamification_summary(user)
+    return {
+        "ok": True,
+        "reward_code": reward_code,
+        "spent_points": cost,
+        "points": summary["points"],
+        "profile": _referral_shop_profile_block(summary),
+    }
+
+
+def select_active_minigame_frame(user, frame_code: str) -> dict[str, Any]:
+    """Set ``GamificationProfile.active_minigame_frame`` if the user owns the frame."""
+    frame_code = (frame_code or "").strip()
+    if frame_code not in REFERRAL_SHOP_COSMETIC_FRAME_CODES:
+        raise ValidationError("unknown_frame", code="unknown_frame")
+    meta = REFERRAL_SHOP_REWARDS.get(frame_code)
+    if meta is None:
+        raise ValidationError("unknown_frame", code="unknown_frame")
+    with transaction.atomic():
+        profile, _ = GamificationProfile.objects.select_for_update().get_or_create(user=user)
+        if meta.get("effect") == "cosmetic_frame" and meta.get("default_owned"):
+            profile.active_minigame_frame = ""
+            profile.save(update_fields=["active_minigame_frame", "updated_at"])
+        else:
+            if not ReferralShopOwnedItem.objects.filter(user=user, item_code=frame_code).exists():
+                raise ValidationError("frame_not_owned", code="frame_not_owned")
+            profile.active_minigame_frame = frame_code
+            profile.save(update_fields=["active_minigame_frame", "updated_at"])
+    summary = build_gamification_summary(user)
+    return {
+        "ok": True,
+        "frame_code": frame_code,
+        "points": summary["points"],
+        "profile": _referral_shop_profile_block(summary),
+    }
 
 
 # Referral shop points multiplier by league (same tier names as ``calculate_referral_league_id``).

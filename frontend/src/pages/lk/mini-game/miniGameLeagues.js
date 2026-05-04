@@ -26,6 +26,36 @@ export const MINI_GAME_LEAGUES = [
   { id: "ultra", name: "Ultra" },
 ];
 
+/** Множитель начисления баллов магазина по лиге (как на backend). */
+export const LEAGUE_POINT_MULTIPLIERS = {
+  start: 1,
+  bronze: 1.25,
+  silver: 1.5,
+  gold: 2,
+  platinum: 2.5,
+  diamond: 3,
+  ultra: 4,
+};
+
+/** Числовой множитель; неизвестная / пустая лига → как Start (×1). */
+export function getLeaguePointMultiplier(leagueId) {
+  const id = String(leagueId ?? "").trim().toLowerCase();
+  if (!id || !(id in LEAGUE_POINT_MULTIPLIERS)) {
+    return LEAGUE_POINT_MULTIPLIERS.start;
+  }
+  return LEAGUE_POINT_MULTIPLIERS[id];
+}
+
+/** Подпись вида x1, x1.25, x1.5 … для UI магазина баллов. */
+export function formatLeaguePointMultiplierLabel(leagueId) {
+  const m = getLeaguePointMultiplier(leagueId);
+  if (!Number.isFinite(m)) {
+    return "x1";
+  }
+  const txt = Number.isInteger(m) ? String(m) : String(m);
+  return `x${txt}`;
+}
+
 /** Группы для страницы «Лиги» — заголовки в стиле каталога программ. */
 export const MINI_GAME_LEAGUE_SECTIONS = [
   { id: "base", title: "Базовые лиги", leagueIds: ["start", "bronze", "silver"] },

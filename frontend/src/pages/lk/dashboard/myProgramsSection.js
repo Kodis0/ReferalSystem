@@ -13,8 +13,41 @@ import {
   programLifecycleStatus,
 } from "./programsCatalogModel";
 import myProgramsCatalogBanner from "../../../static/images/my-programs-catalog-banner.png";
+import achievementRevealEye from "../../../static/images/achievement-reveal-eye.svg";
+import programsCatalogHeroHiddenEye from "../../../static/images/programs-catalog-hero-hidden-eye.svg";
 import "../owner-programs/owner-programs.css";
 import "./dashboard.css";
+import {
+  eyePosUnchanged,
+  floatingEyePosHeroHidden,
+  floatingEyeTopLeftFromBannerInset,
+  rectCenterToFixedEyeTopLeft,
+  roundFixedEyePos,
+} from "./catalogHeroEyeGeometry";
+
+const MY_PROGRAMS_BANNER_HIDDEN_KEY = "myProgramsCatalogBannerHidden:v1";
+
+function readMyProgramsBannerHiddenFromStorage() {
+  try {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(MY_PROGRAMS_BANNER_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistMyProgramsBannerHidden(hidden) {
+  try {
+    if (typeof window === "undefined") return;
+    if (hidden) {
+      window.localStorage.setItem(MY_PROGRAMS_BANNER_HIDDEN_KEY, "1");
+    } else {
+      window.localStorage.removeItem(MY_PROGRAMS_BANNER_HIDDEN_KEY);
+    }
+  } catch {
+    /* storage недоступен */
+  }
+}
 
 function ServiceActionsIcon() {
   return (
@@ -57,6 +90,132 @@ export function MyProgramsSection() {
   const [activeMenuSiteId, setActiveMenuSiteId] = useState("");
   const menuDropdownPortalRef = useRef(null);
   const [menuAnchorRect, setMenuAnchorRect] = useState(null);
+
+  const [myProgramsHeroHidden, setMyProgramsHeroHidden] = useState(readMyProgramsBannerHiddenFromStorage);
+  const [myProgramsHeroEyePos, setMyProgramsHeroEyePos] = useState(null);
+  const myProgramsHeroEyeRoRafRef = useRef(null);
+  const myProgramsHeroEyeFrozenPosRef = useRef(null);
+  const myProgramsHeroCornerAnchorRef = useRef(null);
+  const myProgramsHeroBannerRef = useRef(null);
+  const myProgramsHeroCollapseRef = useRef(null);
+  const myProgramsHeroHeadingRowRef = useRef(null);
+  const myProgramsHeroHeadingEyeAnchorRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (myProgramsHeroEyeRoRafRef.current != null) {
+        window.cancelAnimationFrame(myProgramsHeroEyeRoRafRef.current);
+      }
+    };
+  }, []);
+
+  const syncMyProgramsHeroFloatingEye = useCallback(() => {
+    const commitEyePos = (raw) => {
+      const pos = raw ? roundFixedEyePos(raw) : null;
+      if (!pos) return;
+      setMyProgramsHeroEyePos((prev) => (eyePosUnchanged(prev, pos) ? prev : pos));
+    };
+
+    if (!myProgramsHeroHidden) {
+      const fromBanner = floatingEyeTopLeftFromBannerInset(myProgramsHeroBannerRef.current);
+      if (fromBanner) {
+        commitEyePos(fromBanner);
+      } else {
+        const corner = myProgramsHeroCornerAnchorRef.current;
+        const cornerRect = corner?.getBoundingClientRect();
+        if (cornerRect && cornerRect.width >= 1 && cornerRect.height >= 1) {
+          commitEyePos(rectCenterToFixedEyeTopLeft(cornerRect));
+        }
+      }
+      return;
+    }
+
+    const frozen = myProgramsHeroEyeFrozenPosRef.current;
+    if (frozen) {
+      commitEyePos(frozen);
+      return;
+    }
+
+    const slotPos = floatingEyePosHeroHidden(
+      myProgramsHeroHeadingEyeAnchorRef.current,
+      myProgramsHeroHeadingRowRef.current,
+    );
+    if (slotPos) {
+      commitEyePos(slotPos);
+    }
+  }, [myProgramsHeroHidden]);
+
+  const hideMyProgramsHero = useCallback(() => {
+    const fromBanner = floatingEyeTopLeftFromBannerInset(myProgramsHeroBannerRef.current);
+    if (fromBanner) {
+      myProgramsHeroEyeFrozenPosRef.current = fromBanner;
+    } else {
+      const corner = myProgramsHeroCornerAnchorRef.current;
+      const cr = corner?.getBoundingClientRect();
+      if (cr && cr.width >= 1 && cr.height >= 1) {
+        myProgramsHeroEyeFrozenPosRef.current = rectCenterToFixedEyeTopLeft(cr);
+      } else {
+        const slotPos = floatingEyePosHeroHidden(
+          myProgramsHeroHeadingEyeAnchorRef.current,
+          myProgramsHeroHeadingRowRef.current,
+        );
+        if (slotPos) {
+          myProgramsHeroEyeFrozenPosRef.current = slotPos;
+        }
+      }
+    }
+    setMyProgramsHeroHidden(true);
+    persistMyProgramsBannerHidden(true);
+  }, []);
+
+  const showMyProgramsHero = useCallback(() => {
+    myProgramsHeroEyeFrozenPosRef.current = null;
+    setMyProgramsHeroHidden(false);
+    persistMyProgramsBannerHidden(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    syncMyProgramsHeroFloatingEye();
+  }, [syncMyProgramsHeroFloatingEye]);
+
+  useLayoutEffect(() => {
+    if (typeof ResizeObserver !== "function") {
+      return undefined;
+    }
+    const row = myProgramsHeroHeadingRowRef.current;
+    const collapse = myProgramsHeroCollapseRef.current;
+    const scheduleSync = () => {
+      if (myProgramsHeroEyeRoRafRef.current != null) {
+        window.cancelAnimationFrame(myProgramsHeroEyeRoRafRef.current);
+      }
+      myProgramsHeroEyeRoRafRef.current = window.requestAnimationFrame(() => {
+        myProgramsHeroEyeRoRafRef.current = null;
+        syncMyProgramsHeroFloatingEye();
+      });
+    };
+    const ro = new ResizeObserver(scheduleSync);
+    if (row) ro.observe(row);
+    if (collapse) ro.observe(collapse);
+    return () => {
+      ro.disconnect();
+      if (myProgramsHeroEyeRoRafRef.current != null) {
+        window.cancelAnimationFrame(myProgramsHeroEyeRoRafRef.current);
+        myProgramsHeroEyeRoRafRef.current = null;
+      }
+    };
+  }, [syncMyProgramsHeroFloatingEye]);
+
+  useEffect(() => {
+    function onViewportChange() {
+      syncMyProgramsHeroFloatingEye();
+    }
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [syncMyProgramsHeroFloatingEye]);
 
   useEffect(() => {
     if (!activeMenuSiteId) return undefined;
@@ -301,75 +460,119 @@ export function MyProgramsSection() {
       aria-label="Агентские программы"
       aria-busy={programs === null && !programsError ? true : undefined}
     >
-      <div className="lk-dashboard__my-programs-catalog-banner" data-testid="my-programs-catalog-banner">
-        <div className="lk-dashboard__my-programs-catalog-banner-inner">
-          <div className="lk-dashboard__my-programs-catalog-banner-copy">
-            <p className="lk-dashboard__my-programs-catalog-banner-title">Начните с каталога</p>
-            <p className="lk-dashboard__my-programs-catalog-banner-sub">
-              Выберите подходящую программу из каталога, вступите в неё и получите личную ссылку — по ней будут засчитываться привлечённые вами клиенты.
-            </p>
-            <Link
-              className="lk-dashboard__my-programs-catalog-banner-cta"
-              to="/lk/programs"
-              data-testid="my-programs-catalog-find-program"
+      <div
+        ref={myProgramsHeroCollapseRef}
+        className={
+          "lk-dashboard__programs-catalog-hero-collapse" +
+          (myProgramsHeroHidden ? "" : " lk-dashboard__programs-catalog-hero-collapse--open")
+        }
+        aria-hidden={myProgramsHeroHidden}
+      >
+        <div className="lk-dashboard__programs-catalog-hero-collapse-sizer">
+          <div className="lk-dashboard__my-programs-hero-stack">
+            <div
+              ref={myProgramsHeroBannerRef}
+              className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero"
+              data-testid="my-programs-catalog-banner"
             >
-              Найти программу
-            </Link>
-          </div>
-          <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">
-            <img src={myProgramsCatalogBanner} alt="" decoding="async" />
+              <span
+                ref={myProgramsHeroCornerAnchorRef}
+                className="lk-dashboard__programs-catalog-hero-eye-anchor lk-dashboard__programs-catalog-hero-eye-anchor--corner"
+                aria-hidden="true"
+              />
+              <div className="lk-dashboard__my-programs-catalog-banner-inner">
+                <div className="lk-dashboard__my-programs-catalog-banner-copy">
+                  <p className="lk-dashboard__my-programs-catalog-banner-title">Начните с каталога</p>
+                  <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                    Выберите подходящую программу из каталога, вступите в неё и получите личную ссылку — по ней будут засчитываться привлечённые вами клиенты.
+                  </p>
+                  <Link
+                    className="lk-dashboard__my-programs-catalog-banner-cta"
+                    to="/lk/programs"
+                    data-testid="my-programs-catalog-find-program"
+                  >
+                    Найти программу
+                  </Link>
+                </div>
+                <div className="lk-dashboard__my-programs-catalog-banner-art" aria-hidden="true">
+                  <img src={myProgramsCatalogBanner} alt="" decoding="async" />
+                </div>
+              </div>
+            </div>
+
+            <div className="lk-dashboard__my-programs-catalog-cards" data-testid="my-programs-catalog-cards">
+              <div
+                className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
+                role="group"
+                aria-labelledby="my-programs-card-choose-title"
+                data-testid="my-programs-catalog-card-choose-program"
+              >
+                <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
+                  <Search size={22} strokeWidth={1.75} />
+                </div>
+                <p id="my-programs-card-choose-title" className="lk-dashboard__my-programs-catalog-card-title">
+                  Выберите программу
+                </p>
+                <p className="lk-dashboard__my-programs-catalog-card-desc">
+                  Откройте каталог и найдите программу с подходящими условиями вознаграждения.
+                </p>
+              </div>
+              <div
+                className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
+                role="group"
+                aria-labelledby="my-programs-card-join-title"
+                data-testid="my-programs-catalog-card-join-program"
+              >
+                <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
+                  <UserPlus size={22} strokeWidth={1.75} />
+                </div>
+                <p id="my-programs-card-join-title" className="lk-dashboard__my-programs-catalog-card-title">
+                  Вступите в программу
+                </p>
+                <p className="lk-dashboard__my-programs-catalog-card-desc">
+                  Подтвердите участие, чтобы программа появилась в вашем кабинете и стала доступна личная ссылка.
+                </p>
+              </div>
+              <div
+                className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
+                role="group"
+                aria-labelledby="my-programs-card-link-title"
+                data-testid="my-programs-catalog-card-personal-link"
+              >
+                <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
+                  <Link2 size={22} strokeWidth={1.75} />
+                </div>
+                <p id="my-programs-card-link-title" className="lk-dashboard__my-programs-catalog-card-title">
+                  Получите личную ссылку
+                </p>
+                <p className="lk-dashboard__my-programs-catalog-card-desc">
+                  Делитесь ссылкой — по ней будут засчитываться привлечённые вами клиенты.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      <div className="lk-dashboard__my-programs-catalog-cards" data-testid="my-programs-catalog-cards">
-        <div
-          className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
-          role="group"
-          aria-labelledby="my-programs-card-choose-title"
-          data-testid="my-programs-catalog-card-choose-program"
-        >
-          <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
-            <Search size={22} strokeWidth={1.75} />
-          </div>
-          <p id="my-programs-card-choose-title" className="lk-dashboard__my-programs-catalog-card-title">
-            Выберите программу
-          </p>
-          <p className="lk-dashboard__my-programs-catalog-card-desc">
-            Откройте каталог и найдите программу с подходящими условиями вознаграждения.
-          </p>
-        </div>
-        <div
-          className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
-          role="group"
-          aria-labelledby="my-programs-card-join-title"
-          data-testid="my-programs-catalog-card-join-program"
-        >
-          <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
-            <UserPlus size={22} strokeWidth={1.75} />
-          </div>
-          <p id="my-programs-card-join-title" className="lk-dashboard__my-programs-catalog-card-title">
-            Вступите в программу
-          </p>
-          <p className="lk-dashboard__my-programs-catalog-card-desc">
-            Подтвердите участие, чтобы программа появилась в вашем кабинете и стала доступна личная ссылка.
-          </p>
-        </div>
-        <div
-          className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
-          role="group"
-          aria-labelledby="my-programs-card-link-title"
-          data-testid="my-programs-catalog-card-personal-link"
-        >
-          <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
-            <Link2 size={22} strokeWidth={1.75} />
-          </div>
-          <p id="my-programs-card-link-title" className="lk-dashboard__my-programs-catalog-card-title">
-            Получите личную ссылку
-          </p>
-          <p className="lk-dashboard__my-programs-catalog-card-desc">
-            Делитесь ссылкой — по ней будут засчитываться привлечённые вами клиенты.
-          </p>
-        </div>
+
+      <div
+        ref={myProgramsHeroHeadingRowRef}
+        className="lk-dashboard__programs-catalog-heading-row"
+        data-testid="my-programs-section-title"
+      >
+        <h2 className="lk-dashboard__programs-title owner-programs__services-section-heading">
+          Мои программы
+          {programs !== null && !programsError ? (
+            <>
+              {" "}
+              <span className="owner-programs__services-section-count">{programs.length}</span>
+            </>
+          ) : null}
+        </h2>
+        <span
+          ref={myProgramsHeroHeadingEyeAnchorRef}
+          className="lk-dashboard__programs-catalog-hero-eye-anchor lk-dashboard__programs-catalog-hero-eye-anchor--inline"
+          aria-hidden="true"
+        />
       </div>
       {programsError && (
         <p className="lk-dashboard__programs-muted">
@@ -395,16 +598,14 @@ export function MyProgramsSection() {
               />
             </label>
           </div>
-          <div className="owner-programs__services-section-title" data-testid="my-programs-section-title">
-            <h2 className="owner-programs__services-section-heading">
-              Мои программы{" "}
-              <span className="owner-programs__services-section-count">{programs.length}</span>
-            </h2>
-          </div>
           {programs.length === 0 ? (
-            <div className="lk-dashboard__programs-muted">
-              <p>Вы пока не участвуете ни в одной программе.</p>
-              <p>Откройте каталог, выберите программу и получите персональную ссылку.</p>
+            <div className="lk-dashboard__programs-empty-card">
+              <div className="lk-dashboard__programs-empty-copy">
+                <p className="lk-dashboard__programs-empty-title">Вы пока не участвуете ни в одной программе.</p>
+                <p className="lk-dashboard__programs-empty-sub">
+                  Откройте каталог, выберите программу и получите персональную ссылку.
+                </p>
+              </div>
             </div>
           ) : filteredPrograms.length === 0 ? (
             <p className="lk-dashboard__programs-muted">По вашему запросу программ не найдено.</p>
@@ -500,6 +701,33 @@ export function MyProgramsSection() {
         </>
       )}
     </section>
+    {myProgramsHeroEyePos && typeof document !== "undefined"
+      ? createPortal(
+          <button
+            type="button"
+            className="lk-dashboard__programs-catalog-floating-eye lk-dashboard__programs-catalog-hero-eye"
+            style={{
+              top: myProgramsHeroEyePos.top,
+              left: myProgramsHeroEyePos.left,
+            }}
+            onClick={myProgramsHeroHidden ? showMyProgramsHero : hideMyProgramsHero}
+            aria-label={
+              myProgramsHeroHidden
+                ? "Показать подсказку на странице «Мои программы»"
+                : "Скрыть подсказку на странице «Мои программы»"
+            }
+          >
+            <img
+              src={myProgramsHeroHidden ? programsCatalogHeroHiddenEye : achievementRevealEye}
+              alt=""
+              width={myProgramsHeroHidden ? 23 : 26}
+              height={myProgramsHeroHidden ? 20 : 18}
+              decoding="async"
+            />
+          </button>,
+          document.body,
+        )
+      : null}
     {menuPortal}
     </>
   );

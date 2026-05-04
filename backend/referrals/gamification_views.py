@@ -8,7 +8,10 @@ from .gamification import (
     build_daily_challenge_leaderboard,
     build_gamification_leaderboard,
     build_gamification_summary,
+    build_referral_shop_payload,
     finish_daily_challenge,
+    redeem_referral_shop_reward,
+    select_active_minigame_frame,
     start_daily_challenge,
 )
 from .serializers import DailyChallengeFinishSerializer
@@ -30,6 +33,56 @@ class DailyChallengeLeaderboardView(APIView):
 
     def get(self, request):
         return Response(build_daily_challenge_leaderboard())
+
+
+class GamificationShopView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(build_referral_shop_payload(request.user))
+
+
+class GamificationShopRedeemView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        reward_code = request.data.get("reward_code")
+        if reward_code is None or str(reward_code).strip() == "":
+            return Response(_gamification_api_error("unknown_reward"), status=status.HTTP_400_BAD_REQUEST)
+        raw_crid = request.data.get("client_request_id")
+        client_request_id = None if raw_crid is None else str(raw_crid)
+        try:
+            payload = redeem_referral_shop_reward(
+                request.user,
+                str(reward_code).strip(),
+                client_request_id,
+            )
+        except DjangoValidationError as exc:
+            token = getattr(exc, "code", None)
+            if token is None and getattr(exc, "messages", None):
+                token = str(exc.messages[0])
+            token = str(token or "validation_error")
+            return Response(_gamification_api_error(token), status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class GamificationShopSelectFrameView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        raw = request.data.get("frame_code")
+        frame_code = None if raw is None else str(raw).strip()
+        if not frame_code:
+            return Response(_gamification_api_error("unknown_frame"), status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = select_active_minigame_frame(request.user, frame_code)
+        except DjangoValidationError as exc:
+            token = getattr(exc, "code", None)
+            if token is None and getattr(exc, "messages", None):
+                token = str(exc.messages[0])
+            token = str(token or "validation_error")
+            return Response(_gamification_api_error(token), status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class GamificationReferralLeaderboardView(APIView):

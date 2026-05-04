@@ -22,8 +22,9 @@ import { formatRegistrationErrors } from "./registrationErrors";
  */
 
 const REGISTER_URL = API_ENDPOINTS.register;
-/** Если бэкенд не прислал redirect_url — открываем вкладку «Панель» (после выдачи JWT при регистрации). */
-const DEFAULT_REDIRECT = "/lk/dashboard";
+/** Если бэкенд не прислал redirect_url — открываем вкладку «Проекты» (после выдачи JWT при регистрации). */
+const DEFAULT_REDIRECT = "/lk/partner";
+const OWNER_PROJECTS_BOOT_RETRY_KEY = "lkOwnerProjectsBootRetryAfterRegistration:v1";
 
 /** PDF в `public/legal/` — открываются в новой вкладке. */
 const LEGAL_DOC_BASE = `${process.env.PUBLIC_URL || ""}/legal`;
@@ -235,6 +236,14 @@ function Registration() {
         const target = redirectUrl.startsWith("http")
           ? redirectUrl
           : `${window.location.origin}${redirectUrl.startsWith("/") ? redirectUrl : "/" + redirectUrl}`;
+        try {
+          const targetUrl = new URL(target);
+          if (targetUrl.pathname === "/lk/partner") {
+            localStorage.setItem(OWNER_PROJECTS_BOOT_RETRY_KEY, "1");
+          }
+        } catch {
+          // Редирект всё равно выполняем; флаг нужен только для мягкого повторного запроса проектов.
+        }
         window.location.href = target;
         return;
       }

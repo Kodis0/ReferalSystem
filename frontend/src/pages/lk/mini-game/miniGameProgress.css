@@ -2,6 +2,17 @@
   margin-top: 18px;
 }
 
+/* Вкладка «Прогресс»: сетка карточек 2 в ряд (опыт тайл и «восстановление» по-прежнему на всю ширину). */
+.mini-game-progress__progress-profile-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .mini-game-progress__progress-profile-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Кнопки-вкладки: те же классы, что у NavLink в проектах */
 .lk-simple-page .owner-programs__tabs button.owner-programs__tab {
   font: inherit;
@@ -809,4 +820,779 @@
   .mini-game-achievements__card-complete-reveal {
     transition: none;
   }
+}
+
+/* Оверлей при оформлении покупки на вкладке «Магазин» */
+.mini-game-progress__shop-wrap {
+  position: relative;
+}
+
+.mini-game-progress__shop-redeem-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: rgba(36, 47, 61, 0.78);
+  pointer-events: auto;
+}
+
+.mini-game-progress__shop-redeem-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: #7177f8;
+  border-radius: 50%;
+  animation: mini-game-progress-shop-spin 0.75s linear infinite;
+}
+
+.mini-game-progress__shop-redeem-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+@keyframes mini-game-progress-shop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-game-progress__shop-redeem-spinner {
+    animation: none;
+    border-top-color: rgba(255, 255, 255, 0.35);
+  }
+}
+
+/* Вкладка «Магазин»: баланс баллов и множитель лиги */
+.mini-game-progress__shop-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .mini-game-progress__shop-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mini-game-progress__freeze-shields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.mini-game-progress__freeze-shield {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 27px;
+  flex-shrink: 0;
+}
+
+.mini-game-progress__freeze-shield img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mini-game-progress__freeze-shield_empty img {
+  opacity: 0.28;
+}
+
+.mini-game-progress__shop-status-cards {
+  margin-top: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .mini-game-progress__shop-status-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mini-game-progress__shop-catalog-note {
+  margin-top: 0.75rem;
+}
+
+.mini-game-progress__shop-catalog-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.mini-game-progress__shop-catalog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+/* Как у nav.owner-programs__tabs: нижняя разделительная линия на всю ширину */
+.mini-game-progress__shop-section-heading {
+  position: relative;
+  margin: 0;
+  padding-bottom: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-progress__shop-section-heading::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+[data-theme="light"] .mini-game-progress__shop-section-heading::after {
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.mini-game-progress__shop-catalog-section .mini-game-progress__shop-items {
+  margin-top: 0;
+}
+
+.mini-game-progress__shop-items {
+  margin-top: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .mini-game-progress__shop-items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .mini-game-progress__shop-items {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Карточка товара: бейдж цены, «?», арт, «Купить» */
+.mini-game-progress__shop-item--tile.block-blast-game__profile-card:not(.block-blast-game__profile-card_xp) {
+  align-items: stretch;
+}
+
+.mini-game-progress__shop-item--tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  position: relative;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile:has(.mini-game-progress__shop-item-help-anchor:hover),
+.mini-game-progress__shop-item--tile:has(.mini-game-progress__shop-item-help-anchor:focus-within) {
+  z-index: 100000;
+}
+
+.mini-game-progress__shop-item-caption {
+  margin: 0;
+  padding-right: 40px;
+  box-sizing: border-box;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #fff;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-game-progress__shop-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.mini-game-progress__shop-item-help-anchor {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 2;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.mini-game-progress__shop-item-help {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #7177f8;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mini-game-progress__shop-item-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
+  top: auto;
+  transform: none;
+  box-sizing: border-box;
+  min-width: 160px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(5, 12, 38, 0.15);
+  background: #ffffff;
+  color: #000000;
+  font-family: "Inter", "Stem-Regular", Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  z-index: 100000;
+}
+
+.mini-game-progress__shop-item-help-anchor:hover .mini-game-progress__shop-item-tooltip,
+.mini-game-progress__shop-item-help-anchor:focus-within .mini-game-progress__shop-item-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.mini-game-progress__shop-item-help:hover {
+  filter: brightness(1.08);
+}
+
+.mini-game-progress__shop-item-help:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.85);
+  outline-offset: 2px;
+}
+
+.mini-game-progress__shop-item-hero {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  container-type: size;
+  container-name: shop-item-hero;
+}
+
+.mini-game-progress__shop-item-hero-square {
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@supports (width: 1cqmin) {
+  .mini-game-progress__shop-item-hero-square {
+    width: min(100%, 100cqmin);
+    height: min(100%, 100cqmin);
+  }
+}
+
+@supports not (width: 1cqmin) {
+  .mini-game-progress__shop-item-hero-square {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    max-height: 100%;
+    height: auto;
+  }
+}
+
+.mini-game-progress__shop-item-hero-img--extra-life,
+.mini-game-progress__shop-item-hero-img--full-lives-refill,
+.mini-game-progress__shop-item-hero-img--streak-shield,
+.mini-game-progress__shop-item-hero-img--upgrade-lives,
+.mini-game-progress__shop-item-hero-img--upgrade-shields,
+.mini-game-progress__shop-item-hero-img--fast-life-regen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.mini-game-progress__shop-item--tile-extra-life .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile-extra-life .mini-game-progress__shop-item-hero-img--extra-life {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  transform: scale(2);
+  transform-origin: center center;
+}
+
+.mini-game-progress__shop-item--tile-full-lives-refill .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile-full-lives-refill .mini-game-progress__shop-item-hero-img--full-lives-refill {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  transform: scale(2);
+  transform-origin: center center;
+}
+
+.mini-game-progress__shop-item--tile-streak-shield .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile-streak-shield .mini-game-progress__shop-item-hero-img--streak-shield {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  transform: scale(2);
+  transform-origin: center center;
+}
+
+.mini-game-progress__shop-item--tile-upgrade-lives .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile-upgrade-lives .mini-game-progress__shop-item-hero-img--upgrade-lives {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  transform: scale(2);
+  transform-origin: center center;
+}
+
+.mini-game-progress__shop-item--tile-upgrade-shields .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile-upgrade-shields .mini-game-progress__shop-item-hero-img--upgrade-shields {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  transform: scale(2);
+  transform-origin: center center;
+}
+
+.mini-game-progress__shop-item--tile-fast-life-regen .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item--tile-fast-life-regen .mini-game-progress__shop-item-hero-img--fast-life-regen {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  transform: scale(2);
+  transform-origin: center center;
+}
+
+.mini-game-progress__shop-item--tile-frame-neon .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+/* Превью «Неон»: как block-blast-game__board-wrap + mini-game-frame--neon-line (10px рамка #242f3d, r12, поле --bb-board-bg) + SVG-точка по периметру */
+.mini-game-progress__shop-item-neon-preview {
+  position: relative;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-neon-preview-board {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 3px solid var(--bb-board-frame, #242f3d);
+  background: var(--bb-board-bg, #111827);
+  /* См. blockBlastGame.css: узкая Neon Line */
+  border-color: rgba(192, 174, 252, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.45),
+    0 0 18px rgba(139, 92, 246, 0.48),
+    0 0 40px rgba(99, 102, 241, 0.26);
+}
+
+.mini-game-progress__shop-item-neon-travel-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  overflow: visible;
+}
+
+/* Волна — короткие утолщённые сегменты по самой рамке, без expanding ring вокруг точки */
+.mini-game-progress__shop-item-neon-travel-wave {
+  filter: blur(0.55px) drop-shadow(0 0 5px rgba(192, 174, 252, 0.65));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-game-progress__shop-item-neon-travel-svg {
+    display: none;
+  }
+}
+
+.mini-game-progress__shop-item--tile-frame-pixel-arcade .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+/* Превью Pixel Arcade: те же токены, что board-wrap.mini-game-frame--pixel-arcade (blockBlastGame.css) */
+.mini-game-progress__shop-item-pixel-arcade-preview {
+  position: relative;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-pixel-arcade-preview-board {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 10px solid var(--bb-board-frame, #242f3d);
+  background: var(--bb-board-bg, #111827);
+  border-color: #2f3b52;
+  box-shadow: none;
+}
+
+.mini-game-progress__shop-item-pixel-arcade-travel-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-pixel-arcade-snake {
+  fill: #65a30d;
+}
+
+.mini-game-progress__shop-item-pixel-arcade-snake-head {
+  fill: #84cc16;
+}
+
+.mini-game-progress__shop-item-pixel-arcade-snake-eye {
+  fill: rgba(15, 23, 42, 0.95);
+}
+
+.mini-game-progress__shop-item-pixel-arcade-snake-tongue {
+  fill: #ef4444;
+}
+
+.mini-game-progress__shop-item-pixel-arcade-apple {
+  fill: #ef4444;
+}
+
+.mini-game-progress__shop-item--tile-frame-pacman-chase .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-pacman-chase-preview {
+  position: relative;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-pacman-chase-preview-board {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 10px solid #2563eb;
+  background: var(--bb-board-bg, #111827);
+  box-shadow: none;
+}
+
+.mini-game-progress__shop-item-pacman-chase-travel-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-pacman-chase-pacman {
+  fill: #facc15;
+}
+
+.mini-game-progress__shop-item-pacman-chase-ghost {
+  fill: #ef4444;
+}
+
+.mini-game-progress__shop-item-pacman-chase-eye {
+  fill: #ffffff;
+}
+
+.mini-game-progress__shop-item-pacman-chase-pupil {
+  fill: #111827;
+}
+
+.mini-game-progress__shop-item-pacman-chase-dot {
+  fill: #facc15;
+  transition: opacity 0.18s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-game-progress__shop-item-pixel-arcade-travel-svg {
+    display: none;
+  }
+
+  .mini-game-progress__shop-item-pixel-arcade-preview-board {
+    box-shadow: none;
+  }
+
+  .mini-game-progress__shop-item-pacman-chase-preview-board {
+    box-shadow: none;
+  }
+}
+
+.mini-game-progress__shop-item--tile-frame-garland .mini-game-progress__shop-item-hero {
+  overflow: visible;
+}
+
+/* Превью как на доске: лампочки по периметру (bb-garland-blink), не градиенты внутри и не пульс всей карточки */
+.mini-game-progress__shop-item-garland-preview {
+  position: relative;
+  overflow: visible;
+}
+
+.mini-game-progress__shop-item-garland-preview-board {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background-color: rgba(15, 23, 42, 0.35);
+  box-shadow:
+    inset 0 0 14px rgba(251, 191, 36, 0.06),
+    0 0 10px rgba(251, 191, 36, 0.08);
+}
+
+.mini-game-progress__shop-item-garland-preview .mini-game-progress__shop-item-garland-bulbs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.mini-game-progress__shop-item-footer-included {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(226, 232, 240, 0.96);
+}
+
+/* Как у бустеров: строка с ценой, затем кнопка на всю ширину карточки */
+.mini-game-progress__shop-item-footer--frame {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0;
+}
+
+.mini-game-progress__shop-item-footer-total--frame {
+  margin: 0;
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  text-align: center;
+}
+
+.mini-game-progress__shop-item-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.mini-game-progress__shop-item-streak-meta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  text-align: center;
+  align-self: center;
+}
+
+.mini-game-progress__shop-item-footer {
+  margin-top: auto;
+  margin-left: -16px;
+  margin-right: -16px;
+  margin-bottom: -14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: calc(100% + 32px);
+  max-width: none;
+  box-sizing: border-box;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  overflow: hidden;
+}
+
+.mini-game-progress__shop-item-footer-steps {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  box-sizing: border-box;
+}
+
+.mini-game-progress__shop-item-footer-total {
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.mini-game-progress__shop-item-footer-total-unit {
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.mini-game-progress__shop-item-step {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #7177f8;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.mini-game-progress__shop-item-step:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.mini-game-progress__shop-item-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mini-game-progress__shop-item-step:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.85);
+  outline-offset: 2px;
+}
+
+.mini-game-progress__shop-item-buy {
+  margin-top: 0;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 0;
+  background: #7177f8;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.mini-game-progress__shop-item-buy:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.mini-game-progress__shop-item-buy:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mini-game-progress__shop-item-buy:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.mini-game-progress__shop-feedback {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+}
+
+.mini-game-progress__shop-feedback--error {
+  color: var(--lk-danger-text, #c5221f);
+}
+
+.mini-game-progress__shop-feedback--success {
+  color: rgba(130, 220, 160, 0.98);
+}
+
+.mini-game-progress__fast-regen-caption {
+  margin-top: 8px;
 }
