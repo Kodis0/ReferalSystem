@@ -224,10 +224,35 @@ else:
         }
     }
 
+# Password reset captcha is stored in the default Django cache (`pwreset:captcha:*`).
+# In production this cache must be shared between Gunicorn workers: use DatabaseCache
+# (`DJANGO_CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache`,
+# `DJANGO_CACHE_LOCATION=django_cache`) or Redis.
+DJANGO_CACHE_BACKEND = os.getenv(
+    "DJANGO_CACHE_BACKEND",
+    "django.core.cache.backends.locmem.LocMemCache",
+).strip() or "django.core.cache.backends.locmem.LocMemCache"
+DJANGO_CACHE_LOCATION = os.getenv("DJANGO_CACHE_LOCATION", "lumo-referral-local").strip()
+
+CACHES = {
+    "default": {
+        "BACKEND": DJANGO_CACHE_BACKEND,
+        "LOCATION": DJANGO_CACHE_LOCATION,
+    }
+}
+
 if not DEBUG and DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
     raise ImproperlyConfigured(
         "SQLite must not be used when DJANGO_DEBUG=False. "
         "Set DB_ENGINE=django.db.backends.postgresql and DB_* in backend/.env."
+    )
+
+if not DEBUG and DJANGO_CACHE_BACKEND == "django.core.cache.backends.locmem.LocMemCache":
+    raise ImproperlyConfigured(
+        "LocMemCache must not be used when DJANGO_DEBUG=False because password reset captcha "
+        "must be shared between Gunicorn workers. Set DJANGO_CACHE_BACKEND to "
+        "django.core.cache.backends.db.DatabaseCache with DJANGO_CACHE_LOCATION=django_cache "
+        "or configure a Redis cache backend."
     )
 
 if not DEBUG:

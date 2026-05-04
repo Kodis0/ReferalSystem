@@ -55,12 +55,16 @@ Docker для прод-рантайма не требуется: venv + systemd 
    - `FRONTEND_URL=https://lumoref.ru`
    - `DJANGO_CORS_ALLOWED_ORIGINS=https://lumoref.ru,https://www.lumoref.ru`
    - `DJANGO_CSRF_TRUSTED_ORIGINS=https://lumoref.ru,https://www.lumoref.ru,https://api.lumoref.ru`
-5. **Первый запуск nginx без TLS:** скопировать `deploy/nginx/lumoref.http-bootstrap.conf` в `/etc/nginx/sites-available/lumoref.conf`, включить сайт, `nginx -t`, `systemctl reload nginx`.
-6. **TLS:** после того как **A** для `api` уже виден снаружи:  
+5. **Shared Django cache:** password reset captcha хранится в default cache и должен быть общим для всех Gunicorn workers. Минимально без Redis:
+   - `DJANGO_CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache`
+   - `DJANGO_CACHE_LOCATION=django_cache`
+   - после `migrate` выполнить `cd /var/www/lumoref/app/backend && ../venv/bin/python manage.py createcachetable`
+6. **Первый запуск nginx без TLS:** скопировать `deploy/nginx/lumoref.http-bootstrap.conf` в `/etc/nginx/sites-available/lumoref.conf`, включить сайт, `nginx -t`, `systemctl reload nginx`.
+7. **TLS:** после того как **A** для `api` уже виден снаружи:  
    `sudo certbot certonly --nginx -d lumoref.ru -d www.lumoref.ru -d api.lumoref.ru`  
    (или `--webroot` — по вашей схеме). Затем заменить конфиг на `deploy/nginx/lumoref.conf`, снова `nginx -t` и `reload`.
-7. **systemd:** скопировать `deploy/systemd/lumoref-gunicorn.service` в `/etc/systemd/system/`, при необходимости поправить пути, `systemctl daemon-reload`, `systemctl enable --now lumoref-gunicorn.service`.
-8. **Пользователь деплоя:** отдельный Linux-пользователь с SSH-ключом, правами на `git pull` в каталоге приложения и **ограниченным** `sudo` для `nginx -t`, `systemctl restart lumoref-gunicorn`, `systemctl reload nginx` (без полного root).
+8. **systemd:** скопировать `deploy/systemd/lumoref-gunicorn.service` в `/etc/systemd/system/`, при необходимости поправить пути, `systemctl daemon-reload`, `systemctl enable --now lumoref-gunicorn.service`.
+9. **Пользователь деплоя:** отдельный Linux-пользователь с SSH-ключом, правами на `git pull` в каталоге приложения и **ограниченным** `sudo` для `nginx -t`, `systemctl restart lumoref-gunicorn`, `systemctl reload nginx` (без полного root).
 
 ## 5. Файлы в репозитории
 
@@ -100,10 +104,12 @@ sudo systemctl status postgresql
 sudo -u postgres psql -c "\l"
 sudo -u postgres psql -c "\du"
 cd /var/www/lumoref/app/backend && ../venv/bin/python manage.py migrate
+../venv/bin/python manage.py createcachetable
 ../venv/bin/python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('DB OK')"
 ```
 
 Убедитесь, что в `backend/.env` **не** SQLite: `DB_ENGINE=django.db.backends.postgresql` и тестовое подключение без ошибок `pg_hba` / прав.
+Если используется `DatabaseCache`, убедитесь, что `DJANGO_CACHE_BACKEND=django.core.cache.backends.db.DatabaseCache`, `DJANGO_CACHE_LOCATION=django_cache`, а команда `createcachetable` создала таблицу без ошибок.
 
 **Итог по Postgres из этой сессии:** подключение на проде **не подтверждено** (нет SSH).
 
@@ -223,6 +229,7 @@ export REACT_APP_GOOGLE_CLIENT_ID='YOUR_WEB_CLIENT_ID.apps.googleusercontent.com
 bash deploy/deploy.sh
 
 # Backend
+cd /var/www/lumoref/app/backend && ../venv/bin/python manage.py createcachetable
 sudo systemctl status lumoref-gunicorn
 sudo systemctl restart lumoref-gunicorn
 sudo journalctl -u lumoref-gunicorn -f

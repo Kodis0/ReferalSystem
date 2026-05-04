@@ -47,10 +47,43 @@ sys.stdout.write("IMPORT_OK\\n")
     )
 
 
+def _run_print_core_cache_settings(extra_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    """Import core.settings in a child process and print the configured default cache."""
+    code = f"""
+import sys
+sys.path.insert(0, {repr(str(_BACKEND_ROOT))})
+import os
+os.chdir({repr(str(_BACKEND_ROOT))})
+try:
+    from core import settings
+except Exception as exc:
+    sys.stderr.write(type(exc).__name__ + "\\n")
+    sys.stderr.write(str(exc) + "\\n")
+    sys.exit(2)
+cache_conf = settings.CACHES["default"]
+sys.stdout.write(cache_conf["BACKEND"] + "\\n")
+sys.stdout.write(cache_conf.get("LOCATION", "") + "\\n")
+"""
+    full_env = os.environ.copy()
+    full_env.update(extra_env)
+    full_env.pop("DJANGO_SETTINGS_MODULE", None)
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=full_env,
+        cwd=str(_BACKEND_ROOT),
+        check=False,
+    )
+
+
 class SettingsProdSecretGuardTests(SimpleTestCase):
     _prod_env_base = {
         "DJANGO_DEBUG": "False",
         "DB_ENGINE": "django.db.backends.postgresql",
+        "DJANGO_CACHE_BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "DJANGO_CACHE_LOCATION": "django_cache",
     }
 
     def test_debug_false_empty_secret_fails_fast(self) -> None:
@@ -83,3 +116,38 @@ class SettingsProdSecretGuardTests(SimpleTestCase):
         cp = _run_import_core_settings(env)
         self.assertEqual(cp.returncode, 0, (cp.stdout, cp.stderr))
         self.assertIn("IMPORT_OK", cp.stdout)
+
+
+class SettingsCacheBackendTests(SimpleTestCase):
+    _prod_env_base = {
+        "DJANGO_DEBUG": "False",
+        "DB_ENGINE": "django.db.backends.postgresql",
+        "DJANGO_SECRET_KEY": "x" * 50,
+    }
+
+    def test_cache_env_configures_database_cache_for_password_reset_captcha(self) -> None:
+        """Password reset captcha uses default cache, so production config must be shared."""
+        env = {
+            **self._prod_env_base,
+            "DJANGO_CACHE_BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "DJANGO_CACHE_LOCATION": "django_cache",
+        }
+        cp = _run_print_core_cache_settings(env)
+        self.assertEqual(cp.returncode, 0, (cp.stdout, cp.stderr))
+        self.assertEqual(
+            cp.stdout.splitlines(),
+            ["django.core.cache.backends.db.DatabaseCache", "django_cache"],
+        )
+
+    def test_debug_false_locmem_cache_fails_fast_for_password_reset_captcha(self) -> None:
+        env = {
+            **self._prod_env_base,
+            "DJANGO_CACHE_BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "DJANGO_CACHE_LOCATION": "lumo-referral-local",
+        }
+        cp = _run_import_core_settings(env)
+        self.assertEqual(cp.returncode, 2, (cp.stdout, cp.stderr))
+        err = cp.stdout + cp.stderr
+        self.assertIn("LocMemCache", err)
+        self.assertIn("password reset captcha", err)
+        self.assertIn("Gunicorn workers", err)
