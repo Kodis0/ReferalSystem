@@ -939,45 +939,53 @@ function Login() {
                       <h1 className="login-page__title">Восстановление доступа</h1>
                     </div>
                     <p className="login-page__recover-step2-intro">
-                      Если аккаунт существует, мы отправили код восстановления на почту
-                      {recoverEmail.trim() ? (
+                      {recoverCodeVerified ? (
+                        "Код подтверждён. Придумайте новый пароль для входа."
+                      ) : (
                         <>
-                          {" "}
-                          <span className="login-page__recover-email-hint">{recoverEmail.trim()}</span>
+                          Если аккаунт существует, мы отправили код восстановления на почту
+                          {recoverEmail.trim() ? (
+                            <>
+                              {" "}
+                              <span className="login-page__recover-email-hint">{recoverEmail.trim()}</span>
+                            </>
+                          ) : null}
+                          .
                         </>
-                      ) : null}
-                      .
+                      )}
                     </p>
 
                     <form className="login-page__form" onSubmit={handleRecoverConfirmSubmit} noValidate>
-                      <div className="login-page__form-block">
-                        <p className="login-page__form-block-title">Код из письма</p>
-                        <div className="login-page__form-block-inner">
-                          <div className="login-page__recover-code" role="group" aria-label="Код из письма">
-                            {Array.from({ length: RECOVER_CODE_LENGTH }).map((_, index) => (
-                              <input
-                                key={index}
-                                ref={(node) => {
-                                  recoverCodeInputRefs.current[index] = node;
-                                }}
-                                className="login-page__recover-code-input"
-                                type="text"
-                                id={index === 0 ? "recover-mail-code" : undefined}
-                                name={index === 0 ? "recover-mail-code" : undefined}
-                                autoComplete={index === 0 ? "one-time-code" : "off"}
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                maxLength={RECOVER_CODE_LENGTH}
-                                value={recoverCode[index] || ""}
-                                onChange={(e) => updateRecoverCodeAt(index, e.target.value)}
-                                onPaste={(e) => handleRecoverCodePaste(index, e)}
-                                onKeyDown={(e) => handleRecoverCodeKeyDown(index, e)}
-                                aria-label={`Символ ${index + 1} из ${RECOVER_CODE_LENGTH}`}
-                              />
-                            ))}
+                      {!recoverCodeVerified ? (
+                        <div className="login-page__form-block">
+                          <p className="login-page__form-block-title">Код из письма</p>
+                          <div className="login-page__form-block-inner">
+                            <div className="login-page__recover-code" role="group" aria-label="Код из письма">
+                              {Array.from({ length: RECOVER_CODE_LENGTH }).map((_, index) => (
+                                <input
+                                  key={index}
+                                  ref={(node) => {
+                                    recoverCodeInputRefs.current[index] = node;
+                                  }}
+                                  className="login-page__recover-code-input"
+                                  type="text"
+                                  id={index === 0 ? "recover-mail-code" : undefined}
+                                  name={index === 0 ? "recover-mail-code" : undefined}
+                                  autoComplete={index === 0 ? "one-time-code" : "off"}
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  maxLength={RECOVER_CODE_LENGTH}
+                                  value={recoverCode[index] || ""}
+                                  onChange={(e) => updateRecoverCodeAt(index, e.target.value)}
+                                  onPaste={(e) => handleRecoverCodePaste(index, e)}
+                                  onKeyDown={(e) => handleRecoverCodeKeyDown(index, e)}
+                                  aria-label={`Символ ${index + 1} из ${RECOVER_CODE_LENGTH}`}
+                                />
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      ) : null}
                       {recoverCodeVerified ? (
                         <>
                           <div className="login-page__form-block">
