@@ -94,13 +94,13 @@ def _load_captcha_font(size: int):
 
 
 def _captcha_png_bytes(code: str) -> bytes:
-    """PNG с повёрнутыми символами, шумом и перекрывающими линиями — сложнее для OCR."""
+    """PNG с лёгким шумом: читаемо для пользователя, но не совсем plain-text."""
     w, h = 168, 56
     img = Image.new("RGB", (w, h), (255, 255, 255))
     draw = ImageDraw.Draw(img)
 
-    # Фон: линии и «соль»
-    for _ in range(random.randint(36, 52)):
+    # Фон: немного светлых линий и точек, без сильного перекрытия текста.
+    for _ in range(random.randint(12, 18)):
         draw.line(
             [
                 (random.randint(0, w), random.randint(0, h)),
@@ -113,15 +113,15 @@ def _captcha_png_bytes(code: str) -> bytes:
             ),
             width=1,
         )
-    for _ in range(140):
+    for _ in range(45):
         x = secrets.randbelow(w)
         y = secrets.randbelow(h)
-        v = random.randint(145, 205)
+        v = random.randint(180, 225)
         img.putpixel((x, y), (v, v, v))
 
-    font = _load_captcha_font(20)
-    reserve_right = 44
-    left_margin = 4
+    font = _load_captcha_font(23)
+    reserve_right = 30
+    left_margin = 8
     usable = max(12, w - reserve_right - left_margin)
     n = max(len(code), 1)
     slot = usable / n
@@ -137,19 +137,19 @@ def _captcha_png_bytes(code: str) -> bytes:
             random.randint(75, 118),
             255,
         )
-        ld.text((6, 7), ch, font=font, fill=fill)
-        angle = random.randint(-26, 26)
+        ld.text((6, 5), ch, font=font, fill=fill)
+        angle = random.randint(-12, 12)
         rot = layer.rotate(angle, expand=True, resample=_resample, fillcolor=(255, 255, 255, 0))
         rw, rh = rot.size
         cx = left_margin + i * slot + (slot - rw) / 2
-        cy = (h - rh) / 2 + random.randint(-6, 6)
+        cy = (h - rh) / 2 + random.randint(-3, 3)
         px = int(max(1, min(cx, w - rw - reserve_right)))
         py = int(max(1, min(cy, h - rh - 1)))
         img.paste(rot, (px, py), rot)
 
     draw = ImageDraw.Draw(img)
-    # Линии поверх текста
-    for _ in range(random.randint(10, 18)):
+    # Минимальные линии поверх текста, чтобы не мешать чтению.
+    for _ in range(random.randint(2, 4)):
         draw.line(
             [
                 (random.randint(0, w), random.randint(0, h)),
