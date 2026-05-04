@@ -386,23 +386,37 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   overflow: visible;
 }
 
-.lk-header__brand-referrals-shift {
+/* Точка выезжает первой; надпись Referrals — та же дистанция, с задержкой */
+.lk-header__brand-dot {
   transform: translateX(0);
-  transition: transform 0.32s cubic-bezier(0.33, 1.25, 0.32, 1);
+  transition: transform 0.22s cubic-bezier(0.33, 1.15, 0.32, 1);
 }
 
-.lk-header__logo-link:hover .lk-header__brand-referrals-shift,
-.lk-header__logo-link:focus-visible .lk-header__brand-referrals-shift {
+.lk-header__brand-referrals-word {
+  transform: translateX(0);
+  transition: transform 0.34s cubic-bezier(0.33, 1.25, 0.32, 1) 0.14s;
+}
+
+.lk-header__logo-link:hover .lk-header__brand-dot,
+.lk-header__logo-link:focus-visible .lk-header__brand-dot {
+  transform: translateX(6px);
+}
+
+.lk-header__logo-link:hover .lk-header__brand-referrals-word,
+.lk-header__logo-link:focus-visible .lk-header__brand-referrals-word {
   transform: translateX(6px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lk-header__brand-referrals-shift {
+  .lk-header__brand-dot,
+  .lk-header__brand-referrals-word {
     transition: none;
   }
 
-  .lk-header__logo-link:hover .lk-header__brand-referrals-shift,
-  .lk-header__logo-link:focus-visible .lk-header__brand-referrals-shift {
+  .lk-header__logo-link:hover .lk-header__brand-dot,
+  .lk-header__logo-link:focus-visible .lk-header__brand-dot,
+  .lk-header__logo-link:hover .lk-header__brand-referrals-word,
+  .lk-header__logo-link:focus-visible .lk-header__brand-referrals-word {
     transform: none;
   }
 }

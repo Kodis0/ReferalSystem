@@ -14,7 +14,7 @@ from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Max, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -32,12 +32,12 @@ REFERRAL_LEADERBOARD_TOP_N = 50
 CHALLENGE_LIFE_RECOVERY_INTERVAL = timedelta(hours=4)
 
 # --- XP tiers by score (daily challenge base XP) ---
-# score < 500 -> 10; 500..999 -> 20; 1000..1999 -> 35; score >= 2000 -> 50
+# score < 500 -> 2; 500..999 -> 4; 1000..1999 -> 7; score >= 2000 -> 10
 DAILY_CHALLENGE_XP_TIERS: tuple[dict[str, Any], ...] = (
-    {"min_score": 0, "max_score_exclusive": 500, "base_xp": 10},
-    {"min_score": 500, "max_score_exclusive": 1000, "base_xp": 20},
-    {"min_score": 1000, "max_score_exclusive": 2000, "base_xp": 35},
-    {"min_score": 2000, "max_score_exclusive": None, "base_xp": 50},
+    {"min_score": 0, "max_score_exclusive": 500, "base_xp": 2},
+    {"min_score": 500, "max_score_exclusive": 1000, "base_xp": 4},
+    {"min_score": 1000, "max_score_exclusive": 2000, "base_xp": 7},
+    {"min_score": 2000, "max_score_exclusive": None, "base_xp": 10},
 )
 
 # Streak day thresholds -> multiplier (highest matching tier wins).
@@ -52,7 +52,7 @@ STREAK_MULTIPLIER_TIERS: tuple[tuple[int, Decimal], ...] = (
 )
 
 # Level curve: XP required to *reach* level L (L >= 1). Level 1 starts at 0 XP.
-# XP to go from level k to k+1 is 100*k; cumulative XP to reach level L is 50 * L * (L - 1).
+# Cumulative XP to reach level L is 150 * L * (L - 1); step k→k+1 is 300*k.
 
 
 def local_today() -> date:
@@ -122,7 +122,7 @@ def xp_threshold_for_level(level: int) -> int:
     """Minimum total XP to be at least ``level`` (level is 1-indexed)."""
     if level <= 1:
         return 0
-    return 50 * (level - 1) * level
+    return 150 * (level - 1) * level
 
 
 def calculate_level(xp_total: int) -> int:
@@ -164,12 +164,12 @@ def get_streak_multiplier(streak_days: int) -> Decimal:
 
 def calculate_daily_challenge_base_xp(score: int) -> int:
     if score < 500:
-        return 10
+        return 2
     if score < 1000:
-        return 20
+        return 4
     if score < 2000:
-        return 35
-    return 50
+        return 7
+    return 10
 
 
 def _validate_challenge_score(score: Any) -> int:
@@ -293,9 +293,14 @@ def build_gamification_summary(user) -> dict[str, Any]:
     )
 
     referral_sales_rub = _referral_sales_rub_all_time(user)
-    league_id = referral_league_from_sales_rub(referral_sales_rub)
+    league_id = calculate_referral_league_id(
+        referral_sales_rub,
+        level,
+        int(profile.streak_days),
+    )
 
     return {
+        "referral_sales_rub": referral_sales_rub,
         "profile": {
             "xp_total": xp_total,
             "level": level,
@@ -557,21 +562,86 @@ def finish_daily_challenge(
         )
 
 
-def referral_league_from_sales_rub(sales_rub: int) -> str:
-    """Temporary league tiers by confirmed sales (RUB, integer), aligned with referral rating MVP."""
-    if sales_rub >= 15_000_000:
-        return "ultra"
-    if sales_rub >= 5_000_000:
-        return "diamond"
-    if sales_rub >= 1_500_000:
-        return "platinum"
-    if sales_rub >= 500_000:
-        return "gold"
-    if sales_rub >= 75_000:
-        return "silver"
-    if sales_rub >= 15_000:
-        return "bronze"
+# Referral league: sales (RUB) + shared level + streak days — all gates must pass for a tier.
+REFERRAL_LEAGUE_TIERS_DESC: tuple[tuple[str, int, int, int], ...] = (
+    ("ultra", 15_000_000, 30, 60),
+    ("diamond", 5_000_000, 25, 45),
+    ("platinum", 1_500_000, 20, 30),
+    ("gold", 500_000, 10, 14),
+    ("silver", 75_000, 5, 7),
+    ("bronze", 15_000, 2, 3),
+)
+
+
+def calculate_referral_league_id(sales_rub: int, level: int, streak_days: int) -> str:
+    """Highest league whose sales, level, and streak gates all pass."""
+    s = max(0, int(sales_rub))
+    lv = max(1, int(level))
+    st = max(0, int(streak_days))
+    for league_id, sales_min, level_min, streak_min in REFERRAL_LEAGUE_TIERS_DESC:
+        if s >= sales_min and lv >= level_min and st >= streak_min:
+            return league_id
     return "start"
+
+
+def grant_purchase_xp_for_paid_referral_order(order: Order) -> int:
+    """
+    Idempotent XP into ``GamificationProfile.xp_total`` for a paid referral sale (same eligibility
+    idea as commission: active partner, not self-referral, RUB-or-empty currency).
+    """
+    if order.status != Order.Status.PAID:
+        return 0
+    if not order.partner_id:
+        return 0
+    if order.amount is None or order.amount <= 0:
+        return 0
+
+    currency = (order.currency or "").strip()
+    if currency and currency != "RUB":
+        return 0
+
+    partner = order.partner
+    if partner.status != PartnerProfile.Status.ACTIVE:
+        return 0
+
+    from referrals.services import would_be_self_referral
+
+    buyer = order.customer_user if order.customer_user_id else None
+    if would_be_self_referral(
+        partner,
+        customer_user=buyer,
+        customer_email=order.customer_email or "",
+    ):
+        return 0
+
+    amount_rub = int(Decimal(order.amount).quantize(Decimal("1"), rounding=ROUND_FLOOR))
+    xp_amt = amount_rub // 100
+    if xp_amt <= 0:
+        return 0
+
+    partner_user = partner.user
+    idem = f"purchase_confirmed:{order.pk}"
+
+    with transaction.atomic():
+        profile, _ = GamificationProfile.objects.select_for_update().get_or_create(user=partner_user)
+        try:
+            with transaction.atomic():
+                XPEvent.objects.create(
+                    user=partner_user,
+                    source=XPEvent.Source.PURCHASE_CONFIRMED,
+                    amount=xp_amt,
+                    base_amount=xp_amt,
+                    multiplier=Decimal("1.0000"),
+                    idempotency_key=idem,
+                    metadata_json={"order_id": order.pk},
+                )
+        except IntegrityError as exc:
+            if XPEvent.objects.filter(idempotency_key=idem).exists():
+                return 0
+            raise exc
+        profile.xp_total += xp_amt
+        profile.save(update_fields=["xp_total", "updated_at"])
+        return xp_amt
 
 
 def _looks_like_email(value: str) -> bool:
@@ -664,6 +734,17 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
     }
 
     profiles = list(PartnerProfile.objects.select_related("user").order_by("user_id"))
+    partner_ids = [p.id for p in profiles]
+    all_time_rows = (
+        _referral_paid_orders_qs(None)
+        .filter(partner_id__in=partner_ids)
+        .values("partner_id")
+        .annotate(sales_sum=Sum("amount"))
+    )
+    all_time_sales_by_partner: dict[int, int] = {
+        int(r["partner_id"]): _rub_from_decimal(r["sales_sum"]) for r in all_time_rows
+    }
+
     user_ids = [p.user_id for p in profiles]
     gam_map = {gp.user_id: gp for gp in GamificationProfile.objects.filter(user_id__in=user_ids)}
 
@@ -682,6 +763,7 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
                 "paid_orders_count": int(totals["paid_orders_count"]),
                 "xp_total": xp_total,
                 "streak_days": streak_days,
+                "sales_all_time_rub": all_time_sales_by_partner.get(p.id, 0),
             }
         )
 
@@ -700,12 +782,14 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
     def entry_dict(r: dict[str, Any], *, is_current_user: bool) -> dict[str, Any]:
         u = r["user"]
         sales_rub = int(r["sales_amount"])
+        sales_all_rub = int(r["sales_all_time_rub"])
+        lvl = calculate_level(int(r["xp_total"]))
         return {
             "rank": int(r["rank"]),
             "user_id": int(u.id),
             "display_name": _referral_leaderboard_display_name(u),
             "is_current_user": bool(is_current_user),
-            "league": referral_league_from_sales_rub(sales_rub),
+            "league": calculate_referral_league_id(sales_all_rub, lvl, int(r["streak_days"])),
             "sales_amount": sales_rub,
             "paid_orders_count": int(r["paid_orders_count"]),
             "xp_total": int(r["xp_total"]),
@@ -719,22 +803,31 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
 
     request_row = next((r for r in ranked if r["user"].id == request_user.id), None)
     gp_self = GamificationProfile.objects.filter(user=request_user).first()
+    pp_self = PartnerProfile.objects.filter(user=request_user).first()
 
     if request_row is None:
         xp_self = int(gp_self.xp_total) if gp_self else 0
         streak_self = int(gp_self.streak_days) if gp_self else 0
+        sales_all_self = (
+            all_time_sales_by_partner.get(pp_self.id, 0) if pp_self is not None else 0
+        )
         current_user = {
             "rank": None,
             "sales_amount": 0,
             "paid_orders_count": 0,
             "xp_total": xp_self,
             "streak_days": streak_self,
-            "league": referral_league_from_sales_rub(0),
+            "league": calculate_referral_league_id(
+                sales_all_self,
+                calculate_level(xp_self),
+                streak_self,
+            ),
             "gap_to_top_5": 0,
         }
     else:
         ur = request_row
         sales_u = int(ur["sales_amount"])
+        sales_all_u = int(ur["sales_all_time_rub"])
         rank_u = int(ur["rank"])
         fifth_sales = 0
         if ranked:
@@ -747,7 +840,11 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
             "paid_orders_count": int(ur["paid_orders_count"]),
             "xp_total": int(ur["xp_total"]),
             "streak_days": int(ur["streak_days"]),
-            "league": referral_league_from_sales_rub(sales_u),
+            "league": calculate_referral_league_id(
+                sales_all_u,
+                calculate_level(int(ur["xp_total"])),
+                int(ur["streak_days"]),
+            ),
             "gap_to_top_5": int(gap),
         }
 

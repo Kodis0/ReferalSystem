@@ -10,9 +10,12 @@ from rest_framework.test import APIClient
 
 from referrals.gamification import (
     calculate_daily_challenge_base_xp,
+    calculate_level,
+    calculate_referral_league_id,
     get_streak_multiplier,
+    grant_purchase_xp_for_paid_referral_order,
     local_today,
-    referral_league_from_sales_rub,
+    xp_threshold_for_level,
 )
 from referrals.gamification_game import replay_daily_challenge
 from referrals.models import DailyChallengeAttempt, GamificationProfile, Order, XPEvent
@@ -71,8 +74,12 @@ class GamificationApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["profile"]["league_id"], "start")
 
-    def test_summary_profile_league_id_matches_referral_sales(self):
+    def test_summary_profile_league_id_silver_when_sales_level_streak_gates_met(self):
         partner, _ = ensure_partner_profile(self.user)
+        GamificationProfile.objects.update_or_create(
+            user=self.user,
+            defaults={"xp_total": 3000, "streak_days": 8},
+        )
         now = timezone.now()
         Order.objects.create(
             dedupe_key=f"t:sum-lg-{uuid.uuid4().hex}",
@@ -85,11 +92,35 @@ class GamificationApiTests(TestCase):
             status=Order.Status.PAID,
             paid_at=now,
         )
-        sales_rub = 80000
-        expected = referral_league_from_sales_rub(sales_rub)
+        self.assertEqual(calculate_level(3000), 5)
+        self.assertEqual(calculate_referral_league_id(80000, 5, 8), "silver")
         r = self.client.get("/referrals/gamification/summary/")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["profile"]["league_id"], expected)
+        body = r.json()
+        self.assertEqual(body["profile"]["league_id"], "silver")
+        self.assertEqual(body["referral_sales_rub"], 80000)
+
+    def test_summary_profile_league_id_start_when_level_below_gate_despite_sales(self):
+        partner, _ = ensure_partner_profile(self.user)
+        GamificationProfile.objects.update_or_create(
+            user=self.user,
+            defaults={"xp_total": 0, "streak_days": 100},
+        )
+        now = timezone.now()
+        Order.objects.create(
+            dedupe_key=f"t:sum-lg-{uuid.uuid4().hex}",
+            source=Order.Source.TILDA,
+            external_id=f"ext-{uuid.uuid4().hex[:8]}",
+            payload_fingerprint=uuid.uuid4().hex[:64],
+            partner=partner,
+            amount=Decimal("80000.00"),
+            currency="RUB",
+            status=Order.Status.PAID,
+            paid_at=now,
+        )
+        r = self.client.get("/referrals/gamification/summary/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["profile"]["league_id"], "start")
 
     @patch("referrals.gamification.local_today", return_value=date(2026, 5, 10))
     def test_start_creates_new_attempt_each_call_and_consumes_life(self, _mock):
@@ -224,13 +255,13 @@ class GamificationApiTests(TestCase):
         self.assertEqual(get_streak_multiplier(100), Decimal("2.0"))
 
     def test_daily_challenge_base_xp_brackets(self):
-        self.assertEqual(calculate_daily_challenge_base_xp(0), 10)
-        self.assertEqual(calculate_daily_challenge_base_xp(499), 10)
-        self.assertEqual(calculate_daily_challenge_base_xp(500), 20)
-        self.assertEqual(calculate_daily_challenge_base_xp(999), 20)
-        self.assertEqual(calculate_daily_challenge_base_xp(1000), 35)
-        self.assertEqual(calculate_daily_challenge_base_xp(1999), 35)
-        self.assertEqual(calculate_daily_challenge_base_xp(2000), 50)
+        self.assertEqual(calculate_daily_challenge_base_xp(0), 2)
+        self.assertEqual(calculate_daily_challenge_base_xp(499), 2)
+        self.assertEqual(calculate_daily_challenge_base_xp(500), 4)
+        self.assertEqual(calculate_daily_challenge_base_xp(999), 4)
+        self.assertEqual(calculate_daily_challenge_base_xp(1000), 7)
+        self.assertEqual(calculate_daily_challenge_base_xp(1999), 7)
+        self.assertEqual(calculate_daily_challenge_base_xp(2000), 10)
 
     @patch("referrals.gamification.local_today", return_value=date(2026, 7, 1))
     def test_best_challenge_score_only_increases(self, _mock):
@@ -388,6 +419,90 @@ class GamificationApiTests(TestCase):
         scores = [rows[0]["score"], rows[1]["score"]]
         self.assertEqual(set(scores), {score_a, server_score_b})
         self.assertEqual(rows[0]["score"], max(score_a, server_score_b))
+
+
+class LevelCurveTests(TestCase):
+    """``xp_threshold_for_level`` uses 150 * (L-1) * L for L >= 2."""
+
+    def test_xp_below_threshold_stays_previous_level(self):
+        self.assertEqual(xp_threshold_for_level(2), 300)
+        self.assertEqual(calculate_level(299), 1)
+
+    def test_xp_at_threshold_is_exactly_that_level(self):
+        self.assertEqual(calculate_level(300), 2)
+
+    def test_level_9_at_10800_xp_and_level_10_at_13500(self):
+        self.assertEqual(calculate_level(10799), 8)
+        self.assertEqual(calculate_level(10800), 9)
+        self.assertEqual(calculate_level(13499), 9)
+        self.assertEqual(calculate_level(13500), 10)
+
+    def test_summary_profile_level_follows_new_curve(self):
+        user = User.objects.create_user(
+            username="lvlchk",
+            email="lvlchk@example.com",
+            password="secret12",
+        )
+        GamificationProfile.objects.create(user=user, xp_total=13500)
+        client = APIClient()
+        client.force_authenticate(user=user)
+        r = client.get("/referrals/gamification/summary/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["profile"]["level"], 10)
+
+
+class ReferralLeagueFormulaTests(TestCase):
+    def test_high_sales_low_level_stays_start(self):
+        self.assertEqual(calculate_referral_league_id(1_000_000, 1, 100), "start")
+
+    def test_bronze_requires_all_three_gates(self):
+        self.assertEqual(calculate_referral_league_id(20_000, 2, 3), "bronze")
+        self.assertEqual(calculate_referral_league_id(20_000, 1, 3), "start")
+
+
+class PurchaseReferralXpGrantTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="seller",
+            email="seller@example.com",
+            password="secret12",
+        )
+        self.partner, _ = ensure_partner_profile(self.user)
+
+    def _paid_order(self, **kwargs):
+        defaults = {
+            "dedupe_key": f"t:xp-{uuid.uuid4().hex}",
+            "source": Order.Source.TILDA,
+            "external_id": f"ext-{uuid.uuid4().hex[:8]}",
+            "payload_fingerprint": uuid.uuid4().hex[:64],
+            "partner": self.partner,
+            "amount": Decimal("10000.00"),
+            "currency": "RUB",
+            "status": Order.Status.PAID,
+            "paid_at": timezone.now(),
+            "customer_email": "buyer@example.com",
+        }
+        defaults.update(kwargs)
+        return Order.objects.create(**defaults)
+
+    def test_purchase_xp_idempotent(self):
+        order = self._paid_order()
+        self.assertEqual(grant_purchase_xp_for_paid_referral_order(order), 100)
+        self.assertEqual(grant_purchase_xp_for_paid_referral_order(order), 0)
+        profile = GamificationProfile.objects.get(user=self.user)
+        self.assertEqual(profile.xp_total, 100)
+        ev = XPEvent.objects.get(user=self.user)
+        self.assertEqual(ev.source, XPEvent.Source.PURCHASE_CONFIRMED)
+        self.assertEqual(ev.idempotency_key, f"purchase_confirmed:{order.pk}")
+
+    def test_no_partner_skips_xp(self):
+        order = self._paid_order(partner=None)
+        self.assertEqual(grant_purchase_xp_for_paid_referral_order(order), 0)
+        self.assertFalse(GamificationProfile.objects.filter(user=self.user).exists())
+
+    def test_self_referral_skips_xp(self):
+        order = self._paid_order(customer_email=self.user.email)
+        self.assertEqual(grant_purchase_xp_for_paid_referral_order(order), 0)
 
 
 class LocalTodayPatchTests(TestCase):

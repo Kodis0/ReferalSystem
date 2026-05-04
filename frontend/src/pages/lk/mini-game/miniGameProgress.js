@@ -95,7 +95,7 @@ function sortAchievementsItems(list) {
 
 /**
  * Прогресс выполнения условий перехода к следующей лиге (как на странице «Лиги»).
- * Текущая лига: profile.league_id из API, иначе Start.
+ * Текущая лига: profile.league_id из API; кольцо — среднее по продажам/уровню/серии (фактический переход считает backend по всем порогам).
  */
 function getNextLeagueDonutState(summary) {
   if (!summary || typeof summary !== "object") {

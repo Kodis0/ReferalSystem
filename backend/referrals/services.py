@@ -22,6 +22,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F, Q, Sum
 from django.utils import timezone
 
+from .gamification import grant_purchase_xp_for_paid_referral_order
 from .models import (
     Commission,
     CustomerAttribution,
@@ -1206,6 +1207,7 @@ def _apply_order_upsert_side_effects(
 
     if order.status == Order.Status.PAID:
         create_commission_for_paid_order(order)
+        grant_purchase_xp_for_paid_referral_order(order)
 
 
 def upsert_order_from_tilda_payload(

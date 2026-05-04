@@ -46,34 +46,34 @@ export function isLeagueTierContentUnlocked(summary, tierIndex) {
   return tierIndex <= cur + 1;
 }
 
-/** Цели перехода Start → Bronze; текущие продажи/заказы — опционально из summary.league_progress_to_bronze (API). */
+/** Цели перехода Start → Bronze; продажи из summary.referral_sales_rub (API). */
 export const BRONZE_LEAGUE_SALES_TARGET_RUB = 15000;
-export const BRONZE_LEAGUE_ORDERS_TARGET = 3;
+export const BRONZE_LEAGUE_LEVEL_TARGET = 2;
 export const BRONZE_LEAGUE_STREAK_DAYS_TARGET = 3;
 
 /** Цели перехода Bronze → Silver; опционально summary.league_progress_to_silver (API). */
 export const SILVER_LEAGUE_SALES_TARGET_RUB = 75000;
-export const SILVER_LEAGUE_ORDERS_TARGET = 10;
+export const SILVER_LEAGUE_LEVEL_TARGET = 5;
 export const SILVER_LEAGUE_STREAK_DAYS_TARGET = 7;
 
 /** Цели перехода Silver → Gold; опционально summary.league_progress_to_gold (API). */
 export const GOLD_LEAGUE_SALES_TARGET_RUB = 500000;
-export const GOLD_LEAGUE_ORDERS_TARGET = 50;
+export const GOLD_LEAGUE_LEVEL_TARGET = 10;
 export const GOLD_LEAGUE_STREAK_DAYS_TARGET = 14;
 
 /** Цели перехода Gold → Platinum; опционально summary.league_progress_to_platinum (API). */
 export const PLATINUM_LEAGUE_SALES_TARGET_RUB = 1500000;
-export const PLATINUM_LEAGUE_ORDERS_TARGET = 150;
+export const PLATINUM_LEAGUE_LEVEL_TARGET = 20;
 export const PLATINUM_LEAGUE_STREAK_DAYS_TARGET = 30;
 
 /** Цели перехода Platinum → Diamond; опционально summary.league_progress_to_diamond (API). */
 export const DIAMOND_LEAGUE_SALES_TARGET_RUB = 5000000;
-export const DIAMOND_LEAGUE_ORDERS_TARGET = 400;
+export const DIAMOND_LEAGUE_LEVEL_TARGET = 25;
 export const DIAMOND_LEAGUE_STREAK_DAYS_TARGET = 45;
 
 /** Цели перехода Diamond → Ultra; опционально summary.league_progress_to_ultra (API). */
 export const ULTRA_LEAGUE_SALES_TARGET_RUB = 15000000;
-export const ULTRA_LEAGUE_ORDERS_TARGET = 1000;
+export const ULTRA_LEAGUE_LEVEL_TARGET = 30;
 export const ULTRA_LEAGUE_STREAK_DAYS_TARGET = 60;
 
 function parseOptionalNonNegativeNumber(value) {
@@ -81,100 +81,115 @@ function parseOptionalNonNegativeNumber(value) {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-/** Среднее по трём условиям перехода Start → Bronze (продажи, заказы, дни серии). */
+function referralSalesRubFromSummary(summary, lp) {
+  let root = parseOptionalNonNegativeNumber(summary?.referral_sales_rub);
+  if (root !== null) return root;
+  root = parseOptionalNonNegativeNumber(summary?.referralSalesRub);
+  if (root !== null) return root;
+  root = parseOptionalNonNegativeNumber(lp?.referral_sales_rub);
+  if (root !== null) return root;
+  return parseOptionalNonNegativeNumber(lp?.referralSalesRub) ?? 0;
+}
+
+function profileLevelCurrent(profile) {
+  const l = parseOptionalNonNegativeNumber(profile?.level);
+  return l !== null && l >= 1 ? l : 1;
+}
+
+/** Прогресс к Bronze для UI (среднее по трём метрикам). Переход в лигу на backend — по всем порогам сразу. */
 export function computeBronzeTasksOverallPct(summary) {
   if (!summary || typeof summary !== "object") {
     return 0;
   }
   const profile = summary.profile ?? {};
   const lp = summary.league_progress_to_bronze ?? {};
-  const salesCurrent = parseOptionalNonNegativeNumber(lp.referral_sales_rub) ?? 0;
-  const ordersCurrent = parseOptionalNonNegativeNumber(lp.referral_orders_count) ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDays = parseOptionalNonNegativeNumber(profile.streak_days) ?? 0;
   const salesPct = Math.min(100, (salesCurrent / BRONZE_LEAGUE_SALES_TARGET_RUB) * 100);
-  const ordersPct = Math.min(100, (ordersCurrent / BRONZE_LEAGUE_ORDERS_TARGET) * 100);
+  const levelPct = Math.min(100, (levelCurrent / BRONZE_LEAGUE_LEVEL_TARGET) * 100);
   const streakPct = Math.min(100, (streakDays / BRONZE_LEAGUE_STREAK_DAYS_TARGET) * 100);
-  return Math.min(100, Math.max(0, Math.round((salesPct + ordersPct + streakPct) / 3)));
+  return Math.min(100, Math.max(0, Math.round((salesPct + levelPct + streakPct) / 3)));
 }
 
-/** Среднее по трём условиям перехода к лиге Silver (сумма продаж, заказы, серия активности). */
+/** Прогресс к Silver для UI (среднее по трём метрикам). */
 export function computeSilverTasksOverallPct(summary) {
   if (!summary || typeof summary !== "object") {
     return 0;
   }
   const profile = summary.profile ?? {};
   const lp = summary.league_progress_to_silver ?? {};
-  const salesCurrent = parseOptionalNonNegativeNumber(lp.referral_sales_rub) ?? 0;
-  const ordersCurrent = parseOptionalNonNegativeNumber(lp.referral_orders_count) ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDays = parseOptionalNonNegativeNumber(profile.streak_days) ?? 0;
   const salesPct = Math.min(100, (salesCurrent / SILVER_LEAGUE_SALES_TARGET_RUB) * 100);
-  const ordersPct = Math.min(100, (ordersCurrent / SILVER_LEAGUE_ORDERS_TARGET) * 100);
+  const levelPct = Math.min(100, (levelCurrent / SILVER_LEAGUE_LEVEL_TARGET) * 100);
   const streakPct = Math.min(100, (streakDays / SILVER_LEAGUE_STREAK_DAYS_TARGET) * 100);
-  return Math.min(100, Math.max(0, Math.round((salesPct + ordersPct + streakPct) / 3)));
+  return Math.min(100, Math.max(0, Math.round((salesPct + levelPct + streakPct) / 3)));
 }
 
-/** Среднее по трём условиям перехода к лиге Gold. */
+/** Прогресс к Gold. */
 export function computeGoldTasksOverallPct(summary) {
   if (!summary || typeof summary !== "object") {
     return 0;
   }
   const profile = summary.profile ?? {};
   const lp = summary.league_progress_to_gold ?? {};
-  const salesCurrent = parseOptionalNonNegativeNumber(lp.referral_sales_rub) ?? 0;
-  const ordersCurrent = parseOptionalNonNegativeNumber(lp.referral_orders_count) ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDays = parseOptionalNonNegativeNumber(profile.streak_days) ?? 0;
   const salesPct = Math.min(100, (salesCurrent / GOLD_LEAGUE_SALES_TARGET_RUB) * 100);
-  const ordersPct = Math.min(100, (ordersCurrent / GOLD_LEAGUE_ORDERS_TARGET) * 100);
+  const levelPct = Math.min(100, (levelCurrent / GOLD_LEAGUE_LEVEL_TARGET) * 100);
   const streakPct = Math.min(100, (streakDays / GOLD_LEAGUE_STREAK_DAYS_TARGET) * 100);
-  return Math.min(100, Math.max(0, Math.round((salesPct + ordersPct + streakPct) / 3)));
+  return Math.min(100, Math.max(0, Math.round((salesPct + levelPct + streakPct) / 3)));
 }
 
-/** Среднее по трём условиям перехода к лиге Platinum. */
+/** Прогресс к Platinum. */
 export function computePlatinumTasksOverallPct(summary) {
   if (!summary || typeof summary !== "object") {
     return 0;
   }
   const profile = summary.profile ?? {};
   const lp = summary.league_progress_to_platinum ?? {};
-  const salesCurrent = parseOptionalNonNegativeNumber(lp.referral_sales_rub) ?? 0;
-  const ordersCurrent = parseOptionalNonNegativeNumber(lp.referral_orders_count) ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDays = parseOptionalNonNegativeNumber(profile.streak_days) ?? 0;
   const salesPct = Math.min(100, (salesCurrent / PLATINUM_LEAGUE_SALES_TARGET_RUB) * 100);
-  const ordersPct = Math.min(100, (ordersCurrent / PLATINUM_LEAGUE_ORDERS_TARGET) * 100);
+  const levelPct = Math.min(100, (levelCurrent / PLATINUM_LEAGUE_LEVEL_TARGET) * 100);
   const streakPct = Math.min(100, (streakDays / PLATINUM_LEAGUE_STREAK_DAYS_TARGET) * 100);
-  return Math.min(100, Math.max(0, Math.round((salesPct + ordersPct + streakPct) / 3)));
+  return Math.min(100, Math.max(0, Math.round((salesPct + levelPct + streakPct) / 3)));
 }
 
-/** Среднее по трём условиям перехода к лиге Diamond. */
+/** Прогресс к Diamond. */
 export function computeDiamondTasksOverallPct(summary) {
   if (!summary || typeof summary !== "object") {
     return 0;
   }
   const profile = summary.profile ?? {};
   const lp = summary.league_progress_to_diamond ?? {};
-  const salesCurrent = parseOptionalNonNegativeNumber(lp.referral_sales_rub) ?? 0;
-  const ordersCurrent = parseOptionalNonNegativeNumber(lp.referral_orders_count) ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDays = parseOptionalNonNegativeNumber(profile.streak_days) ?? 0;
   const salesPct = Math.min(100, (salesCurrent / DIAMOND_LEAGUE_SALES_TARGET_RUB) * 100);
-  const ordersPct = Math.min(100, (ordersCurrent / DIAMOND_LEAGUE_ORDERS_TARGET) * 100);
+  const levelPct = Math.min(100, (levelCurrent / DIAMOND_LEAGUE_LEVEL_TARGET) * 100);
   const streakPct = Math.min(100, (streakDays / DIAMOND_LEAGUE_STREAK_DAYS_TARGET) * 100);
-  return Math.min(100, Math.max(0, Math.round((salesPct + ordersPct + streakPct) / 3)));
+  return Math.min(100, Math.max(0, Math.round((salesPct + levelPct + streakPct) / 3)));
 }
 
-/** Среднее по трём условиям перехода к лиге Ultra. */
+/** Прогресс к Ultra. */
 export function computeUltraTasksOverallPct(summary) {
   if (!summary || typeof summary !== "object") {
     return 0;
   }
   const profile = summary.profile ?? {};
   const lp = summary.league_progress_to_ultra ?? {};
-  const salesCurrent = parseOptionalNonNegativeNumber(lp.referral_sales_rub) ?? 0;
-  const ordersCurrent = parseOptionalNonNegativeNumber(lp.referral_orders_count) ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDays = parseOptionalNonNegativeNumber(profile.streak_days) ?? 0;
   const salesPct = Math.min(100, (salesCurrent / ULTRA_LEAGUE_SALES_TARGET_RUB) * 100);
-  const ordersPct = Math.min(100, (ordersCurrent / ULTRA_LEAGUE_ORDERS_TARGET) * 100);
+  const levelPct = Math.min(100, (levelCurrent / ULTRA_LEAGUE_LEVEL_TARGET) * 100);
   const streakPct = Math.min(100, (streakDays / ULTRA_LEAGUE_STREAK_DAYS_TARGET) * 100);
-  return Math.min(100, Math.max(0, Math.round((salesPct + ordersPct + streakPct) / 3)));
+  return Math.min(100, Math.max(0, Math.round((salesPct + levelPct + streakPct) / 3)));
 }
 
 /** Слайдер «Условия» / «Награда» на всю ширину блока разблокировки (всегда, не только на узком экране). */
@@ -409,10 +424,8 @@ function MiniGameLeaguesCatalogSectionHeadingFullbleed({ section, locked }) {
 function MiniGameLeagueBronzeUnlockCard({ summary }) {
   const profile = summary?.profile ?? {};
   const lp = summary?.league_progress_to_bronze ?? {};
-  const salesRaw = parseOptionalNonNegativeNumber(lp.referral_sales_rub);
-  const ordersRaw = parseOptionalNonNegativeNumber(lp.referral_orders_count);
-  const salesCurrent = salesRaw ?? 0;
-  const ordersCurrent = ordersRaw ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDaysRaw = parseOptionalNonNegativeNumber(profile.streak_days);
   const streakDays = streakDaysRaw ?? 0;
 
@@ -436,10 +449,10 @@ function MiniGameLeagueBronzeUnlockCard({ summary }) {
               ariaLabel={`Продажи по рефералам: ${salesCurrent.toLocaleString("ru-RU")} из ${BRONZE_LEAGUE_SALES_TARGET_RUB.toLocaleString("ru-RU")} ₽`}
             />
             <BronzeLeagueRequirementBar
-              label="Заказы"
-              current={ordersCurrent}
-              target={BRONZE_LEAGUE_ORDERS_TARGET}
-              ariaLabel={`Заказы: ${Math.min(ordersCurrent, BRONZE_LEAGUE_ORDERS_TARGET).toLocaleString("ru-RU")} из ${BRONZE_LEAGUE_ORDERS_TARGET.toLocaleString("ru-RU")}`}
+              label="Уровень"
+              current={levelCurrent}
+              target={BRONZE_LEAGUE_LEVEL_TARGET}
+              ariaLabel={`Уровень: ${Math.min(levelCurrent, BRONZE_LEAGUE_LEVEL_TARGET).toLocaleString("ru-RU")} из ${BRONZE_LEAGUE_LEVEL_TARGET.toLocaleString("ru-RU")}`}
             />
             <BronzeLeagueRequirementBar
               label="Дни серии"
@@ -500,10 +513,8 @@ function MiniGameLeagueBronzeUnlockCard({ summary }) {
 function MiniGameLeagueSilverUnlockCard({ summary }) {
   const profile = summary?.profile ?? {};
   const lp = summary?.league_progress_to_silver ?? {};
-  const salesRaw = parseOptionalNonNegativeNumber(lp.referral_sales_rub);
-  const ordersRaw = parseOptionalNonNegativeNumber(lp.referral_orders_count);
-  const salesCurrent = salesRaw ?? 0;
-  const ordersCurrent = ordersRaw ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDaysRaw = parseOptionalNonNegativeNumber(profile.streak_days);
   const streakDays = streakDaysRaw ?? 0;
 
@@ -527,10 +538,10 @@ function MiniGameLeagueSilverUnlockCard({ summary }) {
               ariaLabel={`Сумма продаж: ${salesCurrent.toLocaleString("ru-RU")} из ${SILVER_LEAGUE_SALES_TARGET_RUB.toLocaleString("ru-RU")} ₽`}
             />
             <BronzeLeagueRequirementBar
-              label="Оплаченные заказы"
-              current={ordersCurrent}
-              target={SILVER_LEAGUE_ORDERS_TARGET}
-              ariaLabel={`Оплаченные заказы: ${Math.min(ordersCurrent, SILVER_LEAGUE_ORDERS_TARGET).toLocaleString("ru-RU")} из ${SILVER_LEAGUE_ORDERS_TARGET.toLocaleString("ru-RU")}`}
+              label="Уровень"
+              current={levelCurrent}
+              target={SILVER_LEAGUE_LEVEL_TARGET}
+              ariaLabel={`Уровень: ${Math.min(levelCurrent, SILVER_LEAGUE_LEVEL_TARGET).toLocaleString("ru-RU")} из ${SILVER_LEAGUE_LEVEL_TARGET.toLocaleString("ru-RU")}`}
             />
             <BronzeLeagueRequirementBar
               label="Серия активности"
@@ -592,10 +603,8 @@ function MiniGameLeagueSilverUnlockCard({ summary }) {
 function MiniGameLeagueGoldUnlockCard({ summary }) {
   const profile = summary?.profile ?? {};
   const lp = summary?.league_progress_to_gold ?? {};
-  const salesRaw = parseOptionalNonNegativeNumber(lp.referral_sales_rub);
-  const ordersRaw = parseOptionalNonNegativeNumber(lp.referral_orders_count);
-  const salesCurrent = salesRaw ?? 0;
-  const ordersCurrent = ordersRaw ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDaysRaw = parseOptionalNonNegativeNumber(profile.streak_days);
   const streakDays = streakDaysRaw ?? 0;
 
@@ -619,10 +628,10 @@ function MiniGameLeagueGoldUnlockCard({ summary }) {
               ariaLabel={`Сумма продаж: ${salesCurrent.toLocaleString("ru-RU")} из ${GOLD_LEAGUE_SALES_TARGET_RUB.toLocaleString("ru-RU")} ₽`}
             />
             <BronzeLeagueRequirementBar
-              label="Оплаченные заказы"
-              current={ordersCurrent}
-              target={GOLD_LEAGUE_ORDERS_TARGET}
-              ariaLabel={`Оплаченные заказы: ${Math.min(ordersCurrent, GOLD_LEAGUE_ORDERS_TARGET).toLocaleString("ru-RU")} из ${GOLD_LEAGUE_ORDERS_TARGET.toLocaleString("ru-RU")}`}
+              label="Уровень"
+              current={levelCurrent}
+              target={GOLD_LEAGUE_LEVEL_TARGET}
+              ariaLabel={`Уровень: ${Math.min(levelCurrent, GOLD_LEAGUE_LEVEL_TARGET).toLocaleString("ru-RU")} из ${GOLD_LEAGUE_LEVEL_TARGET.toLocaleString("ru-RU")}`}
             />
             <BronzeLeagueRequirementBar
               label="Серия активности"
@@ -689,10 +698,8 @@ function MiniGameLeagueGoldUnlockCard({ summary }) {
 function MiniGameLeaguePlatinumUnlockCard({ summary }) {
   const profile = summary?.profile ?? {};
   const lp = summary?.league_progress_to_platinum ?? {};
-  const salesRaw = parseOptionalNonNegativeNumber(lp.referral_sales_rub);
-  const ordersRaw = parseOptionalNonNegativeNumber(lp.referral_orders_count);
-  const salesCurrent = salesRaw ?? 0;
-  const ordersCurrent = ordersRaw ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDaysRaw = parseOptionalNonNegativeNumber(profile.streak_days);
   const streakDays = streakDaysRaw ?? 0;
 
@@ -716,10 +723,10 @@ function MiniGameLeaguePlatinumUnlockCard({ summary }) {
               ariaLabel={`Сумма продаж: ${salesCurrent.toLocaleString("ru-RU")} из ${PLATINUM_LEAGUE_SALES_TARGET_RUB.toLocaleString("ru-RU")} ₽`}
             />
             <BronzeLeagueRequirementBar
-              label="Оплаченные заказы"
-              current={ordersCurrent}
-              target={PLATINUM_LEAGUE_ORDERS_TARGET}
-              ariaLabel={`Оплаченные заказы: ${Math.min(ordersCurrent, PLATINUM_LEAGUE_ORDERS_TARGET).toLocaleString("ru-RU")} из ${PLATINUM_LEAGUE_ORDERS_TARGET.toLocaleString("ru-RU")}`}
+              label="Уровень"
+              current={levelCurrent}
+              target={PLATINUM_LEAGUE_LEVEL_TARGET}
+              ariaLabel={`Уровень: ${Math.min(levelCurrent, PLATINUM_LEAGUE_LEVEL_TARGET).toLocaleString("ru-RU")} из ${PLATINUM_LEAGUE_LEVEL_TARGET.toLocaleString("ru-RU")}`}
             />
             <BronzeLeagueRequirementBar
               label="Серия активности"
@@ -791,10 +798,8 @@ function MiniGameLeaguePlatinumUnlockCard({ summary }) {
 function MiniGameLeagueDiamondUnlockCard({ summary }) {
   const profile = summary?.profile ?? {};
   const lp = summary?.league_progress_to_diamond ?? {};
-  const salesRaw = parseOptionalNonNegativeNumber(lp.referral_sales_rub);
-  const ordersRaw = parseOptionalNonNegativeNumber(lp.referral_orders_count);
-  const salesCurrent = salesRaw ?? 0;
-  const ordersCurrent = ordersRaw ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDaysRaw = parseOptionalNonNegativeNumber(profile.streak_days);
   const streakDays = streakDaysRaw ?? 0;
 
@@ -818,10 +823,10 @@ function MiniGameLeagueDiamondUnlockCard({ summary }) {
               ariaLabel={`Сумма продаж: ${salesCurrent.toLocaleString("ru-RU")} из ${DIAMOND_LEAGUE_SALES_TARGET_RUB.toLocaleString("ru-RU")} ₽`}
             />
             <BronzeLeagueRequirementBar
-              label="Оплаченные заказы"
-              current={ordersCurrent}
-              target={DIAMOND_LEAGUE_ORDERS_TARGET}
-              ariaLabel={`Оплаченные заказы: ${Math.min(ordersCurrent, DIAMOND_LEAGUE_ORDERS_TARGET).toLocaleString("ru-RU")} из ${DIAMOND_LEAGUE_ORDERS_TARGET.toLocaleString("ru-RU")}`}
+              label="Уровень"
+              current={levelCurrent}
+              target={DIAMOND_LEAGUE_LEVEL_TARGET}
+              ariaLabel={`Уровень: ${Math.min(levelCurrent, DIAMOND_LEAGUE_LEVEL_TARGET).toLocaleString("ru-RU")} из ${DIAMOND_LEAGUE_LEVEL_TARGET.toLocaleString("ru-RU")}`}
             />
             <BronzeLeagueRequirementBar
               label="Серия активности"
@@ -893,10 +898,8 @@ function MiniGameLeagueDiamondUnlockCard({ summary }) {
 function MiniGameLeagueUltraUnlockCard({ summary }) {
   const profile = summary?.profile ?? {};
   const lp = summary?.league_progress_to_ultra ?? {};
-  const salesRaw = parseOptionalNonNegativeNumber(lp.referral_sales_rub);
-  const ordersRaw = parseOptionalNonNegativeNumber(lp.referral_orders_count);
-  const salesCurrent = salesRaw ?? 0;
-  const ordersCurrent = ordersRaw ?? 0;
+  const salesCurrent = referralSalesRubFromSummary(summary, lp);
+  const levelCurrent = profileLevelCurrent(profile);
   const streakDaysRaw = parseOptionalNonNegativeNumber(profile.streak_days);
   const streakDays = streakDaysRaw ?? 0;
 
@@ -920,10 +923,10 @@ function MiniGameLeagueUltraUnlockCard({ summary }) {
               ariaLabel={`Сумма продаж: ${salesCurrent.toLocaleString("ru-RU")} из ${ULTRA_LEAGUE_SALES_TARGET_RUB.toLocaleString("ru-RU")} ₽`}
             />
             <BronzeLeagueRequirementBar
-              label="Оплаченные заказы"
-              current={ordersCurrent}
-              target={ULTRA_LEAGUE_ORDERS_TARGET}
-              ariaLabel={`Оплаченные заказы: ${Math.min(ordersCurrent, ULTRA_LEAGUE_ORDERS_TARGET).toLocaleString("ru-RU")} из ${ULTRA_LEAGUE_ORDERS_TARGET.toLocaleString("ru-RU")}`}
+              label="Уровень"
+              current={levelCurrent}
+              target={ULTRA_LEAGUE_LEVEL_TARGET}
+              ariaLabel={`Уровень: ${Math.min(levelCurrent, ULTRA_LEAGUE_LEVEL_TARGET).toLocaleString("ru-RU")} из ${ULTRA_LEAGUE_LEVEL_TARGET.toLocaleString("ru-RU")}`}
             />
             <BronzeLeagueRequirementBar
               label="Серия активности"
