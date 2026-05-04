@@ -1072,6 +1072,39 @@ class PasswordResetCodeApiTests(TestCase):
         self.assertEqual(prc.attempts, 1)
 
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_verify_code_success_does_not_mark_code_used(self):
+        User.objects.create_user(email="verify@example.com", username="verify", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "verify@example.com")
+        good = re.search(r"\b\d{6}\b", mail.outbox[0].body).group(0)
+        prc = PasswordResetCode.objects.get()
+        r = c.post(
+            "/users/api/password-reset/verify-code/",
+            {"email": "verify@example.com", "code": good},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("code"), "password_reset_code_verified")
+        prc.refresh_from_db()
+        self.assertIsNone(prc.used_at)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_verify_wrong_code_increments_attempts(self):
+        User.objects.create_user(email="verify-wrong@example.com", username="verifywrong", password="Secret123!")
+        c = APIClient()
+        self._code_request(c, "verify-wrong@example.com")
+        prc = PasswordResetCode.objects.get()
+        r = c.post(
+            "/users/api/password-reset/verify-code/",
+            {"email": "verify-wrong@example.com", "code": "000000"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "password_reset_code_invalid")
+        prc.refresh_from_db()
+        self.assertEqual(prc.attempts, 1)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_five_wrong_attempts_blocks_even_correct_code(self):
         User.objects.create_user(email="five@example.com", username="five", password="Secret123!")
         c = APIClient()

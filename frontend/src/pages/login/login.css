@@ -373,16 +373,13 @@ html:has(.login-page:not(.registration-page)) body {
 }
 
 .login-page__recover-step2-intro {
-  margin: 0 0 12px;
+  margin: 0 0 20px;
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-secondary-color);
 }
 
 .login-page__recover-email-hint {
-  margin: 0 0 20px;
-  font-size: 13px;
-  line-height: 1.4;
   color: var(--grey-color);
   word-break: break-all;
 }
@@ -390,6 +387,44 @@ html:has(.login-page:not(.registration-page)) body {
 .login-page__recover-confirm-error {
   margin-top: 8px;
   margin-bottom: 8px;
+}
+
+.login-page__recover-code {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.login-page__recover-code-input {
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  border: 1px solid var(--line-color);
+  border-radius: var(--border-radius-medium);
+  background: var(--background-color);
+  color: var(--text-color);
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  outline: none;
+  transition:
+    border-color var(--transition-duration) var(--transition-function),
+    box-shadow var(--transition-duration) var(--transition-function);
+}
+
+.login-page__recover-code-input:hover {
+  border-color: rgba(113, 119, 248, 0.65);
+  box-shadow:
+    0 0 0 1px var(--main-color-20),
+    0 0 1px rgba(113, 119, 248, 0.35);
+}
+
+.login-page__recover-code-input:focus {
+  border-color: var(--main-color);
+  box-shadow: 0 0 0 3px var(--main-color-10);
 }
 
 .login-page__recover-resend {

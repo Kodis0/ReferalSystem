@@ -144,13 +144,25 @@ function LoginWelcomeAvatarIcon() {
 
 const LOGIN_RETURNING_KEY = "lumo_login_returning";
 const LOGIN_DISPLAY_NAME_KEY = "lumo_login_display_name";
+const RECOVER_CODE_LENGTH = 6;
+
+function normalizeRecoverCode(value) {
+  return String(value ?? "").replace(/\D/g, "").slice(0, RECOVER_CODE_LENGTH);
+}
+
+function loginGivenName(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const parts = text.split(/\s+/);
+  return parts.length > 1 ? parts[1] : parts[0];
+}
 
 function readLoginWelcomeFromStorage() {
   try {
     if (localStorage.getItem(LOGIN_RETURNING_KEY) !== "1") {
       return { returning: false, name: null };
     }
-    const name = (localStorage.getItem(LOGIN_DISPLAY_NAME_KEY) || "").trim();
+    const name = loginGivenName(localStorage.getItem(LOGIN_DISPLAY_NAME_KEY));
     return { returning: true, name: name || null };
   } catch {
     return { returning: false, name: null };
@@ -159,12 +171,10 @@ function readLoginWelcomeFromStorage() {
 
 function pickLoginDisplayName(user) {
   if (!user || typeof user !== "object") return "";
-  const fio = (user.fio || "").trim();
-  if (fio) return fio;
   const first = (user.first_name || "").trim();
-  const last = (user.last_name || "").trim();
-  const joined = [first, last].filter(Boolean).join(" ").trim();
-  if (joined) return joined;
+  if (first) return first;
+  const fio = (user.fio || "").trim();
+  if (fio) return loginGivenName(fio);
   const email = (user.email || "").trim();
   if (email) {
     const local = email.split("@")[0];
@@ -346,14 +356,18 @@ function Login() {
   const [recoverPhase, setRecoverPhase] = useState("step1");
   const [recoverConfirmError, setRecoverConfirmError] = useState("");
   const [recoverCode, setRecoverCode] = useState("");
+  const [recoverCodeVerified, setRecoverCodeVerified] = useState(false);
   const [recoverNewPassword, setRecoverNewPassword] = useState("");
   const [recoverNewPassword2, setRecoverNewPassword2] = useState("");
+  const [showRecoverNewPassword, setShowRecoverNewPassword] = useState(false);
+  const [showRecoverNewPassword2, setShowRecoverNewPassword2] = useState(false);
   const [resendCooldownSec, setResendCooldownSec] = useState(0);
   const [recoverResendExpanded, setRecoverResendExpanded] = useState(false);
   const [{ returning: isReturningUser, name: storedWelcomeName }] = useState(() => readLoginWelcomeFromStorage());
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const googleCredentialHandlerRef = useRef(() => {});
+  const recoverCodeInputRefs = useRef([]);
 
   googleCredentialHandlerRef.current = async (credentialResponse) => {
     const cred = credentialResponse?.credential;
@@ -426,8 +440,11 @@ function Login() {
     setRecoverPhase("step1");
     setRecoverConfirmError("");
     setRecoverCode("");
+    setRecoverCodeVerified(false);
     setRecoverNewPassword("");
     setRecoverNewPassword2("");
+    setShowRecoverNewPassword(false);
+    setShowRecoverNewPassword2(false);
     setResendCooldownSec(0);
     setRecoverResendExpanded(false);
     setCaptchaCode("");
@@ -653,6 +670,7 @@ function Login() {
       setResendCooldownSec(60);
       setRecoverResendExpanded(false);
       setRecoverConfirmError("");
+      setRecoverCodeVerified(false);
     } catch (err) {
       console.error("Recover password:", err);
       setMessage("Произошла ошибка, попробуйте позже");
@@ -661,11 +679,90 @@ function Login() {
     }
   };
 
+  const focusRecoverCodeInput = (index) => {
+    recoverCodeInputRefs.current[index]?.focus();
+  };
+
+  const resetRecoverCodeVerification = () => {
+    setRecoverCodeVerified(false);
+    setRecoverNewPassword("");
+    setRecoverNewPassword2("");
+    setShowRecoverNewPassword(false);
+    setShowRecoverNewPassword2(false);
+  };
+
+  const updateRecoverCodeAt = (index, value) => {
+    resetRecoverCodeVerification();
+    const incoming = normalizeRecoverCode(value);
+    const chars = recoverCode.padEnd(RECOVER_CODE_LENGTH, " ").slice(0, RECOVER_CODE_LENGTH).split("");
+    if (!incoming) {
+      chars[index] = " ";
+      setRecoverCode(chars.join("").replace(/\s/g, ""));
+      return;
+    }
+    incoming.split("").forEach((char, offset) => {
+      const targetIndex = index + offset;
+      if (targetIndex < RECOVER_CODE_LENGTH) {
+        chars[targetIndex] = char;
+      }
+    });
+    setRecoverCode(chars.join("").replace(/\s/g, ""));
+    focusRecoverCodeInput(Math.min(index + incoming.length, RECOVER_CODE_LENGTH - 1));
+  };
+
+  const handleRecoverCodePaste = (index, e) => {
+    const pasted = normalizeRecoverCode(e.clipboardData.getData("text"));
+    if (!pasted) return;
+    e.preventDefault();
+    resetRecoverCodeVerification();
+    if (pasted.length >= RECOVER_CODE_LENGTH) {
+      setRecoverCode(pasted);
+      focusRecoverCodeInput(RECOVER_CODE_LENGTH - 1);
+      return;
+    }
+    updateRecoverCodeAt(index, pasted);
+  };
+
+  const handleRecoverCodeKeyDown = (index, e) => {
+    if (e.key !== "Backspace" || recoverCode[index] || index <= 0) return;
+    e.preventDefault();
+    resetRecoverCodeVerification();
+    const chars = recoverCode.padEnd(RECOVER_CODE_LENGTH, " ").slice(0, RECOVER_CODE_LENGTH).split("");
+    chars[index - 1] = " ";
+    setRecoverCode(chars.join("").replace(/\s/g, ""));
+    focusRecoverCodeInput(index - 1);
+  };
+
   const handleRecoverConfirmSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setRecoverConfirmError("");
     try {
+      if (!recoverCodeVerified) {
+        const res = await fetch(API_ENDPOINTS.passwordResetCodeVerify, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: recoverEmail.trim(),
+            code: recoverCode.trim(),
+          }),
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const errText =
+            formatLoginApiErrors(data) ||
+            (typeof data.detail === "string" ? data.detail : "") ||
+            "Не удалось проверить код.";
+          setRecoverConfirmError(errText);
+          setLoading(false);
+          return;
+        }
+        setRecoverCodeVerified(true);
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch(API_ENDPOINTS.passwordResetCodeConfirm, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -727,6 +824,8 @@ function Login() {
       }
       setResendCooldownSec(60);
       setRecoverResendExpanded(false);
+      setRecoverCode("");
+      resetRecoverCodeVerification();
       setCaptchaCode("");
     } catch (err) {
       console.error("Recover resend:", err);
@@ -840,70 +939,101 @@ function Login() {
                       <h1 className="login-page__title">Восстановление доступа</h1>
                     </div>
                     <p className="login-page__recover-step2-intro">
-                      Если аккаунт существует, мы отправили код восстановления на почту.
+                      Если аккаунт существует, мы отправили код восстановления на почту
+                      {recoverEmail.trim() ? (
+                        <>
+                          {" "}
+                          <span className="login-page__recover-email-hint">{recoverEmail.trim()}</span>
+                        </>
+                      ) : null}
+                      .
                     </p>
-                    {recoverEmail.trim() ? (
-                      <p className="login-page__recover-email-hint">{recoverEmail.trim()}</p>
-                    ) : null}
 
                     <form className="login-page__form" onSubmit={handleRecoverConfirmSubmit} noValidate>
                       <div className="login-page__form-block">
                         <p className="login-page__form-block-title">Код из письма</p>
                         <div className="login-page__form-block-inner">
-                          <div className="login-page__input">
-                            <div className="login-page__input-wrapper">
+                          <div className="login-page__recover-code" role="group" aria-label="Код из письма">
+                            {Array.from({ length: RECOVER_CODE_LENGTH }).map((_, index) => (
                               <input
-                                className="login-page__input-field"
+                                key={index}
+                                ref={(node) => {
+                                  recoverCodeInputRefs.current[index] = node;
+                                }}
+                                className="login-page__recover-code-input"
                                 type="text"
-                                id="recover-mail-code"
-                                name="recover-mail-code"
-                                autoComplete="one-time-code"
+                                id={index === 0 ? "recover-mail-code" : undefined}
+                                name={index === 0 ? "recover-mail-code" : undefined}
+                                autoComplete={index === 0 ? "one-time-code" : "off"}
                                 inputMode="numeric"
-                                maxLength={6}
-                                value={recoverCode}
-                                onChange={(e) => setRecoverCode(e.target.value)}
-                                placeholder="000000"
+                                pattern="[0-9]*"
+                                maxLength={RECOVER_CODE_LENGTH}
+                                value={recoverCode[index] || ""}
+                                onChange={(e) => updateRecoverCodeAt(index, e.target.value)}
+                                onPaste={(e) => handleRecoverCodePaste(index, e)}
+                                onKeyDown={(e) => handleRecoverCodeKeyDown(index, e)}
+                                aria-label={`Символ ${index + 1} из ${RECOVER_CODE_LENGTH}`}
                               />
-                            </div>
+                            ))}
                           </div>
                         </div>
                       </div>
-                      <div className="login-page__form-block">
-                        <p className="login-page__form-block-title">Новый пароль</p>
-                        <div className="login-page__form-block-inner">
-                          <div className="login-page__input login-page__input--password">
-                            <div className="login-page__input-wrapper">
-                              <input
-                                className="login-page__input-field"
-                                type="password"
-                                id="recover-new-password"
-                                name="recover-new-password"
-                                autoComplete="new-password"
-                                value={recoverNewPassword}
-                                onChange={(e) => setRecoverNewPassword(e.target.value)}
-                              />
+                      {recoverCodeVerified ? (
+                        <>
+                          <div className="login-page__form-block">
+                            <p className="login-page__form-block-title">Новый пароль</p>
+                            <div className="login-page__form-block-inner">
+                              <div className="login-page__input login-page__input--password">
+                                <div className="login-page__input-wrapper">
+                                  <input
+                                    className="login-page__input-field"
+                                    type={showRecoverNewPassword ? "text" : "password"}
+                                    id="recover-new-password"
+                                    name="recover-new-password"
+                                    autoComplete="new-password"
+                                    value={recoverNewPassword}
+                                    onChange={(e) => setRecoverNewPassword(e.target.value)}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="login-page__icon-btn"
+                                    onClick={() => setShowRecoverNewPassword((v) => !v)}
+                                    aria-label={showRecoverNewPassword ? "Скрыть новый пароль" : "Показать новый пароль"}
+                                  >
+                                    {showRecoverNewPassword ? <EyeOffIcon /> : <EyeIcon />}
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                      <div className="login-page__form-block">
-                        <p className="login-page__form-block-title">Повторите пароль</p>
-                        <div className="login-page__form-block-inner">
-                          <div className="login-page__input login-page__input--password">
-                            <div className="login-page__input-wrapper">
-                              <input
-                                className="login-page__input-field"
-                                type="password"
-                                id="recover-new-password2"
-                                name="recover-new-password2"
-                                autoComplete="new-password"
-                                value={recoverNewPassword2}
-                                onChange={(e) => setRecoverNewPassword2(e.target.value)}
-                              />
+                          <div className="login-page__form-block">
+                            <p className="login-page__form-block-title">Повторите пароль</p>
+                            <div className="login-page__form-block-inner">
+                              <div className="login-page__input login-page__input--password">
+                                <div className="login-page__input-wrapper">
+                                  <input
+                                    className="login-page__input-field"
+                                    type={showRecoverNewPassword2 ? "text" : "password"}
+                                    id="recover-new-password2"
+                                    name="recover-new-password2"
+                                    autoComplete="new-password"
+                                    value={recoverNewPassword2}
+                                    onChange={(e) => setRecoverNewPassword2(e.target.value)}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="login-page__icon-btn"
+                                    onClick={() => setShowRecoverNewPassword2((v) => !v)}
+                                    aria-label={showRecoverNewPassword2 ? "Скрыть повтор пароля" : "Показать повтор пароля"}
+                                  >
+                                    {showRecoverNewPassword2 ? <EyeOffIcon /> : <EyeIcon />}
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
+                        </>
+                      ) : null}
 
                       {recoverConfirmError ? (
                         <div
@@ -919,7 +1049,7 @@ function Login() {
                         className="login-page__base-button login-page__base-button_size_large login-page__base-button_color_primary login-page__login-btn"
                         disabled={loading}
                       >
-                        {loading ? "Сохранение..." : "Сменить пароль"}
+                        {loading ? (recoverCodeVerified ? "Сохранение..." : "Проверка...") : recoverCodeVerified ? "Сменить пароль" : "Проверить код"}
                       </button>
                     </form>
 
@@ -935,6 +1065,8 @@ function Login() {
                           onClick={() => {
                             setRecoverConfirmError("");
                             setRecoverResendExpanded(true);
+                            setRecoverCode("");
+                            resetRecoverCodeVerification();
                             void loadCaptcha();
                             setCaptchaCode("");
                           }}

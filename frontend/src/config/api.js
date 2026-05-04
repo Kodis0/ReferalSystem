@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
   /** Legacy: ссылка по uid/token в письме (если используется отдельно). */
   passwordResetRequest: `${API_BASE}/users/password-reset/request/`,
   passwordResetCodeRequest: `${API_BASE}/users/api/password-reset/request/`,
+  passwordResetCodeVerify: `${API_BASE}/users/api/password-reset/verify-code/`,
   passwordResetCodeConfirm: `${API_BASE}/users/api/password-reset/confirm/`,
   /** GET — список достижений и сводка для ЛК (Bearer). */
   usersAchievements: `${API_BASE}/users/api/achievements/`,

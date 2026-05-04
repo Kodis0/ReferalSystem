@@ -107,6 +107,73 @@ def get_latest_active_code(user):
     )
 
 
+def _validate_password_reset_code(*, normalized_email: str, code_plain: str):
+    user = User.objects.filter(email__iexact=normalized_email).first()
+    if user is None or not user.is_active:
+        return (
+            None,
+            None,
+            {
+                "detail": "Неверный код восстановления или email.",
+                "code": "password_reset_confirm_failed",
+            },
+            400,
+        )
+
+    prc = get_latest_active_code(user)
+    if prc is None:
+        return (
+            user,
+            None,
+            {
+                "detail": "Код восстановления недействителен или истёк.",
+                "code": "password_reset_code_invalid",
+            },
+            400,
+        )
+
+    if prc.attempts >= MAX_VERIFY_ATTEMPTS:
+        return (
+            user,
+            prc,
+            {
+                "detail": "Превышено число попыток ввода кода.",
+                "code": "password_reset_max_attempts",
+            },
+            400,
+        )
+
+    stripped_code = (code_plain or "").strip()
+    if not codes_match(stripped_code, prc.code_hash):
+        prc.attempts += 1
+        prc.save(update_fields=["attempts"])
+        return (
+            user,
+            prc,
+            {
+                "detail": "Неверный код восстановления.",
+                "code": "password_reset_code_invalid",
+            },
+            400,
+        )
+
+    return user, prc, None, 200
+
+
+def verify_password_reset_code(*, normalized_email: str, code_plain: str):
+    """
+    Проверяет код до показа формы нового пароля. Код не помечается использованным:
+    финальный confirm повторно валидирует его перед сменой пароля.
+    """
+    _user, _prc, error_payload, http_status = _validate_password_reset_code(
+        normalized_email=normalized_email,
+        code_plain=code_plain,
+    )
+    if error_payload is not None:
+        return error_payload, http_status
+    return {"detail": "Код подтверждён.", "code": "password_reset_code_verified"}, 200
+
+
 def confirm_password_reset_with_code(
     *,
     normalized_email: str,
@@ -126,46 +193,12 @@ def confirm_password_reset_with_code(
             400,
         )
 
-    user = User.objects.filter(email__iexact=normalized_email).first()
-    if user is None or not user.is_active:
-        return (
-            {
-                "detail": "Неверный код восстановления или email.",
-                "code": "password_reset_confirm_failed",
-            },
-            400,
-        )
-
-    prc = get_latest_active_code(user)
-    if prc is None:
-        return (
-            {
-                "detail": "Код восстановления недействителен или истёк.",
-                "code": "password_reset_code_invalid",
-            },
-            400,
-        )
-
-    if prc.attempts >= MAX_VERIFY_ATTEMPTS:
-        return (
-            {
-                "detail": "Превышено число попыток ввода кода.",
-                "code": "password_reset_max_attempts",
-            },
-            400,
-        )
-
-    stripped_code = (code_plain or "").strip()
-    if not codes_match(stripped_code, prc.code_hash):
-        prc.attempts += 1
-        prc.save(update_fields=["attempts"])
-        return (
-            {
-                "detail": "Неверный код восстановления.",
-                "code": "password_reset_code_invalid",
-            },
-            400,
-        )
+    user, _prc, error_payload, http_status = _validate_password_reset_code(
+        normalized_email=normalized_email,
+        code_plain=code_plain,
+    )
+    if error_payload is not None:
+        return error_payload, http_status
 
     try:
         validate_password(new_password, user)

@@ -38,7 +38,7 @@ from .support_views import (
     SupportTicketRetrieveView,
 )
 from .password_reset_views import PasswordResetCaptchaView, PasswordResetRequestView
-from .password_reset_code_views import PasswordResetCodeConfirmView, PasswordResetCodeRequestView
+from .password_reset_code_views import PasswordResetCodeConfirmView, PasswordResetCodeRequestView, PasswordResetCodeVerifyView
 from .achievement_views import UserAchievementsListView
 
 urlpatterns = [
@@ -59,6 +59,7 @@ urlpatterns = [
     path('password-reset/captcha/', PasswordResetCaptchaView.as_view(), name='password_reset_captcha'),
     path('password-reset/request/', PasswordResetRequestView.as_view(), name='password_reset_request'),
     path('api/password-reset/request/', PasswordResetCodeRequestView.as_view(), name='password_reset_code_request'),
+    path('api/password-reset/verify-code/', PasswordResetCodeVerifyView.as_view(), name='password_reset_code_verify'),
     path('api/password-reset/confirm/', PasswordResetCodeConfirmView.as_view(), name='password_reset_code_confirm'),
     path('api/achievements/', UserAchievementsListView.as_view(), name='user_achievements_list'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

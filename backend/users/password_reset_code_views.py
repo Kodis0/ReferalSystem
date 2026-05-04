@@ -14,6 +14,7 @@ from .password_reset_code_service import (
     confirm_password_reset_with_code,
     issue_code_for_user,
     normalize_email,
+    verify_password_reset_code,
 )
 from .password_reset_views import password_reset_captcha_error_response
 
@@ -101,5 +102,36 @@ class PasswordResetCodeConfirmView(APIView):
             code_plain=code,
             new_password=new_password,
             new_password_confirm=new_password_confirm,
+        )
+        return Response(payload, status=http_status)
+
+
+class PasswordResetCodeVerifyView(APIView):
+    """
+    POST /users/api/password-reset/verify-code/
+
+    Body: `{ "email", "code" }`. Проверяет код перед показом полей нового пароля.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        raw_email = request.data.get("email")
+        code = request.data.get("code")
+
+        if not isinstance(raw_email, str) or not raw_email.strip():
+            return Response(
+                {"detail": "Укажите email.", "code": "email_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(code, str) or not code.strip():
+            return Response(
+                {"detail": "Укажите код из письма.", "code": "code_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload, http_status = verify_password_reset_code(
+            normalized_email=normalize_email(raw_email),
+            code_plain=code,
         )
         return Response(payload, status=http_status)
