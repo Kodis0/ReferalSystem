@@ -895,6 +895,77 @@ html:has(.login-page:not(.registration-page)) body {
   outline-offset: 3px;
 }
 
+.login-page__btn-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.login-page__btn-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: var(--light-color);
+  border-radius: 50%;
+  animation: login-page-button-spin 0.75s linear infinite;
+}
+
+@keyframes login-page-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page__btn-spinner {
+    animation: none;
+    border-top-color: rgba(255, 255, 255, 0.65);
+  }
+}
+
+.login-page__login-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #17212b;
+}
+
+.login-page__login-loader-panel {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0;
+}
+
+.login-page__login-loader-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: #7177f8;
+  border-radius: 50%;
+  animation: login-page-button-spin 0.75s linear infinite;
+}
+
+.login-page__login-loader-text {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-page__login-loader-spinner {
+    animation: none;
+    border-top-color: rgba(255, 255, 255, 0.45);
+  }
+}
+
 .login-page__divider {
   display: flex;
   flex-direction: row;
@@ -1113,6 +1184,7 @@ html:has(.login-page:not(.registration-page)) body {
    ============================================================================= */
 
 .login-page__container {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;

@@ -32,15 +32,6 @@
   overflow: hidden;
 }
 
-.main-page__hero-dots {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 0;
-}
-
 .main-page__hero-text-wrap {
   position: relative;
   z-index: 1;
@@ -60,11 +51,6 @@
   letter-spacing: -0.02em;
   animation: hero-text-in 1.2s ease-out;
   transition: color 0.25s ease;
-}
-
-.main-page__hero-title-caret {
-  /* обёртка для ChevronMorphLiquid — стили в компоненте */
-  display: inline-block;
 }
 
 .main-page__hero-subtitle {
@@ -109,103 +95,140 @@
   }
 }
 
-.main-page__block-2 {
-  height: 700px;
-  background: var(--block-2-bg);
+.main-page__footer {
   flex-shrink: 0;
-  transition: background-color 0.25s ease;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 90px clamp(24px, 6vw, 80px) 0;
-  box-sizing: border-box;
-}
-
-.main-page__block-2-inner {
-  width: 100%;
-  max-width: 1200px;
-}
-
-.main-page__section-title {
-  margin: 0;
-  width: auto;
-  text-align: left;
-  font-size: 40px;
-  font-weight: 900;
-  line-height: 48.4px;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-  transition: color 0.25s ease;
-}
-
-.main-page__how-grid {
-  margin-top: 58px;
-  display: grid;
-  grid-template-columns: repeat(2, 569px);
-  column-gap: 62px;
-  row-gap: 29px;
-  justify-content: center;
-}
-
-.main-page__how-card {
-  position: relative;
-  width: 569px;
-  height: 250px;
-  background: #181f38;
-  border-radius: 39px 39px 0 39px;
-  box-sizing: border-box;
-  padding: 54px 82px 0;
-  overflow: hidden;
-}
-
-.main-page__how-card-title {
-  font-size: 32px;
-  font-weight: 900;
-  line-height: 38.7px;
-  color: #ffffff;
-}
-
-.main-page__how-card-text {
-  margin-top: 16px;
-  max-width: 340px;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 24.2px;
+  padding: 52px clamp(24px, 6vw, 80px) 28px;
+  background: #050c26;
   color: rgba(255, 255, 255, 0.92);
-  white-space: pre-line;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-.main-page__how-card-icon {
-  position: absolute;
-  right: -22px;
-  bottom: -18px;
-  width: 200px;
-  height: auto;
-  pointer-events: none;
-  user-select: none;
+.main-page__footer-inner {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: clamp(48px, 8vw, 96px);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-/* Персональная подстройка иконок по карточкам */
-.main-page__how-card-icon--people {
-  right: 0px;
-  bottom: -10px;
-  width: 120px;
+.main-page__footer-side {
+  min-width: 0;
 }
 
-.main-page__how-card-icon--peoples {
-  right: 0px;
-  bottom: 0px;
-  width: 170px;
+.main-page__footer-logo {
+  display: inline-block;
+  margin-bottom: 22px;
+  text-decoration: none;
+  line-height: 0;
 }
 
-.main-page__how-card-icon--result {
-  right: 0px;
-  bottom: 0px;
-  width: 170px;
+.main-page__footer-brand-logo {
+  display: block;
+  width: 214px;
+  height: 24px;
+  overflow: visible;
 }
 
-.main-page__how-card-icon--pay {
-  right: 0px;
-  bottom: 0px;
-  width: 170px;
+.main-page__footer-text {
+  margin: 0;
+  max-width: 260px;
+  color: rgba(127, 145, 164, 0.92);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.main-page__footer-contacts {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.main-page__footer-contact-link {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.main-page__footer-contact-link:hover {
+  color: #c7c9fa;
+}
+
+.main-page__footer-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(28px, 5vw, 64px);
+}
+
+.main-page__footer-column {
+  min-width: 0;
+}
+
+.main-page__footer-title {
+  margin: 0 0 16px;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.main-page__footer-links {
+  display: grid;
+  gap: 11px;
+}
+
+.main-page__footer-link {
+  color: rgba(127, 145, 164, 0.95);
+  font-size: 14px;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.main-page__footer-link:hover {
+  color: #ffffff;
+  opacity: 1;
+}
+
+.main-page__footer-bottom {
+  display: grid;
+  gap: 6px;
+  max-width: 1200px;
+  margin: 42px auto 0;
+  padding-top: 22px;
+  border-top: 1px solid rgba(127, 145, 164, 0.18);
+  color: rgba(127, 145, 164, 0.78);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+[data-theme="light"] .main-page__footer-bottom {
+  border-top-color: rgba(127, 145, 164, 0.18);
+}
+
+@media (max-width: 760px) {
+  .main-page__content {
+    height: auto;
+    min-height: calc(100vh - 96px);
+  }
+
+  .main-page__hero {
+    min-height: 620px;
+    padding-top: 112px;
+  }
+
+  .main-page__hero-text-wrap {
+    padding: 0 24px;
+  }
+
+  .main-page__footer-inner {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
+
+  .main-page__footer-nav {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
 }

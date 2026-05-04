@@ -46,6 +46,45 @@ class PartnerProfile(models.Model):
         return f"{self.ref_code} ({self.user_id})"
 
 
+class ProgramBudgetTopUp(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        CANCELED = "canceled", "Canceled"
+
+    class PaymentMethod(models.TextChoices):
+        BANK_CARD = "bank_card", "Bank card"
+
+    class PaymentProvider(models.TextChoices):
+        TBANK = "tbank", "T-Bank"
+
+    partner = models.ForeignKey(
+        PartnerProfile,
+        on_delete=models.CASCADE,
+        related_name="program_budget_topups",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="RUB")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    payment_method = models.CharField(max_length=32, choices=PaymentMethod.choices, default=PaymentMethod.BANK_CARD)
+    provider = models.CharField(max_length=32, choices=PaymentProvider.choices, null=True, blank=True)
+    provider_payment_id = models.CharField(max_length=128, null=True, blank=True)
+    provider_order_id = models.CharField(max_length=128, null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["partner", "status", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"ProgramBudgetTopUp {self.pk} ({self.partner_id}, {self.amount} {self.currency})"
+
+
 class Project(models.Model):
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -5,6 +5,7 @@ from .models import (
     CustomerAttribution,
     Order,
     PartnerProfile,
+    ProgramBudgetTopUp,
     PublicLeadIngestAudit,
     ReferralLeadEvent,
     ReferralVisit,
@@ -90,6 +91,24 @@ class PartnerProfileAdmin(admin.ModelAdmin):
     )
     list_filter = ("status",)
     search_fields = ("ref_code", "user__email")
+
+
+@admin.register(ProgramBudgetTopUp)
+class ProgramBudgetTopUpAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "partner",
+        "amount",
+        "currency",
+        "status",
+        "payment_method",
+        "provider",
+        "created_at",
+        "paid_at",
+    )
+    list_filter = ("status", "payment_method", "provider", "created_at")
+    search_fields = ("partner__ref_code", "partner__user__email", "provider_payment_id", "provider_order_id")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(ReferralVisit)

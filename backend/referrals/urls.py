@@ -14,6 +14,9 @@ from .views import (
     PartnerDashboardView,
     PartnerOnboardView,
     PlatformServiceStatusView,
+    ProgramBudgetBalanceView,
+    ProgramBudgetTopUpTransactionsView,
+    ProgramBudgetTopUpView,
     ProjectOwnerCreateView,
     ProjectOwnerDetailView,
     ProjectSiteOwnerCreateView,
@@ -82,6 +85,21 @@ urlpatterns = [
     path("capture/", ReferralCaptureView.as_view(), name="referral-capture"),
     path("partner/onboard/", PartnerOnboardView.as_view(), name="partner-onboard"),
     path("partner/me/", PartnerDashboardView.as_view(), name="partner-dashboard"),
+    path(
+        "partner/balance/program-budget/",
+        ProgramBudgetBalanceView.as_view(),
+        name="program-budget-balance",
+    ),
+    path(
+        "partner/balance/program-budget/topup/",
+        ProgramBudgetTopUpView.as_view(),
+        name="program-budget-topup",
+    ),
+    path(
+        "partner/balance/program-budget/transactions/",
+        ProgramBudgetTopUpTransactionsView.as_view(),
+        name="program-budget-transactions",
+    ),
     path(
         "project/create/",
         ProjectOwnerCreateView.as_view(),

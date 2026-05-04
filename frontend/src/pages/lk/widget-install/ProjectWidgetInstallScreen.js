@@ -31,5 +31,5 @@ export default function ProjectWidgetInstallScreen() {
     return <Navigate to="/lk/partner" replace />;
   }
 
-  return <WidgetInstallScreen routeSitePublicId={id} focused={focused} />;
+  return <WidgetInstallScreen routeSitePublicId={id} focused={focused} cleanupDraftOnExit />;
 }

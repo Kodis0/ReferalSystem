@@ -400,6 +400,30 @@ export default function SiteProjectLayout() {
   }, [loadHead]);
 
   useEffect(() => {
+    if (!hasProjectId) return undefined;
+    const handleProjectSiteDeleted = (event) => {
+      const detail = event instanceof CustomEvent && event.detail ? event.detail : {};
+      const eventProjectId = Number(detail.projectId);
+      const sitePublicId = typeof detail.sitePublicId === "string" ? detail.sitePublicId.trim() : "";
+      if (eventProjectId !== numericProjectId || !isUuidString(sitePublicId)) return;
+      setProjectEntry((prev) => {
+        if (!prev || !Array.isArray(prev.sites)) return prev;
+        const sites = prev.sites.filter((site) => site.public_id !== sitePublicId);
+        return sites.length === prev.sites.length ? prev : { ...prev, sites };
+      });
+    };
+    const handleOwnerProjectsUpdated = () => {
+      loadHead();
+    };
+    window.addEventListener("lk-project-site-deleted", handleProjectSiteDeleted);
+    window.addEventListener("lk-owner-projects-updated", handleOwnerProjectsUpdated);
+    return () => {
+      window.removeEventListener("lk-project-site-deleted", handleProjectSiteDeleted);
+      window.removeEventListener("lk-owner-projects-updated", handleOwnerProjectsUpdated);
+    };
+  }, [hasProjectId, loadHead, numericProjectId]);
+
+  useEffect(() => {
     if (!hasProjectId || !isUuidString(createdSitePublicId) || addSiteState === "saving") return;
     const widgetPath = buildScopedProjectPath("widget");
     const onWidgetPath = location.pathname === `${projectBasePath}/widget`;

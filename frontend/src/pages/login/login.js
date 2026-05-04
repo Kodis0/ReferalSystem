@@ -912,6 +912,14 @@ function Login() {
         ) : (
         <div className="login-page__wrapper">
           <div className="login-page__container">
+            {loading && !showRecoverAccess ? (
+              <div className="login-page__login-loader" role="status" aria-live="polite">
+                <div className="login-page__login-loader-panel">
+                  <span className="login-page__login-loader-spinner" aria-hidden="true" />
+                  <span className="login-page__login-loader-text">Входим в аккаунт...</span>
+                </div>
+              </div>
+            ) : null}
             {showRecoverAccess ? (
               <>
                 {recoverPhase === "success" ? (
@@ -1366,8 +1374,16 @@ function Login() {
                 data-testid="submit-form-btn"
                 data-test-id="submit-form-btn"
                 disabled={loading}
+                aria-busy={loading ? "true" : undefined}
               >
-                {loading ? "Вход..." : "Войти"}
+                {loading ? (
+                  <span className="login-page__btn-loading">
+                    <span className="login-page__btn-spinner" aria-hidden="true" />
+                    <span>Входим...</span>
+                  </span>
+                ) : (
+                  "Войти"
+                )}
               </button>
             </form>
 

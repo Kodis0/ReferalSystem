@@ -700,6 +700,94 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   align-items: center;
 }
 
+.lk-header__wallet-btn {
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  font: 500 14px/24px "Inter", "Stem-Regular", "Stem", "Tahoma", "Arial", sans-serif;
+  text-decoration: none;
+  transition:
+    color 0.2s ease,
+    transform 0.18s ease;
+}
+
+.lk-header__wallet-btn:hover,
+.lk-header__wallet-btn:focus-visible {
+  background: transparent;
+  color: #ffffff;
+  transform: none;
+}
+
+.lk-header__wallet-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.lk-header__wallet-btn:hover .lk-header__wallet-icon,
+.lk-header__wallet-btn:focus-visible .lk-header__wallet-icon {
+  animation: lk-wallet-bounce 0.42s ease;
+}
+
+[data-theme="light"] .lk-header__wallet-btn:hover,
+[data-theme="light"] .lk-header__wallet-btn:focus-visible {
+  background: transparent;
+  color: #26325c;
+}
+
+[data-theme="light"] .lk-header__wallet-btn {
+  color: #26325c;
+}
+
+.lk-header__wallet-icon,
+.lk-header__wallet-icon-svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.lk-header__wallet-balance {
+  white-space: nowrap;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+}
+
+.lk-header__wallet-btn::after {
+  content: "";
+  width: 1px;
+  height: 24px;
+  margin-left: 10px;
+  background: rgba(127, 145, 164, 0.35);
+  pointer-events: none;
+}
+
+[data-theme="light"] .lk-header__wallet-btn::after {
+  background: rgba(38, 50, 92, 0.18);
+}
+
+@keyframes lk-wallet-bounce {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  45% {
+    transform: translateY(-2px) rotate(-5deg);
+  }
+
+  75% {
+    transform: translateY(1px) rotate(3deg);
+  }
+}
+
 .lk-header__support-btn,
 .lk-header__account-btn {
   display: inline-flex;

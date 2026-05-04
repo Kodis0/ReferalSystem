@@ -49,6 +49,12 @@ import SiteHistoryPage from "./owner-programs/SiteHistoryPage";
 import ProjectReferralBlockScreen from "./owner-programs/ProjectReferralBlockScreen";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
+import BalancePage from "./balance/BalancePage";
+import {
+  fetchProgramBudgetBalance,
+  formatProgramBudgetMoney,
+  PROGRAM_BUDGET_UPDATED_EVENT,
+} from "./balance/programBudgetApi";
 import {
   accountKeyFromUser,
   applySessionToLocalStorage,
@@ -126,6 +132,43 @@ function SupportButtonChevron() {
     </svg>
   );
 }
+
+function WalletHeaderIcon() {
+  return (
+    <svg
+      className="lk-header__wallet-icon-svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <g>
+        <path
+          d="M19 7H18V6C18 5.20435 17.6839 4.44129 17.1213 3.87868C16.5587 3.31607 15.7956 3 15 3H5C4.20435 3 3.44129 3.31607 2.87868 3.87868C2.31607 4.44129 2 5.20435 2 6V18C2 18.7956 2.31607 19.5587 2.87868 20.1213C3.44129 20.6839 4.20435 21 5 21H19C19.7956 21 20.5587 20.6839 21.1213 20.1213C21.6839 19.5587 22 18.7956 22 18V10C22 9.20435 21.6839 8.44129 21.1213 7.87868C20.5587 7.31607 19.7956 7 19 7ZM5 5H15C15.2652 5 15.5196 5.10536 15.7071 5.29289C15.8946 5.48043 16 5.73478 16 6V7H5C4.73478 7 4.48043 6.89464 4.29289 6.70711C4.10536 6.51957 4 6.26522 4 6C4 5.73478 4.10536 5.48043 4.29289 5.29289C4.48043 5.10536 4.73478 5 5 5ZM20 15H19C18.7348 15 18.4804 14.8946 18.2929 14.7071C18.1054 14.5196 18 14.2652 18 14C18 13.7348 18.1054 13.4804 18.2929 13.2929C18.4804 13.1054 18.7348 13 19 13H20V15ZM20 11H19C18.2044 11 17.4413 11.3161 16.8787 11.8787C16.3161 12.4413 16 13.2044 16 14C16 14.7956 16.3161 15.5587 16.8787 16.1213C17.4413 16.6839 18.2044 17 19 17H20V18C20 18.2652 19.8946 18.5196 19.7071 18.7071C19.5196 18.8946 19.2652 19 19 19H5C4.73478 19 4.48043 18.8946 4.29289 18.7071C4.10536 18.5196 4 18.2652 4 18V8.83C4.32127 8.94302 4.65943 9.00051 5 9H19C19.2652 9 19.5196 9.10536 19.7071 9.29289C19.8946 9.48043 20 9.73478 20 10V11Z"
+          fill="currentColor"
+        />
+        <path d="M13.0248 8.06845L5 10H18L14.5835 8.14974C14.2893 7.99037 13.5166 7.95007 13.0248 8.06845Z" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M11.9274 7.48018C12.9539 6.64976 14.5667 6.93243 15.1809 8.05041L20 9H2L11.9274 7.48018ZM7.48967 7.10047H16.6229L13.314 8.8999L7.48967 7.10047Z"
+          fill="currentColor"
+        />
+        <path d="M16.6288 8.01309L5 9H19L17.8606 8.16193C17.6906 8.03689 17.1368 7.96998 16.6288 8.01309Z" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M19.5 7.055C20 7.5 20 7.5 20.5 7.49989L21.3874 9.00008H5.49996L5.17285 7.05509L19.5 7.055ZM11.4459 7.00008H18.6125L19 7L11.4459 7.00008Z"
+          fill="currentColor"
+        />
+      </g>
+    </svg>
+  );
+}
+
+const DEFAULT_PROGRAM_BUDGET_BALANCE = 0;
 
 /** Событие для обновления счётчика на кнопке «Идеи» без перезагрузки (например, после ответа API). */
 export const LK_IDEAS_NAV_BADGE_EVENT = "lk-ideas-nav-badge-count";
@@ -260,10 +303,13 @@ function LK() {
   const { user, setUser, fetchUser } = useCurrentUser();
   const { logout, refreshAccessToken, setUser: setAuthUser } = useAuth();
   const [ideaNavBadgeCount, setIdeaNavBadgeCount] = useState(0);
+  const [programBudgetBalance, setProgramBudgetBalance] = useState(DEFAULT_PROGRAM_BUDGET_BALANCE);
+  const [programBudgetCurrency, setProgramBudgetCurrency] = useState("RUB");
 
   const accountId = formatAccountId(user);
   const accountSwitcherSessions = listSessionsForSwitcher(user);
   const currentAccountKey = accountKeyFromUser(user);
+  const walletBalanceLabel = formatProgramBudgetMoney(programBudgetBalance, programBudgetCurrency);
 
   const handleSwitchAccount = useCallback(
     async (session) => {
@@ -328,6 +374,29 @@ function LK() {
     window.addEventListener(LK_IDEAS_NAV_BADGE_EVENT, onIdeasBadgeEvent);
     return () => window.removeEventListener(LK_IDEAS_NAV_BADGE_EVENT, onIdeasBadgeEvent);
   }, []);
+
+  useEffect(() => {
+    async function loadProgramBudgetBalance() {
+      try {
+        const payload = await fetchProgramBudgetBalance();
+        setProgramBudgetBalance(payload?.availableAmount ?? DEFAULT_PROGRAM_BUDGET_BALANCE);
+        setProgramBudgetCurrency(payload?.currency || "RUB");
+      } catch {
+        setProgramBudgetBalance(DEFAULT_PROGRAM_BUDGET_BALANCE);
+        setProgramBudgetCurrency("RUB");
+      }
+    }
+
+    function onProgramBudgetUpdated(event) {
+      const payload = event?.detail || {};
+      setProgramBudgetBalance(payload.availableAmount ?? DEFAULT_PROGRAM_BUDGET_BALANCE);
+      setProgramBudgetCurrency(payload.currency || "RUB");
+    }
+
+    loadProgramBudgetBalance();
+    window.addEventListener(PROGRAM_BUDGET_UPDATED_EVENT, onProgramBudgetUpdated);
+    return () => window.removeEventListener(PROGRAM_BUDGET_UPDATED_EVENT, onProgramBudgetUpdated);
+  }, [currentAccountKey]);
 
   useEffect(() => {
     function onDocClick(e) {
@@ -459,7 +528,25 @@ function LK() {
             </div>
 
             <div className="lk-header__right">
-            <div className="lk-header__support" ref={supportRef}>
+              <button
+                type="button"
+                className="lk-header__wallet-btn"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setSupportOpen(false);
+                  setPersonalizationOpen(false);
+                  setLanguageOpen(false);
+                  navigate("/lk/balance");
+                }}
+                aria-label={`Бюджет программы, баланс ${walletBalanceLabel}`}
+                title="Бюджет программы"
+              >
+                <span className="lk-header__wallet-icon" aria-hidden="true">
+                  <WalletHeaderIcon />
+                </span>
+                <span className="lk-header__wallet-balance">{walletBalanceLabel}</span>
+              </button>
+              <div className="lk-header__support" ref={supportRef}>
                 <button
                   type="button"
                 className="lk-header__support-btn"
@@ -808,6 +895,7 @@ function LK() {
             />
             <Route path="settings/change-password" element={<ChangePasswordPage user={user} />} />
             <Route path="settings" element={<Settings user={user} fetchUser={fetchUser} setUser={setUser} />} />
+            <Route path="balance" element={<BalancePage />} />
             <Route path="news" element={<NewsPage />} />
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />

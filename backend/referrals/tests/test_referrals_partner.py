@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from referrals.models import ReferralLeadEvent, Site
+from referrals.models import ProgramBudgetTopUp, ReferralLeadEvent, Site
 from referrals.services import (
     ensure_partner_profile,
     mask_email_for_partner_dashboard,
@@ -190,5 +190,39 @@ class PartnerApiTests(TestCase):
         self.assertEqual(r2.status_code, 200)
         self.assertIn("referral_link", r2.data)
         self.assertIn("recent_leads", r2.data)
+
+    def test_program_budget_topup_bank_card_creates_pending_without_crediting_balance(self):
+        self.api.force_authenticate(self.user)
+
+        r = self.api.post(
+            "/referrals/partner/balance/program-budget/topup/",
+            {"amount": "10000", "paymentMethod": "bank_card"},
+            format="json",
+        )
+
+        self.assertEqual(r.status_code, 202)
+        self.assertEqual(r.data["code"], "payment_provider_not_configured")
+        self.assertIsNone(r.data["topup"]["provider"])
+        self.assertEqual(r.data["topup"]["paymentMethod"], "bank_card")
+        self.assertEqual(r.data["topup"]["status"], ProgramBudgetTopUp.Status.PENDING)
+        self.assertEqual(r.data["balance"]["availableAmount"], "0.00")
+
+        topup = ProgramBudgetTopUp.objects.get()
+        self.assertEqual(topup.payment_method, ProgramBudgetTopUp.PaymentMethod.BANK_CARD)
+        self.assertIsNone(topup.provider)
+        self.assertEqual(topup.status, ProgramBudgetTopUp.Status.PENDING)
+
+    def test_program_budget_rejects_unknown_payment_method(self):
+        self.api.force_authenticate(self.user)
+
+        r = self.api.post(
+            "/referrals/partner/balance/program-budget/topup/",
+            {"amount": "10000", "paymentMethod": "tbank"},
+            format="json",
+        )
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data["code"], "unsupported_payment_method")
+        self.assertFalse(ProgramBudgetTopUp.objects.exists())
 
 

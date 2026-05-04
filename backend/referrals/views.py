@@ -1,6 +1,9 @@
+from decimal import Decimal, InvalidOperation
+
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
 from django.core.paginator import Paginator
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -13,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import PartnerProfile, Project, Site, SiteOwnerActivityLog
+from .models import PartnerProfile, ProgramBudgetTopUp, Project, Site, SiteOwnerActivityLog
 from .owner_site_activity import (
     log_owner_project_created,
     log_owner_project_deleted,
@@ -133,6 +136,101 @@ class PartnerDashboardView(APIView):
             )
         base = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
         return Response(partner_dashboard_payload(profile, app_public_base_url=base))
+
+
+def _program_budget_money(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.01")))
+
+
+def _program_budget_balance_payload(profile: PartnerProfile) -> dict:
+    available = (
+        ProgramBudgetTopUp.objects.filter(partner=profile, status=ProgramBudgetTopUp.Status.SUCCEEDED).aggregate(
+            total=Sum("amount")
+        )["total"]
+        or Decimal("0.00")
+    )
+    minimum = Decimal(str(getattr(settings, "PROGRAM_BUDGET_MINIMUM_ACTIVATION_AMOUNT", "1000.00")))
+    return {
+        "availableAmount": _program_budget_money(available),
+        "holdAmount": "0.00",
+        "currency": "RUB",
+        "minimumActivationAmount": _program_budget_money(minimum),
+        "isProgramActive": available >= minimum,
+    }
+
+
+def _program_budget_topup_payload(topup: ProgramBudgetTopUp) -> dict:
+    return {
+        "id": topup.id,
+        "amount": _program_budget_money(topup.amount),
+        "currency": topup.currency,
+        "status": topup.status,
+        "paymentMethod": topup.payment_method,
+        "provider": topup.provider,
+        "providerPaymentId": topup.provider_payment_id,
+        "providerOrderId": topup.provider_order_id,
+        "errorMessage": topup.error_message,
+        "createdAt": topup.created_at.isoformat(),
+        "paidAt": topup.paid_at.isoformat() if topup.paid_at else None,
+    }
+
+
+class ProgramBudgetBalanceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = ensure_partner_profile(request.user)
+        return Response(_program_budget_balance_payload(profile))
+
+
+class ProgramBudgetTopUpTransactionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = ensure_partner_profile(request.user)
+        rows = ProgramBudgetTopUp.objects.filter(partner=profile).order_by("-created_at")[:50]
+        return Response({"transactions": [_program_budget_topup_payload(row) for row in rows]})
+
+
+class ProgramBudgetTopUpView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        profile, _ = ensure_partner_profile(request.user)
+        payment_method = str(request.data.get("paymentMethod") or "").strip()
+        if payment_method != ProgramBudgetTopUp.PaymentMethod.BANK_CARD:
+            return Response(
+                _owner_api_error_body("unsupported_payment_method"),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            amount = Decimal(str(request.data.get("amount", ""))).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return Response(_owner_api_error_body("invalid_amount"), status=status.HTTP_400_BAD_REQUEST)
+
+        if amount <= 0:
+            return Response(_owner_api_error_body("invalid_amount"), status=status.HTTP_400_BAD_REQUEST)
+
+        topup = ProgramBudgetTopUp.objects.create(
+            partner=profile,
+            amount=amount,
+            currency="RUB",
+            status=ProgramBudgetTopUp.Status.PENDING,
+            payment_method=ProgramBudgetTopUp.PaymentMethod.BANK_CARD,
+            provider=None,
+            error_message="payment_provider_not_configured",
+        )
+        return Response(
+            {
+                "topup": _program_budget_topup_payload(topup),
+                "balance": _program_budget_balance_payload(profile),
+                "paymentUrl": None,
+                "detail": "Оплата банковской картой скоро будет доступна.",
+                "code": "payment_provider_not_configured",
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 def _owner_sites_queryset(user):

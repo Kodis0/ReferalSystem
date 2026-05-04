@@ -345,8 +345,7 @@ function WidgetInstallSnippetCard({
   compact = false,
   snippetOnly = false,
 }) {
-  const lkTheme = useLkDocumentTheme();
-  const snippetHlStyle = lkTheme === "light" ? atomOneLight : atomOneDarkReasonable;
+  const snippetHlStyle = atomOneLight;
   const copied = copyHint === "Скопировано";
   const sectionClass = compact
     ? "lk-widget-install__card owner-programs__site-snippet-card"
@@ -694,10 +693,15 @@ function WidgetInstallConnectionCheckCard({
 }
 
 /**
- * @param {{ routeSitePublicId?: string, focused?: boolean, presentation?: "default" | "project-site" }} [props]
+ * @param {{ routeSitePublicId?: string, focused?: boolean, presentation?: "default" | "project-site", cleanupDraftOnExit?: boolean }} [props]
  * When set (UUID), loads integration for that Site — used from `/lk/partner/:sitePublicId/widget`.
  */
-function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", focused = false, presentation = "default" } = {}) {
+function WidgetInstallScreen({
+  routeSitePublicId: routeSitePublicIdProp = "",
+  focused = false,
+  presentation = "default",
+  cleanupDraftOnExit = false,
+} = {}) {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -708,12 +712,16 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const focusedConnectView = inProjectShell && focused && !projectSitePresentation;
   const focusedConnectViewRef = useRef(focusedConnectView);
   focusedConnectViewRef.current = focusedConnectView;
+  const cleanupDraftOnExitRef = useRef(Boolean(cleanupDraftOnExit));
+  cleanupDraftOnExitRef.current = Boolean(cleanupDraftOnExit);
+  const skipDraftCleanupRef = useRef(false);
   const connectSiteIntroRu =
     "Скопируйте код, вставьте его в header сайта и опубликуйте сайт. После этого мы автоматически проверим подключение.";
   const shellTitle = focusedConnectView ? "Подключите сайт" : inProjectShell ? "Виджет" : "Виджет на сайт";
   const shellSubtitle = focusedConnectView
     ? ""
     : "Подключите сайт: вставьте код, выберите данные для отправки, проверьте и активируйте интеграцию.";
+  const howToStepsTotal = 7;
 
   const [loading, setLoading] = useState(true);
   const [siteMissing, setSiteMissing] = useState(false);
@@ -734,6 +742,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
   const [data, setData] = useState(null);
   const [diag, setDiag] = useState(null);
   const [diagError, setDiagError] = useState("");
+  const [howToStepIndex, setHowToStepIndex] = useState(0);
   const [originInput, setOriginInput] = useState("");
   const [verificationUrlInput, setVerificationUrlInput] = useState("");
   const [configText, setConfigText] = useState("{}");
@@ -755,8 +764,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
 
   const projectIdFromRoute = useMemo(() => {
     const raw = String(params?.projectId ?? "").trim();
-    return /^\d+$/.test(raw) ? raw : "";
-  }, [params?.projectId]);
+    if (/^\d+$/.test(raw)) return raw;
+    const fromPath = String(location.pathname || "").match(/\/project\/(\d+)(?:\/|$)/);
+    return fromPath ? fromPath[1] : "";
+  }, [location.pathname, params?.projectId]);
 
   /** API may omit numeric `project.id`; under `/lk/partner/project/:projectId/...` the path is authoritative. */
   const effectiveProjectBasePath = useMemo(() => {
@@ -775,6 +786,38 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
       verifyPollIntervalRef.current = null;
     }
   }, []);
+
+  const cleanupDraftSiteOnExit = useCallback(() => {
+    const projectId = projectIdFromRouteRef.current;
+    const sitePublicId = routeSitePublicId || selectedSitePublicIdRef.current;
+    if (
+      !cleanupDraftOnExitRef.current ||
+      skipDraftCleanupRef.current ||
+      !projectId ||
+      !isUuidString(sitePublicId)
+    ) {
+      return;
+    }
+    skipDraftCleanupRef.current = true;
+    window.dispatchEvent(
+      new CustomEvent("lk-project-site-deleted", {
+        detail: { projectId: Number(projectId), sitePublicId },
+      }),
+    );
+    fetch(API_ENDPOINTS.projectSiteDelete(projectId), {
+      method: "DELETE",
+      headers: authHeaders(),
+      credentials: "include",
+      keepalive: true,
+      body: JSON.stringify({ site_public_id: sitePublicId }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          window.dispatchEvent(new Event("lk-owner-projects-updated"));
+        }
+      })
+      .catch(() => {});
+  }, [routeSitePublicId]);
 
   const refreshIntegrationSnapshotForPoll = useCallback(
     async (signal) => {
@@ -971,6 +1014,13 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     [stopVerifyPolling],
   );
 
+  useEffect(
+    () => () => {
+      cleanupDraftSiteOnExit();
+    },
+    [cleanupDraftSiteOnExit],
+  );
+
   const siteManagementPath = useMemo(() => {
     if (!effectiveProjectBasePath || !selectedSitePublicId) return "";
     return `${effectiveProjectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}/widget`;
@@ -980,6 +1030,7 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
     if (!focusedConnectView || loading || !data || !siteManagementPath) return;
     const cc = diag?.connection_check;
     if (cc?.status === "found") {
+      skipDraftCleanupRef.current = true;
       navigate(siteManagementPath, { replace: true });
     }
   }, [focusedConnectView, loading, data, diag, siteManagementPath, navigate]);
@@ -1147,7 +1198,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           effectiveProjectBasePathRef.current,
           projectIdFromRouteRef.current,
         );
-        if (widgetPath) navigate(widgetPath, { replace: true });
+        if (widgetPath) {
+          skipDraftCleanupRef.current = true;
+          navigate(widgetPath, { replace: true });
+        }
       }
     };
 
@@ -1295,7 +1349,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           effectiveProjectBasePath,
           projectIdFromRoute,
         );
-        if (widgetPath) navigate(widgetPath, { replace: true });
+        if (widgetPath) {
+          skipDraftCleanupRef.current = true;
+          navigate(widgetPath, { replace: true });
+        }
       }
     } catch (e) {
       if (verifySessionRef.current !== session) return;
@@ -1343,7 +1400,10 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
           effectiveProjectBasePath,
           projectIdFromRoute,
         );
-        if (widgetPath) navigate(widgetPath, { replace: true });
+        if (widgetPath) {
+          skipDraftCleanupRef.current = true;
+          navigate(widgetPath, { replace: true });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -1605,6 +1665,28 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
         {diagError ? <div className="lk-widget-install__diag-soft">{diagError}</div> : null}
 
         <section className="lk-widget-install__card lk-widget-install__how-to-card">
+          <div className="lk-widget-install__how-to-slider-head">
+            <div>
+              <p className="lk-widget-install__how-to-kicker">
+                Шаг {howToStepIndex + 1} из {howToStepsTotal}
+              </p>
+              <h2 className="lk-widget-install__how-to-title">Установка виджета</h2>
+            </div>
+            <div className="lk-widget-install__how-to-dots" aria-label="Шаги установки">
+              {Array.from({ length: howToStepsTotal }).map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className={`lk-widget-install__how-to-dot${index === howToStepIndex ? " lk-widget-install__how-to-dot_active" : ""}`}
+                  onClick={() => setHowToStepIndex(index)}
+                  aria-label={`Открыть шаг ${index + 1}`}
+                  aria-current={index === howToStepIndex ? "step" : undefined}
+                />
+              ))}
+            </div>
+          </div>
+
+          {howToStepIndex === 0 ? (
           <div className="lk-widget-install__step-block">
             <h3 className="lk-widget-install__step-title">Шаг 1. Скопируйте код</h3>
             <p className="lk-widget-install__step-text lk-partner__muted">
@@ -1618,7 +1700,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               copyHint={copyHint}
             />
           </div>
+          ) : null}
 
+          {howToStepIndex === 1 ? (
           <div className="lk-widget-install__step-block">
             <h3 className="lk-widget-install__step-title">Шаг 2. Откройте настройки сайта</h3>
             <p className="lk-widget-install__step-text lk-partner__muted">
@@ -1630,7 +1714,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               onOpen={setScreenshotLightbox}
             />
           </div>
+          ) : null}
 
+          {howToStepIndex === 2 ? (
           <div className="lk-widget-install__step-block">
             <h3 className="lk-widget-install__step-title">Шаг 3. Перейдите в «Вставка кода»</h3>
             <p className="lk-widget-install__step-text lk-partner__muted">
@@ -1642,7 +1728,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               onOpen={setScreenshotLightbox}
             />
           </div>
+          ) : null}
 
+          {howToStepIndex === 3 ? (
           <div className="lk-widget-install__step-block">
             <h3 className="lk-widget-install__step-title">Шаг 4. Откройте редактор HTML-кода</h3>
             <p className="lk-widget-install__step-text lk-partner__muted">
@@ -1654,7 +1742,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               onOpen={setScreenshotLightbox}
             />
           </div>
+          ) : null}
 
+          {howToStepIndex === 4 ? (
           <div className="lk-widget-install__step-block">
             <h3 className="lk-widget-install__step-title">Шаг 5. Вставьте код в HEAD</h3>
             <p className="lk-widget-install__step-text lk-partner__muted">
@@ -1666,7 +1756,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               onOpen={setScreenshotLightbox}
             />
           </div>
+          ) : null}
 
+          {howToStepIndex === 5 ? (
           <div className="lk-widget-install__step-block">
             <h3 className="lk-widget-install__step-title">Шаг 6. Опубликуйте сайт</h3>
             <p className="lk-widget-install__step-text lk-partner__muted">
@@ -1678,7 +1770,9 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               onOpen={setScreenshotLightbox}
             />
           </div>
+          ) : null}
 
+          {howToStepIndex === 6 ? (
           <div className="lk-widget-install__step-block lk-widget-install__step-block_last">
             <h3 className="lk-widget-install__step-title" data-testid="project-site-connect-step-verify-title">
               Шаг 7. Проверьте подключение
@@ -1748,6 +1842,26 @@ function WidgetInstallScreen({ routeSitePublicId: routeSitePublicIdProp = "", fo
               saving={saving}
               compact
             />
+          </div>
+          ) : null}
+
+          <div className="lk-widget-install__how-to-nav">
+            <button
+              type="button"
+              className="lk-widget-install__how-to-nav-btn"
+              onClick={() => setHowToStepIndex((index) => Math.max(0, index - 1))}
+              disabled={howToStepIndex === 0}
+            >
+              Назад
+            </button>
+            <button
+              type="button"
+              className="lk-widget-install__how-to-nav-btn lk-widget-install__how-to-nav-btn_primary"
+              onClick={() => setHowToStepIndex((index) => Math.min(howToStepsTotal - 1, index + 1))}
+              disabled={howToStepIndex === howToStepsTotal - 1}
+            >
+              Далее
+            </button>
           </div>
         </section>
         {screenshotLightbox ? (

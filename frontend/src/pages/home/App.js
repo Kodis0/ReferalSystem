@@ -3,6 +3,7 @@ import Home from './Home';
 import Registration from '../registration/registration';
 import Login from '../login/login';
 import LK from '../lk/lk';
+import LegalPage from "../legal/LegalPage";
 import SiteConnectPage from "../site-connect/SiteConnectPage";
 import ProtectedRoute from "../../components/protectedroute";
 import ReferralCaptureOnMount from "../../components/ReferralCaptureOnMount";
@@ -19,6 +20,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/registration" element={<Registration />} /> 
         <Route path="/login" element={<Login />} />
+        <Route path="/legal/:legalSlug" element={<LegalPage />} />
 
         <Route path="/site-connect" element={<ProtectedRoute><SiteConnectPage /></ProtectedRoute>} />
         <Route path="/lk/*" element={<ProtectedRoute><LK /></ProtectedRoute>} />

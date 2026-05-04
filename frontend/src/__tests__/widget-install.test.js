@@ -18,6 +18,10 @@ function renderFocusedWidgetInstall(ui) {
   return render(<MemoryRouter initialEntries={["/lk/partner/project/1/widget"]}>{ui}</MemoryRouter>);
 }
 
+async function openFocusedVerifyStep() {
+  await userEvent.click(await screen.findByRole("button", { name: /Открыть шаг 7/i }));
+}
+
 describe("WidgetInstallScreen", () => {
   // Contract (owner/LK widget-install): machine key + owner-visible error text both flow through
   // `payload.code ?? payload.detail` — "prefers code" rows assert `detail` does not leak when `code` is set.
@@ -748,12 +752,49 @@ describe("WidgetInstallScreen", () => {
     renderFocusedWidgetInstall(
       <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
     );
+    await openFocusedVerifyStep();
 
     await waitFor(() => {
       expect(screen.getByTestId("project-site-connect-step-verify-title")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /Проверить подключение/i })).toBeInTheDocument();
     expect(screen.getByText("Ещё не проверяли")).toBeInTheDocument();
+  });
+
+  it("deletes transient focused draft site when leaving connect wizard before verification", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockImplementation((url, options = {}) => {
+      const u = String(url);
+      if (u.includes("/referrals/project/1/site/create/") && options.method === "DELETE") {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      if (u.includes("/diagnostics/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockDiagnosticsPayload(),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockIntegrationPayload(),
+      });
+    });
+
+    const { unmount } = renderFocusedWidgetInstall(
+      <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused cleanupDraftOnExit />
+    );
+
+    await screen.findByText("Установка виджета");
+    unmount();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/referrals/project/1/site/create/"),
+        expect.objectContaining({
+          method: "DELETE",
+          body: JSON.stringify({ site_public_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }),
+        }),
+      );
+    });
   });
 
   it("shows focused connection check loading state", async () => {
@@ -777,6 +818,7 @@ describe("WidgetInstallScreen", () => {
     renderFocusedWidgetInstall(
       <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
     );
+    await openFocusedVerifyStep();
 
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
@@ -827,6 +869,7 @@ describe("WidgetInstallScreen", () => {
     renderFocusedWidgetInstall(
       <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
     );
+    await openFocusedVerifyStep();
 
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
@@ -881,6 +924,7 @@ describe("WidgetInstallScreen", () => {
     renderFocusedWidgetInstall(
       <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
     );
+    await openFocusedVerifyStep();
 
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
@@ -1069,6 +1113,7 @@ describe("WidgetInstallScreen", () => {
     renderFocusedWidgetInstall(
       <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
     );
+    await openFocusedVerifyStep();
 
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
@@ -1147,6 +1192,7 @@ describe("WidgetInstallScreen", () => {
     renderFocusedWidgetInstall(
       <WidgetInstallScreen routeSitePublicId="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" focused />
     );
+    await openFocusedVerifyStep();
 
     await userEvent.click(await screen.findByRole("button", { name: /Проверить подключение/i }));
 
