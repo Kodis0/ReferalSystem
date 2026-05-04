@@ -654,17 +654,15 @@ export default function MiniGameProgressPage() {
                               </div>
                               {showCompleteOverlay ? (
                                 <div className="mini-game-achievements__card-complete-overlay">
-                                  <div className="mini-game-achievements__card-complete-stack">
-                                    <div className="mini-game-achievements__card-complete-check-hit">
-                                      <img
-                                        src={achievementDoneCheck}
-                                        alt=""
-                                        className="mini-game-achievements__card-complete-check-img"
-                                        width={28}
-                                        height={28}
-                                        decoding="async"
-                                      />
-                                    </div>
+                                  <div className="mini-game-achievements__card-complete-mark-slot">
+                                    <img
+                                      src={achievementDoneCheck}
+                                      alt=""
+                                      className="mini-game-achievements__card-complete-check-img"
+                                      width={48}
+                                      height={48}
+                                      decoding="async"
+                                    />
                                     <button
                                       type="button"
                                       className="mini-game-achievements__card-complete-reveal"
@@ -673,7 +671,7 @@ export default function MiniGameProgressPage() {
                                         setAchievementDetailRevealed((prev) => new Set(prev).add(a.code));
                                       }}
                                     >
-                                      <img src={achievementRevealEye} alt="" width={22} height={15} decoding="async" />
+                                      <img src={achievementRevealEye} alt="" width={36} height={24} decoding="async" />
                                     </button>
                                   </div>
                                 </div>
