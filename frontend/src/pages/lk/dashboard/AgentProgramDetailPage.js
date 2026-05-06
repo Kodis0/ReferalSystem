@@ -238,8 +238,9 @@ function buildEarningsChartSeries(recentOrders, commissionTotal, salesTotal, per
   return keys.map((k) => byKey.get(k));
 }
 
-function buildTwoLineGeometry(series) {
-  const values = series.flatMap((row) => [row.sales, row.commission]);
+/** Y-scale и линия только по доходу реферала (комиссии по дням), без суммы продаж на том же масштабе. */
+function buildCommissionLineGeometry(series) {
+  const values = series.map((row) => row.commission);
   const maxValue = Math.max(...values, 1);
   const y0 = 0;
   const y1 = maxValue;
@@ -253,7 +254,6 @@ function buildTwoLineGeometry(series) {
     x: left + (series.length <= 1 ? innerW / 2 : (i / (series.length - 1)) * innerW),
     y: scaleY(value),
   });
-  const salesPoints = series.map((row, i) => pointFor(row.sales, i));
   const commissionPoints = series.map((row, i) => pointFor(row.commission, i));
   const yTicks = Array.from({ length: 6 }, (_, i) => {
     const t = i / 5;
@@ -271,9 +271,7 @@ function buildTwoLineGeometry(series) {
     clipY: top,
     clipW,
     clipH,
-    salesPoints,
     commissionPoints,
-    salesPathD: linearPathThroughPoints(salesPoints),
     commissionPathD: linearPathThroughPoints(commissionPoints),
     yTicks,
   };
@@ -284,7 +282,7 @@ function programAvatarLetter(label) {
   return value.slice(0, 1).toUpperCase() || "P";
 }
 
-function AgentProgramEarningsKpiCard({ label, value, valueClassName, hint, helpText }) {
+function AgentProgramEarningsKpiCard({ label, value, subtitle, valueClassName, hint, helpText }) {
   const fullHelpText = [hint, helpText].filter(Boolean).join(". ");
   return (
     <div className="owner-programs__site-dash-kpi lk-dashboard__program-earnings-card">
@@ -304,6 +302,9 @@ function AgentProgramEarningsKpiCard({ label, value, valueClassName, hint, helpT
       ) : null}
       <span className="owner-programs__site-dash-kpi-label lk-dashboard__program-earnings-label">{label}</span>
       <strong className={`owner-programs__site-dash-kpi-value ${valueClassName}`}>{value}</strong>
+      {subtitle ? (
+        <span className="owner-programs__site-dash-kpi-hint lk-dashboard__program-earnings-kpi-sub">{subtitle}</span>
+      ) : null}
     </div>
   );
 }
@@ -481,7 +482,7 @@ export default function AgentProgramDetailPage() {
     () => buildEarningsChartSeries(recentOrders, referrerCommissionValue, referrerSalesValue, period),
     [recentOrders, referrerCommissionValue, referrerSalesValue, period]
   );
-  const earningsChartGeom = useMemo(() => buildTwoLineGeometry(earningsChartSeries), [earningsChartSeries]);
+  const earningsChartGeom = useMemo(() => buildCommissionLineGeometry(earningsChartSeries), [earningsChartSeries]);
 
   const earningsClipId = useMemo(
     () => `agent-earnings-clip-${String(sitePublicId || "").replace(/[^a-zA-Z0-9_-]/g, "") || "chart"}`,
@@ -512,16 +513,14 @@ export default function AgentProgramDetailPage() {
 
   const earningsHoverIdx = earningsHover?.idx ?? null;
   const earningsHoverX =
-    earningsHoverIdx != null ? earningsChartGeom.salesPoints[earningsHoverIdx]?.x : null;
-  const earningsHoverSalesPoint =
-    earningsHoverIdx != null ? earningsChartGeom.salesPoints[earningsHoverIdx] : null;
+    earningsHoverIdx != null ? earningsChartGeom.commissionPoints[earningsHoverIdx]?.x : null;
   const earningsHoverCommissionPoint =
     earningsHoverIdx != null ? earningsChartGeom.commissionPoints[earningsHoverIdx] : null;
 
   const onEarningsSvgPointer = useCallback(
     (event) => {
       const svg = earningsSvgRef.current;
-      if (!svg || !earningsChartGeom?.salesPoints?.length) return;
+      if (!svg || !earningsChartGeom?.commissionPoints?.length) return;
       const ctm = svg.getScreenCTM();
       if (!ctm) return;
       const pt = svg.createSVGPoint();
@@ -530,7 +529,7 @@ export default function AgentProgramDetailPage() {
       const local = pt.matrixTransform(ctm.inverse());
       let best = 0;
       let bestDistance = Infinity;
-      earningsChartGeom.salesPoints.forEach((point, idx) => {
+      earningsChartGeom.commissionPoints.forEach((point, idx) => {
         const distance = Math.abs(point.x - local.x);
         if (distance < bestDistance) {
           best = idx;
@@ -732,10 +731,10 @@ export default function AgentProgramDetailPage() {
                     <header className="owner-programs__site-dash-chart-plate-head">
                       <div className="owner-programs__site-dash-chart-plate-titles">
                         <h2 id="agent-program-earnings-chart-title" className="owner-programs__site-dash-chart-plate-title">
-                          Доход и продажи
+                          Доход за период
                         </h2>
                         <p className="owner-programs__site-dash-chart-plate-sub">
-                          Доход реферала и сумма продаж, которую он принёс сайту
+                          Показывает, сколько вы заработали по своей ссылке
                         </p>
                       </div>
                     </header>
@@ -755,7 +754,7 @@ export default function AgentProgramDetailPage() {
                           viewBox={`0 0 ${EARNINGS_CHART_VB_W} ${EARNINGS_CHART_VB_H}`}
                           preserveAspectRatio="xMinYMid meet"
                           role="img"
-                          aria-label="График дохода реферала и суммы продаж по дням"
+                          aria-label="График вашего дохода по дням"
                           onPointerMove={onEarningsSvgPointer}
                           onPointerDown={onEarningsSvgPointer}
                         >
@@ -791,11 +790,6 @@ export default function AgentProgramDetailPage() {
                           ))}
                           <g clipPath={`url(#${earningsClipId})`}>
                             <path
-                              d={earningsChartGeom.salesPathD}
-                              className="owner-programs__site-dash-svg-line lk-dashboard__program-earnings-chart-line_sales"
-                              fill="none"
-                            />
-                            <path
                               d={earningsChartGeom.commissionPathD}
                               className="owner-programs__site-dash-svg-line owner-programs__site-dash-svg-line_main lk-dashboard__program-earnings-chart-line_commission"
                               fill="none"
@@ -809,7 +803,7 @@ export default function AgentProgramDetailPage() {
                             className="owner-programs__site-dash-svg-x-axis"
                             aria-hidden
                           />
-                          {earningsHoverX != null && earningsHoverSalesPoint && earningsHoverCommissionPoint ? (
+                          {earningsHoverX != null && earningsHoverCommissionPoint ? (
                             <g
                               className="owner-programs__site-dash-svg-hover"
                               clipPath={`url(#${earningsClipId})`}
@@ -821,12 +815,6 @@ export default function AgentProgramDetailPage() {
                                 x2={earningsHoverX}
                                 y2={earningsChartGeom.axisY}
                                 className="owner-programs__site-dash-svg-hover-line"
-                              />
-                              <circle
-                                cx={earningsHoverSalesPoint.x}
-                                cy={earningsHoverSalesPoint.y}
-                                r="5"
-                                className="owner-programs__site-dash-svg-hover-dot"
                               />
                               <circle
                                 cx={earningsHoverCommissionPoint.x}
@@ -866,13 +854,9 @@ export default function AgentProgramDetailPage() {
                             <div className="owner-programs__site-dash-tooltip-date">
                               {formatDayTooltip(earningsChartSeries[earningsHoverIdx].date)}
                             </div>
-                            <div className="owner-programs__site-dash-tooltip-metric">Доход реферала</div>
+                            <div className="owner-programs__site-dash-tooltip-metric">Ваш доход</div>
                             <div className="owner-programs__site-dash-tooltip-value">
                               {formatReferrerMoneyRub(earningsChartSeries[earningsHoverIdx].commission)}
-                            </div>
-                            <div className="owner-programs__site-dash-tooltip-metric">Сумма продаж</div>
-                            <div className="owner-programs__site-dash-tooltip-value">
-                              {formatReferrerMoneyRub(earningsChartSeries[earningsHoverIdx].sales)}
                             </div>
                           </div>
                         ) : null}
@@ -880,11 +864,7 @@ export default function AgentProgramDetailPage() {
                       <div className="lk-dashboard__program-earnings-line-legend">
                         <span className="lk-dashboard__program-earnings-line-legend-item">
                           <i className="lk-dashboard__program-earnings-line-legend-mark lk-dashboard__program-earnings-line-legend-mark_commission" aria-hidden="true" />
-                          Доход реферала {formatReferrerMoneyRub(program.referrer_commission_total)}
-                        </span>
-                        <span className="lk-dashboard__program-earnings-line-legend-item">
-                          <i className="lk-dashboard__program-earnings-line-legend-mark lk-dashboard__program-earnings-line-legend-mark_sales" aria-hidden="true" />
-                          Сумма продаж {formatReferrerMoneyRub(program.referrer_sales_total)}
+                          Ваш доход {formatReferrerMoneyRub(program.referrer_commission_total)}
                         </span>
                       </div>
                     </div>
@@ -892,18 +872,18 @@ export default function AgentProgramDetailPage() {
                   </article>
                   <div className="owner-programs__site-dash-row-kpis lk-dashboard__program-earnings" data-testid="agent-program-referrer-money" aria-label="Доходы по программе">
                     <AgentProgramEarningsKpiCard
-                      label="Доход реферала"
+                      label="Ваш доход"
+                      subtitle="Начислено за оплаченные заказы"
                       value={formatReferrerMoneyRub(program.referrer_commission_total)}
                       valueClassName="lk-dashboard__program-earnings-commission"
-                      hint="Сумма ваших начисленных комиссий."
-                      helpText="Учитываются оплаченные заказы, привязанные к вашему участию в программе."
+                      helpText="Ваше вознаграждение за оплаченные заказы клиентов, пришедших по вашей ссылке."
                     />
                     <AgentProgramEarningsKpiCard
-                      label="Доход магазина"
+                      label="Продажи по вашей ссылке"
+                      subtitle="Сумма заказов клиентов, которых вы привели"
                       value={formatReferrerMoneyRub(program.referrer_sales_total)}
                       valueClassName="lk-dashboard__program-earnings-sales-total"
-                      hint="Сумма оплаченных заказов клиентов по вашей реферальной ссылке."
-                      helpText="Это выручка магазина по заказам с вашим ref; процент вознаграждения считается от этих продаж."
+                      helpText="Общая сумма заказов клиентов, которых вы привели по реферальной ссылке."
                     />
                   </div>
                 </div>

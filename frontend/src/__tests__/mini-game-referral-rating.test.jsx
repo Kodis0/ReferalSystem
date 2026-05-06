@@ -62,12 +62,12 @@ describe("MiniGameRatingPage referral leaderboard API", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Тест Имя")).toBeInTheDocument();
-      expect(screen.getAllByText(/7 мест/).length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText(/До топ-5 осталось/)).toBeInTheDocument();
     });
+    const list = screen.getByLabelText("Рейтинг участников");
+    expect(list.querySelectorAll("li").length).toBe(1);
   });
 
-  it("shows current user row when leaderboard_empty", async () => {
+  it("shows empty message when leaderboard_empty", async () => {
     fetchGamificationReferralLeaderboard.mockResolvedValue({
       period: "month",
       leaderboard_empty: true,
@@ -90,8 +90,9 @@ describe("MiniGameRatingPage referral leaderboard API", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Ваша позиция")).toBeInTheDocument();
-      expect(screen.getByText(/1 место/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/За выбранный период в рейтинге пока нет участников с подтверждёнными продажами/i),
+      ).toBeInTheDocument();
     });
   });
 });

@@ -215,7 +215,6 @@ export default function MiniGameRatingPage() {
     };
   }, [filtersPanelOpen]);
 
-  const currentUser = payload?.current_user ?? null;
   const leaderboardEmpty = Boolean(payload?.leaderboard_empty);
 
   const filteredEntries = useMemo(() => {
@@ -225,61 +224,7 @@ export default function MiniGameRatingPage() {
     return list.filter((e) => String(e.display_name || "").toLowerCase().includes(q));
   }, [payload, searchQuery]);
 
-  const topFive = useMemo(() => filteredEntries.slice(0, 5).map(mapEntryToRow), [filteredEntries]);
-
-  const userPinnedRow = useMemo(() => {
-    if (!currentUser || currentUser.rank == null) {
-      return null;
-    }
-    if (currentUser.rank <= 5) {
-      return null;
-    }
-    const displayName =
-      typeof currentUser.display_name === "string" && currentUser.display_name.trim()
-        ? currentUser.display_name.trim()
-        : "Вы";
-    return {
-      userId: currentUser.user_id,
-      rank: currentUser.rank,
-      name: displayName,
-      displayName,
-      salesRub: currentUser.sales_amount,
-      orders: currentUser.paid_orders_count,
-      programsCount: Number(currentUser.joined_programs_count) || 0,
-      avatarUrl: typeof currentUser.avatar_data_url === "string" ? currentUser.avatar_data_url.trim() : "",
-    };
-  }, [currentUser]);
-
-  const showPinnedUser = Boolean(userPinnedRow) && !searchQuery.trim();
-
-  const mePrograms = Number(currentUser?.joined_programs_count) || 0;
-
-  const meRankHighlight =
-    loadState === "ready" && currentUser
-      ? currentUser.rank == null
-        ? "Нет профиля реферала"
-        : rankPlaceRu(currentUser.rank)
-      : "";
-
-  const meDetailLine =
-    loadState === "ready" && currentUser
-      ? `${programsCountRu(mePrograms)} · ${ordersCountRu(currentUser.paid_orders_count)}`
-      : "";
-
-  const gapRub =
-    loadState === "ready" && currentUser && currentUser.rank != null && currentUser.rank > 5
-      ? Math.max(0, Number(currentUser.gap_to_top_5) || 0)
-      : 0;
-
-  const meDisplayName =
-    loadState === "ready" && currentUser && typeof currentUser.display_name === "string"
-      ? currentUser.display_name.trim()
-      : "";
-
-  const meAvatarUrl =
-    loadState === "ready" && currentUser && typeof currentUser.avatar_data_url === "string"
-      ? currentUser.avatar_data_url.trim()
-      : "";
+  const leaderboardRows = useMemo(() => filteredEntries.map(mapEntryToRow), [filteredEntries]);
 
   return (
     <div className="lk-simple-page">
@@ -436,27 +381,10 @@ export default function MiniGameRatingPage() {
             <p className="lk-dashboard__programs-muted">Загрузка…</p>
           ) : null}
 
-          {loadState === "ready" && currentUser ? (
-            <div className="mini-game-rating__me-block">
-              <p className="mini-game-rating__me-label">Ваша позиция</p>
-              <ul className="lk-dashboard__programs-list">
-                <li className="lk-dashboard__programs-item">
-                  <ReferralLeaderboardCatalogRow
-                    displayName={meDisplayName || "Вы"}
-                    avatarUrl={meAvatarUrl}
-                    salesRub={currentUser.sales_amount}
-                    rankHighlight={meRankHighlight}
-                    detailLine={meDetailLine}
-                    rankNumber={currentUser.rank}
-                  />
-                </li>
-              </ul>
-              {currentUser.rank != null && currentUser.rank > 5 && gapRub > 0 ? (
-                <p className="mini-game-rating__me-gap">
-                  До топ-5 осталось {formatRub(gapRub)} продаж
-                </p>
-              ) : null}
-            </div>
+          {loadState === "ready" && leaderboardEmpty ? (
+            <p className="lk-dashboard__programs-muted mini-game-rating__empty-msg" role="status">
+              За выбранный период в рейтинге пока нет участников с подтверждёнными продажами.
+            </p>
           ) : null}
 
           {loadState === "ready" && !leaderboardEmpty && filteredEntries.length === 0 && searchQuery.trim() ? (
@@ -466,8 +394,8 @@ export default function MiniGameRatingPage() {
           ) : null}
 
           {loadState === "ready" && !leaderboardEmpty && filteredEntries.length > 0 ? (
-            <ul className="lk-dashboard__programs-list" aria-label="Топ участников рейтинга">
-              {topFive.map((row, idx) => (
+            <ul className="lk-dashboard__programs-list" aria-label="Рейтинг участников">
+              {leaderboardRows.map((row, idx) => (
                 <li key={`${period}-${row.userId}-${idx}`} className="lk-dashboard__programs-item">
                   <ReferralLeaderboardCatalogRow
                     displayName={row.displayName || row.name}
@@ -479,25 +407,6 @@ export default function MiniGameRatingPage() {
                   />
                 </li>
               ))}
-              {showPinnedUser ? (
-                <li className="lk-dashboard__programs-item">
-                  <div className="mini-game-rating__catalog-omit" aria-hidden="true">
-                    …
-                  </div>
-                </li>
-              ) : null}
-              {showPinnedUser && userPinnedRow ? (
-                <li className={`lk-dashboard__programs-item mini-game-rating__catalog-item--pinned`}>
-                  <ReferralLeaderboardCatalogRow
-                    displayName={userPinnedRow.displayName}
-                    avatarUrl={userPinnedRow.avatarUrl}
-                    salesRub={userPinnedRow.salesRub}
-                    rankHighlight={rankPlaceRu(userPinnedRow.rank)}
-                    detailLine={`${programsCountRu(userPinnedRow.programsCount)} · ${ordersCountRu(userPinnedRow.orders)}`}
-                    rankNumber={userPinnedRow.rank}
-                  />
-                </li>
-              ) : null}
             </ul>
           ) : null}
         </section>

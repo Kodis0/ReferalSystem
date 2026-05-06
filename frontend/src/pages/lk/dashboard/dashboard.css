@@ -1465,12 +1465,32 @@ a.lk-dashboard__program-card-name:hover {
   background-color: #242f3d;
 }
 
+.owner-programs__site-dash-row-kpis.lk-dashboard__program-earnings .lk-dashboard__program-earnings-card {
+  justify-content: center;
+  align-items: center;
+}
+
+.owner-programs__site-dash-row-kpis.lk-dashboard__program-earnings .lk-dashboard__program-earnings-card .owner-programs__site-dash-kpi-label,
+.owner-programs__site-dash-row-kpis.lk-dashboard__program-earnings .lk-dashboard__program-earnings-card .owner-programs__site-dash-kpi-value,
+.owner-programs__site-dash-row-kpis.lk-dashboard__program-earnings .lk-dashboard__program-earnings-card .lk-dashboard__program-earnings-kpi-sub {
+  width: 100%;
+  text-align: center;
+}
+
 .lk-dashboard__program-earnings-label {
   display: block;
   color: #7f91a4;
   font-size: 12px;
   line-height: 16px;
   font-weight: 500;
+}
+
+/* Кнопка «?» в углу — симметричные поля, чтобы центрированный текст не заходил под кнопку. */
+.lk-dashboard__program-earnings-card:has(.owner-programs__site-dash-kpi-help-anchor)
+  .owner-programs__site-dash-kpi-label.lk-dashboard__program-earnings-label {
+  padding-left: 30px;
+  padding-right: 30px;
+  box-sizing: border-box;
 }
 
 .lk-dashboard__program-earnings-commission,
@@ -1483,6 +1503,11 @@ a.lk-dashboard__program-card-name:hover {
 
 .lk-dashboard__program-earnings-sales-total {
   color: rgba(148, 163, 184, 0.82);
+}
+
+.lk-dashboard__program-earnings-card .lk-dashboard__program-earnings-kpi-sub {
+  margin-top: 4px;
+  color: rgba(127, 145, 164, 0.92);
 }
 
 .lk-dashboard__program-earnings-chart {
@@ -1517,10 +1542,6 @@ a.lk-dashboard__program-card-name:hover {
 
 .lk-dashboard__program-earnings-chart-line_commission {
   stroke: #7177f8;
-}
-
-.lk-dashboard__program-earnings-chart-line_sales {
-  stroke: rgba(148, 163, 184, 0.82);
 }
 
 .lk-dashboard__program-earnings-line-legend {
