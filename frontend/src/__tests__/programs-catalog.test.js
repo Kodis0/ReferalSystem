@@ -253,6 +253,7 @@ describe("Programs Catalog", () => {
                 site_display_label: "Demo Shop",
                 site_origin_label: "demo.example",
                 avatar_data_url: "https://cdn.example/icon.png",
+                site_avatar_data_url: "https://cdn.example/icon.png",
                 avatar_updated_at: "2026-04-29T18:00:00+00:00",
                 joined: false,
                 site_status: "verified",
@@ -263,6 +264,7 @@ describe("Programs Catalog", () => {
                 site_display_label: "Other Shop",
                 site_origin_label: "other.example",
                 avatar_data_url: "",
+                site_avatar_data_url: "",
                 joined: false,
                 site_status: "verified",
                 commission_percent: "12",
@@ -274,21 +276,23 @@ describe("Programs Catalog", () => {
       return Promise.reject(new Error("unexpected fetch"));
     });
 
-    const { container } = render(
+    render(
       <MemoryRouter>
         <ProgramsCatalogPage />
       </MemoryRouter>
     );
 
     await screen.findByText("Demo Shop");
-    const img = container.querySelector(".lk-dashboard__programs-avatar-img");
+    const demoRow = screen.getByText("Demo Shop").closest('[data-testid="programs-catalog-list-link"]');
+    const img = demoRow.querySelector(".lk-dashboard__programs-avatar-img");
     expect(img).toHaveAttribute(
       "src",
       "https://cdn.example/icon.png?v=2026-04-29T18%3A00%3A00%2B00%3A00"
     );
     fireEvent.error(img);
-    expect(screen.getByText("D")).toBeInTheDocument();
-    expect(screen.getByText("O")).toBeInTheDocument();
+    expect(within(demoRow).getByText("D")).toBeInTheDocument();
+    const otherRow = screen.getByText("Other Shop").closest('[data-testid="programs-catalog-list-link"]');
+    expect(within(otherRow).getByText("O")).toBeInTheDocument();
   });
 
   it("mount loads catalog via GET /users/programs/ only and never POST /users/site/join/", async () => {

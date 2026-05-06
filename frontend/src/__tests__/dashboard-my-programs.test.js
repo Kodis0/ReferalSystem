@@ -246,6 +246,7 @@ describe("Dashboard My Programs", () => {
                 site_display_label: "Demo Shop",
                 site_origin_label: "demo.example",
                 avatar_data_url: "https://cdn.example/my-icon.png",
+                site_avatar_data_url: "https://cdn.example/my-icon.png",
                 avatar_updated_at: "2026-04-29T18:30:00+00:00",
                 site_status: "verified",
                 platform_preset: "tilda",
@@ -272,12 +273,17 @@ describe("Dashboard My Programs", () => {
     );
 
     await screen.findByText("Demo Shop");
-    const img = container.querySelector(".lk-dashboard__programs-avatar-img");
+    const demoRow = screen.getByText("Demo Shop").closest('[data-testid="agent-program-list-link"]');
+    const img = demoRow.querySelector(".lk-dashboard__programs-avatar-img");
     expect(img).toHaveAttribute(
       "src",
       "https://cdn.example/my-icon.png?v=2026-04-29T18%3A30%3A00%2B00%3A00"
     );
-    expect(screen.getByText("O")).toBeInTheDocument();
+    const otherRow = screen.getByText("Other Shop").closest('[data-testid="agent-program-list-link"]');
+    expect(otherRow.querySelector(".lk-dashboard__programs-avatar-img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("other.example"),
+    );
   });
 
   it("removes program after leaving membership", async () => {

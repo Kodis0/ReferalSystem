@@ -599,7 +599,9 @@ export default function AgentProgramDetailPage() {
             <div className="lk-dashboard__program-card-head">
               <div className="lk-dashboard__program-card-avatar" aria-hidden="true">
                 <SiteFaviconAvatar
-                  manualUrl={typeof program.avatar_data_url === "string" ? program.avatar_data_url.trim() : ""}
+                  manualUrl={
+                    typeof program.site_avatar_data_url === "string" ? program.site_avatar_data_url.trim() : ""
+                  }
                   siteLike={program}
                   letter={programAvatarLetter(programSiteLabel(program))}
                   imgClassName="lk-dashboard__program-card-avatar-img"

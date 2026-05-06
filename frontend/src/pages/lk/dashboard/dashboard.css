@@ -254,6 +254,11 @@
   background: #242f3d;
 }
 
+/* Карточка программы: баннер «Это ваша программа» наследует margin каталога (0 сверху) и прилипает к сетке метрик — восстанавливаем отступ. */
+.lk-dashboard__my-programs-catalog-banner.lk-dashboard__program-owner-notice {
+  margin: 18px 0 16px;
+}
+
 .lk-dashboard__my-programs-catalog-banner-inner {
   display: flex;
   flex-direction: row;

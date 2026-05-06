@@ -758,6 +758,8 @@ export default function ProgramsCatalogPage() {
               const commissionLabel = formatCatalogCommissionPercent(p);
               const catalogOriginLabel = programCatalogSiteOriginLabel(p);
               const catalogSiteHref = programCatalogExternalSiteHref(p);
+              const catalogSiteAvatarUrl =
+                typeof p.site_avatar_data_url === "string" ? p.site_avatar_data_url.trim() : "";
               const menuOpen = activeMenuSiteId === p.site_public_id;
               const busyJoin = joiningSiteId === p.site_public_id;
               const busyLeave = leavingSiteId === p.site_public_id;
@@ -781,8 +783,8 @@ export default function ProgramsCatalogPage() {
                     <div className="lk-dashboard__programs-item-top">
                       <div className="lk-dashboard__programs-avatar" aria-hidden="true">
                         <SiteFaviconAvatar
-                          key={`cat-${p.site_public_id}-${String(p.avatar_data_url || "").slice(0, 48)}-${String(p.avatar_updated_at || "")}`}
-                          manualUrl={typeof p.avatar_data_url === "string" ? p.avatar_data_url.trim() : ""}
+                          key={`cat-${p.site_public_id}-${catalogSiteAvatarUrl.slice(0, 48)}-${String(p.avatar_updated_at || "")}`}
+                          manualUrl={catalogSiteAvatarUrl}
                           siteLike={p}
                           letter={programAvatarLetter(rowTitle)}
                           imgClassName="lk-dashboard__programs-avatar-img"

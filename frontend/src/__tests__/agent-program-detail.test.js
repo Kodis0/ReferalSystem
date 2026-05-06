@@ -132,6 +132,7 @@ describe("Agent program detail page", () => {
               site_display_label: "Demo Shop",
               site_origin_label: "demo.example",
               avatar_data_url: "https://cdn.example/detail-icon.png",
+              site_avatar_data_url: "https://cdn.example/detail-icon.png",
               avatar_updated_at: "2026-04-29T19:00:00+00:00",
               site_status: "active",
               program_active: true,
