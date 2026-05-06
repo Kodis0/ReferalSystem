@@ -38,7 +38,7 @@ def partner_ids_for_site_referrers(site: Site) -> list[int]:
 
 def _parse_period(raw: str | None) -> str:
     s = (raw or "").strip().lower()
-    if s in ("7d", "30d", "all"):
+    if s in ("7d", "30d", "3m", "6m", "1y", "all"):
         return s
     return "7d"
 
@@ -49,6 +49,12 @@ def _since_for_period(period: str):
         return now - timedelta(days=7)
     if period == "30d":
         return now - timedelta(days=30)
+    if period == "3m":
+        return now - timedelta(days=90)
+    if period == "6m":
+        return now - timedelta(days=180)
+    if period == "1y":
+        return now - timedelta(days=365)
     return None
 
 
@@ -276,7 +282,7 @@ def build_site_owner_analytics_payload(
                 | Q(status=Order.Status.PENDING, amount__gt=0)
             )
             .annotate(sort_ts=Coalesce("paid_at", "created_at"))
-            .order_by("-sort_ts", "-pk")[:20]
+            .order_by("-sort_ts", "-pk")[:50]
         )
         for o in ro:
             ts = o.paid_at or o.created_at

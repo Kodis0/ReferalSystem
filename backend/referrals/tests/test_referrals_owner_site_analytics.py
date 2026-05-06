@@ -105,6 +105,29 @@ class SiteOwnerAnalyticsApiTests(TestCase):
         self.assertEqual(r.data["kpis"]["leads_count"], 1)
         self.assertEqual(r.data["funnel"]["leads"], 1)
 
+    def test_analytics_recent_sales_returns_latest_50(self):
+        site, partner = self._site_and_partner()
+        now = timezone.now()
+        for i in range(55):
+            Order.objects.create(
+                partner=partner,
+                ref_code=partner.ref_code,
+                dedupe_key=f"tilda:analytics-recent-{i}",
+                payload_fingerprint=f"{i:064x}"[-64:],
+                amount=Decimal("10.00") + Decimal(i),
+                currency="RUB",
+                status=Order.Status.PAID,
+                paid_at=now - timezone.timedelta(minutes=i),
+            )
+
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/analytics/?site_public_id={site.public_id}&period=7d"
+        r = self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(len(r.data["recent_sales"]), 50)
+        self.assertEqual(r.data["recent_sales"][0]["amount"], "10.00")
+        self.assertEqual(r.data["recent_sales"][-1]["amount"], "59.00")
+
     def test_analytics_counts_referred_lead_even_when_partner_not_site_member(self):
         """Widget submit resolved to a partner ref must count even without SiteMembership on this site."""
         site, _partner_member = self._site_and_partner()
@@ -155,3 +178,13 @@ class SiteOwnerAnalyticsApiTests(TestCase):
         self.assertEqual(r.data["kpis"]["visits_count"], 0)
         self.assertEqual(r.data["kpis"]["sales_count"], 0)
         self.assertEqual(r.data["recent_sales"], [])
+
+    def test_analytics_accepts_extended_periods(self):
+        site, _partner = self._site_and_partner()
+        self.api.force_authenticate(self.owner)
+        for period in ("3m", "6m", "1y"):
+            with self.subTest(period=period):
+                url = f"/referrals/site/integration/analytics/?site_public_id={site.public_id}&period={period}"
+                r = self.api.get(url)
+                self.assertEqual(r.status_code, 200, r.data)
+                self.assertEqual(r.data["period"], period)

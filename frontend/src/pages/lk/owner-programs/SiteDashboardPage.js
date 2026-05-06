@@ -27,6 +27,20 @@ function formatMoney(raw) {
   return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 }
 
+function formatOrderDate(raw) {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function formatOrderStatus(raw) {
+  if (raw === "paid") return "Оплачен";
+  if (raw === "pending") return "Ожидает";
+  if (raw === "cancelled") return "Отменён";
+  return raw || "—";
+}
+
 function parseSeriesNumbers(rows, key) {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => {
@@ -434,6 +448,9 @@ function DaySeriesChart({ byDay, values, gradId, formatY, ariaLabel, tooltipMetr
 const PERIODS = [
   { id: "7d", label: "7 дней" },
   { id: "30d", label: "30 дней" },
+  { id: "3m", label: "3 месяца" },
+  { id: "6m", label: "Полгода" },
+  { id: "1y", label: "Год" },
   { id: "all", label: "Всё время" },
 ];
 
@@ -510,7 +527,7 @@ export default function SiteDashboardPage() {
   }, [load]);
 
   const byDay = useMemo(() => (Array.isArray(payload?.series?.by_day) ? payload.series.by_day : []), [payload]);
-  const salesSeries = useMemo(() => parseSeriesNumbers(byDay, "sales_count"), [byDay]);
+  const salesAmountSeries = useMemo(() => parseSeriesNumbers(byDay, "sales_amount"), [byDay]);
   const commissionsSeries = useMemo(() => parseSeriesNumbers(byDay, "commissions"), [byDay]);
   const activitySeries = useMemo(() => {
     if (!byDay.length) return [];
@@ -684,9 +701,9 @@ export default function SiteDashboardPage() {
                     <header className="owner-programs__site-dash-chart-plate-head">
                       <div className="owner-programs__site-dash-chart-plate-titles">
                         <h2 id="site-dash-sales-title" className="owner-programs__site-dash-chart-plate-title">
-                          Продажи по дням
+                          Сумма продаж по дням
                         </h2>
-                        <p className="owner-programs__site-dash-chart-plate-sub">Число оплаченных заказов участников программы</p>
+                        <p className="owner-programs__site-dash-chart-plate-sub">Деньги по оплаченным и ожидающим подтверждения заказам</p>
                       </div>
                     </header>
                     <div className="owner-programs__site-dash-chart-plate-body owner-programs__site-dash-chart-plate-body_line">
@@ -695,11 +712,11 @@ export default function SiteDashboardPage() {
                       ) : (
                         <DaySeriesChart
                           byDay={byDay}
-                          values={salesSeries}
+                          values={salesAmountSeries}
                           gradId="site-dash-grad-sales"
-                          formatY={formatInt}
-                          tooltipMetricLabel="Продажи, шт."
-                          ariaLabel="График продаж по дням"
+                          formatY={formatMoney}
+                          tooltipMetricLabel="Сумма продаж"
+                          ariaLabel="График суммы продаж по дням"
                         />
                       )}
                     </div>
@@ -762,7 +779,7 @@ export default function SiteDashboardPage() {
             </div>
           </section>
 
-          <section className="owner-programs__site-dash-card owner-programs__site-dash-card_table" aria-labelledby="site-dash-sales-table-title">
+          <section className="owner-programs__site-dash-card owner-programs__site-dash-card_table owner-programs__history owner-programs__site-dash-orders" aria-labelledby="site-dash-sales-table-title">
             <h2 id="site-dash-sales-table-title" className="owner-programs__site-dash-card-title">
               Последние заказы
             </h2>
@@ -775,32 +792,40 @@ export default function SiteDashboardPage() {
                 </p>
               </div>
             ) : (
-              <div className="lk-partner__table-wrap owner-programs__site-dash-table-wrap">
-                <table className="lk-partner__table owner-programs__site-dash-table">
-                  <thead>
-                    <tr>
-                      <th>Дата</th>
-                      <th>Сумма</th>
-                      <th>Статус</th>
-                      <th>Код</th>
-                      <th>Email</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentSales.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.at ? new Date(row.at).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—"}</td>
-                        <td>
+              <div className="owner-programs__history-tableWrap owner-programs__site-dash-orders-tableWrap">
+                <div className="owner-programs__histTable owner-programs__site-dash-orders-table">
+                  <div className="owner-programs__histRow owner-programs__histRow_head owner-programs__site-dash-orders-row">
+                    {["Дата", "Сумма", "Статус", "Код", "Email"].map((label) => (
+                      <div key={label} className="owner-programs__histCell owner-programs__histCell_headerCell">
+                        <span className="owner-programs__histText owner-programs__histText_s owner-programs__histText_grey owner-programs__histText_alignLeft">
+                          {label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {recentSales.map((row) => (
+                    <div key={row.id} className="owner-programs__histRow owner-programs__histRow_body owner-programs__site-dash-orders-row">
+                      <div className="owner-programs__histCell">
+                        <span className="owner-programs__histText owner-programs__histText_date">{formatOrderDate(row.at)}</span>
+                      </div>
+                      <div className="owner-programs__histCell">
+                        <span className="owner-programs__histText owner-programs__histText_body">
                           {formatMoney(row.amount)}
                           {row.currency ? ` ${row.currency}` : ""}
-                        </td>
-                        <td>{row.status ?? "—"}</td>
-                        <td>{row.ref_code || "—"}</td>
-                        <td>{row.customer_email_masked || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </span>
+                      </div>
+                      <div className="owner-programs__histCell">
+                        <span className="owner-programs__histText owner-programs__histText_body">{formatOrderStatus(row.status)}</span>
+                      </div>
+                      <div className="owner-programs__histCell">
+                        <span className="owner-programs__histText owner-programs__histText_body">{row.ref_code || "—"}</span>
+                      </div>
+                      <div className="owner-programs__histCell">
+                        <span className="owner-programs__histText owner-programs__histText_body">{row.customer_email_masked || "—"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>
