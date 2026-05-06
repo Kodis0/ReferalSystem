@@ -35,6 +35,7 @@
   /** Latest widget-config JSON; set when fetch resolves so POST uses current selectors. */
   var lastResolvedWidgetConfig = null;
   var runtimeDebugEnabled = false;
+  var lastTildaProductContext = null;
   /** When true: record outcome trace + optional Tilda DOM success/failure heuristics (still not guaranteed). */
   var observeSuccessEnabled = false;
   /** When true: send optional ``lead_client_outcome`` POST after ingest (site config / flag; heuristic only). */
@@ -465,7 +466,7 @@
     if (!allowed.email && /email|e_mail|mail/.test(key)) return true;
     if (!allowed.phone && /phone|tel|mobile|telephone/.test(key)) return true;
     if (!allowed.name && /(^name$|fullname|full_name|customer_name|first_name|last_name)/.test(key)) return true;
-    if (!allowed.amount && /(^amount$|lead_amount)/.test(key)) return true;
+    if (!allowed.amount && /(^amount$|lead_amount|^sum$|^total$|payment_sum|formprice|price)/.test(key)) return true;
     if (!allowed.currency && key === "currency") return true;
     if (!allowed.product_name && /(^product$|^product_name$)/.test(key)) return true;
     return false;
@@ -643,6 +644,28 @@
     form.appendChild(inp);
   }
 
+  function upsertHiddenField(form, name, value) {
+    var v = trimStr(value);
+    if (!form || !name || !v) return;
+    var existing = form.querySelector('input[type="hidden"][name="' + name + '"]');
+    if (existing) {
+      existing.value = v;
+      return;
+    }
+    var inp = doc.createElement("input");
+    inp.type = "hidden";
+    inp.name = name;
+    inp.value = v;
+    form.appendChild(inp);
+  }
+
+  function normalizeAmountText(raw) {
+    var s = trimStr(raw).replace(/\s+/g, "").replace(/\u00a0/g, "").replace(",", ".");
+    if (!s) return "";
+    var m = s.match(/\d+(?:\.\d{1,2})?/);
+    return m ? m[0] : "";
+  }
+
   function siteLeadSelectors(cfg) {
     var c = (cfg && cfg.config) || {};
     return {
@@ -729,6 +752,82 @@
     var val = readDomValueFromElement(el);
     dbg("selector resolve", { selector: selector, found: !!el, adapter: adapter.id });
     return val;
+  }
+
+  function readTildaProductContextFromElement(el) {
+    if (!el || el.nodeType !== 1) return null;
+    var card = null;
+    try {
+      card =
+        el.closest(".t776__content") ||
+        el.closest(".t-store__card") ||
+        el.closest(".js-product") ||
+        el.closest(".t-rec");
+    } catch (e) {
+      card = null;
+    }
+    if (!card) return null;
+    var priceEl = null;
+    var titleEl = null;
+    try {
+      priceEl = card.querySelector(".js-product-price, .t-store__card__price-value, [field*='price']");
+      titleEl = card.querySelector(".js-product-name, .t-store__card__title, [field*='title']");
+    } catch (e2) {
+      priceEl = null;
+      titleEl = null;
+    }
+    var amount = normalizeAmountText(readDomValueFromElement(priceEl));
+    var productName = readDomValueFromElement(titleEl);
+    if (!amount && !productName) return null;
+    return { amount: amount, productName: productName };
+  }
+
+  function rememberTildaProductContextFromClick(rawTarget) {
+    var el = rawTarget;
+    if (el && el.nodeType === 3 && el.parentElement) el = el.parentElement;
+    if (!el || el.nodeType !== 1) return;
+    var link = null;
+    try {
+      link = el.closest("a, button, .t-btn, .t-submit");
+    } catch (e) {
+      link = null;
+    }
+    if (!link) return;
+    var href = "";
+    try {
+      href = String(link.getAttribute("href") || "");
+    } catch (e2) {}
+    var cls = String(link.className || "");
+    if (href !== "#order" && href.indexOf("#order") !== 0 && cls.indexOf("t776__btn_second") < 0) return;
+    var ctx = readTildaProductContextFromElement(link);
+    if (ctx) {
+      lastTildaProductContext = ctx;
+      dbg("tilda product context", { hasAmount: !!ctx.amount, hasProductName: !!ctx.productName });
+    }
+  }
+
+  function ensureHiddenOrderFields(form, cfg, adapter) {
+    var selCfg = siteLeadSelectors(cfg);
+    var amount = "";
+    var productName = "";
+    if (selCfg.amountSelector) {
+      amount = normalizeAmountText(readDomBySelectorInContext(selCfg.amountSelector, form, adapter));
+    }
+    if (selCfg.productNameSelector) {
+      productName = readDomBySelectorInContext(selCfg.productNameSelector, form, adapter);
+    }
+    if (!amount && adapter && adapter.id === PLATFORMS.TILDA && lastTildaProductContext) {
+      amount = lastTildaProductContext.amount || "";
+      if (!productName) productName = lastTildaProductContext.productName || "";
+    }
+    if (!amount && adapter && adapter.id === PLATFORMS.TILDA) {
+      amount = normalizeAmountText(readDomBySelectorInContext(".js-product-price", form, adapter));
+    }
+    if (!productName && adapter && adapter.id === PLATFORMS.TILDA) {
+      productName = readDomBySelectorInContext(".js-product-name", form, adapter);
+    }
+    upsertHiddenField(form, "sum", amount);
+    upsertHiddenField(form, "product_name", productName);
   }
 
   /** Pipeline stages (local only; not sent to API). */
@@ -983,6 +1082,7 @@
     var fid = form.id || form.getAttribute("name") || "";
     pushTrace(OUTCOME.SUBMIT_ATTEMPT_DETECTED, { formId: fid });
     dbg(STAGE.SUBMIT_ATTEMPT, { formId: fid });
+    ensureHiddenOrderFields(form, lastResolvedWidgetConfig, adapter);
     var selCfg = siteLeadSelectors(lastResolvedWidgetConfig);
     var fields = filterFieldsByCaptureConfig(collectFormFields(form), lastResolvedWidgetConfig);
     dbg(STAGE.PAYLOAD_BUILT, { fieldCount: Object.keys(fields).length });
@@ -1087,6 +1187,7 @@
     form.addEventListener(
       "submit",
       function () {
+        ensureHiddenOrderFields(form, lastResolvedWidgetConfig, adapter);
         sendLeadOnce(ingestUrl, ref, form, adapter);
       },
       true
@@ -1094,6 +1195,7 @@
     form.addEventListener("click", function (ev) {
       var sub = findSubmitLikeFromClickTarget(form, ev.target, adapter);
       if (!sub) return;
+      ensureHiddenOrderFields(form, lastResolvedWidgetConfig, adapter);
       setTimeout(function () {
         if (shouldSkipLeadDedup(form)) return;
         sendLeadOnce(ingestUrl, ref, form, adapter);
@@ -1160,6 +1262,17 @@
     observeSuccessEnabled = resolveObserveSuccessFromWidgetConfig(cfg);
     reportObservedOutcomeEnabled = resolveReportObservedOutcomeFromWidgetConfig(cfg);
     syncPublicApi();
+
+    if (adapter && adapter.id === PLATFORMS.TILDA && !doc._rsTildaProductClickContextWired) {
+      doc._rsTildaProductClickContextWired = true;
+      doc.addEventListener(
+        "click",
+        function (ev) {
+          rememberTildaProductContextFromClick(ev.target);
+        },
+        true
+      );
+    }
 
     var storageKey = (cfg && cfg.storage_key) || "rs_ref_v1_" + siteId;
     var ingestUrl =

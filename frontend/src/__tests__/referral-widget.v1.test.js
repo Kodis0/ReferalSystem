@@ -176,6 +176,108 @@ describe("referral-widget.v1.js", () => {
     expect(body.product_name).toBe("Course A");
   });
 
+  it("adds hidden order fields from configured selectors before form submit", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              amount_selector: "#amt",
+              product_name_selector: "#title",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const price = document.createElement("div");
+    price.id = "amt";
+    price.textContent = "79 р.";
+    const title = document.createElement("div");
+    title.id = "title";
+    title.textContent = "Dining Chair";
+    document.body.appendChild(price);
+    document.body.appendChild(title);
+
+    runWidgetWithCurrentScript(createMockScript());
+    await flushWidgetReady();
+
+    const form = document.createElement("form");
+    const em = document.createElement("input");
+    em.name = "email";
+    em.value = "a@b.co";
+    form.appendChild(em);
+    document.body.appendChild(form);
+    await flushMicrotasks();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("79");
+    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Dining Chair");
+  });
+
+  it("adds hidden order sum from clicked Tilda product card", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const card = document.createElement("div");
+    card.className = "t776__content";
+    const title = document.createElement("div");
+    title.className = "js-product-name";
+    title.textContent = "Dining Chair";
+    const price = document.createElement("div");
+    price.className = "js-product-price";
+    price.textContent = "79";
+    const buy = document.createElement("a");
+    buy.className = "t776__btn_second";
+    buy.href = "#order";
+    buy.textContent = "Buy now";
+    card.appendChild(title);
+    card.appendChild(price);
+    card.appendChild(buy);
+    document.body.appendChild(card);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    const form = document.createElement("form");
+    form.id = "order";
+    const em = document.createElement("input");
+    em.name = "email";
+    em.value = "a@b.co";
+    form.appendChild(em);
+    document.body.appendChild(form);
+    await flushMicrotasks();
+
+    buy.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("79");
+    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Dining Chair");
+  });
+
   it("resolves amount from nearest block context, not first global match", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {
