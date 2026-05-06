@@ -728,27 +728,30 @@ def create_commission_for_paid_order(order: Order) -> Optional[Commission]:
 
     commission: Optional[Commission] = None
     with transaction.atomic():
-        locked = (
-            Order.objects.select_for_update()
-            .select_related("partner", "partner__user", "customer_user")
-            .get(pk=order.pk)
-        )
+        # Lock only the order row. PostgreSQL rejects FOR UPDATE on nullable
+        # outer-joined tables, so partner/customer are read separately below.
+        locked = Order.objects.select_for_update().get(pk=order.pk)
         if locked.status != Order.Status.PAID:
             return None
         if not locked.partner_id:
+            return None
+        partner = PartnerProfile.objects.select_related("user").get(pk=locked.partner_id)
+        if partner.status != PartnerProfile.Status.ACTIVE:
+            return None
+        if _is_self_referral(locked, partner):
             return None
 
         existing = Commission.objects.filter(order_id=locked.pk).first()
         if existing:
             return existing
 
-        pct = locked.partner.commission_percent
+        pct = partner.commission_percent
         base = locked.amount
         amount = (base * pct / Decimal("100")).quantize(Decimal("0.01"))
 
         try:
             commission = Commission.objects.create(
-                partner=locked.partner,
+                partner=partner,
                 order=locked,
                 base_amount=base,
                 commission_percent=pct,
