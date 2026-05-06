@@ -624,17 +624,17 @@
 }
 
 .lk-widget-install__card.owner-programs__site-snippet-card .lk-widget-install__snippet-card {
-  background: #fff;
-  border: none;
+  background: #17212b;
+  border: 1px solid #242f3d;
 }
 
 .lk-widget-install__card.owner-programs__site-snippet-card .lk-widget-install__snippet-card-head {
-  background: #fff;
-  border-bottom: none;
+  background: #17212b;
+  border-bottom: 1px solid #242f3d;
 }
 
 .lk-widget-install__card.owner-programs__site-snippet-card .lk-widget-install__snippet-card-code {
-  background: #fff;
+  background: #17212b;
 }
 
 @media (max-width: 720px) {

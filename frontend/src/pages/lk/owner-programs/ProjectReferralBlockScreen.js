@@ -1438,30 +1438,25 @@ function ReferralBuilderBlocksDock({ visible, onPickType }) {
   );
 }
 
-function ReferralBuilderWorkspaceOnboarding() {
-  const cards = [
-    {
-      id: "referral-builder-onboard-card-1",
-      title: "Сайт подключён",
-      desc: "Мы подготовили рабочую область на основе вашего сайта.",
-    },
-    {
-      id: "referral-builder-onboard-card-2",
-      title: "Выберите место",
-      desc: "Нажмите «+» там, где хотите разместить реферальный блок.",
-    },
-    {
-      id: "referral-builder-onboard-card-3",
-      title: "Проверьте внешний вид",
-      desc: "Добавьте шаблон и посмотрите, как он смотрится на странице.",
-    },
-    {
-      id: "referral-builder-onboard-card-4",
-      title: "Скопируйте код",
-      desc: "Откройте код блока, скопируйте его и вставьте в Tilda.",
-    },
-  ];
+const REFERRAL_BUILDER_ONBOARDING_CARDS = [
+  {
+    id: "referral-builder-onboard-card-2",
+    title: "Выберите место",
+    desc: "Нажмите «+» там, где хотите разместить реферальный блок.",
+  },
+  {
+    id: "referral-builder-onboard-card-3",
+    title: "Проверьте внешний вид",
+    desc: "Добавьте шаблон и посмотрите, как он смотрится на странице.",
+  },
+  {
+    id: "referral-builder-onboard-card-4",
+    title: "Скопируйте код",
+    desc: "Откройте код блока, скопируйте его и вставьте в Tilda.",
+  },
+];
 
+function ReferralBuilderWorkspaceOnboarding() {
   return (
     <section
       className="owner-programs__referral-builder-onboarding"
@@ -1480,30 +1475,36 @@ function ReferralBuilderWorkspaceOnboarding() {
             </div>
           </div>
         </div>
-
-        <div
-          className="lk-dashboard__my-programs-catalog-cards owner-programs__referral-builder-onboarding-cards"
-          data-testid="referral-builder-onboarding-cards"
-        >
-          {cards.map(({ id, title, desc }, index) => (
-            <div
-              key={id}
-              className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
-              role="group"
-              aria-labelledby={`${id}-title`}
-            >
-              <div className="owner-programs__referral-builder-onboarding-step" aria-hidden="true">
-                {index + 1}
-              </div>
-              <p id={`${id}-title`} className="lk-dashboard__my-programs-catalog-card-title">
-                {title}
-              </p>
-              <p className="lk-dashboard__my-programs-catalog-card-desc">{desc}</p>
-            </div>
-          ))}
-        </div>
       </div>
     </section>
+  );
+}
+
+function ReferralBuilderWorkspaceOnboardingCards() {
+  return (
+    <div
+      className="owner-programs__referral-builder-onboarding-below-workspace"
+      aria-label="Шаги добавления блока"
+    >
+      <div
+        className="lk-dashboard__my-programs-catalog-cards owner-programs__referral-builder-onboarding-cards"
+        data-testid="referral-builder-onboarding-cards"
+      >
+        {REFERRAL_BUILDER_ONBOARDING_CARDS.map(({ id, title, desc }) => (
+          <div
+            key={id}
+            className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
+            role="group"
+            aria-labelledby={`${id}-title`}
+          >
+            <p id={`${id}-title`} className="lk-dashboard__my-programs-catalog-card-title">
+              {title}
+            </p>
+            <p className="lk-dashboard__my-programs-catalog-card-desc">{desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2744,7 +2745,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
               <span className="owner-programs__skel owner-programs__referral-builder-workspace-skel__hero" aria-hidden />
               <span className="owner-programs__skel owner-programs__referral-builder-workspace-skel__line" aria-hidden />
               <div className="owner-programs__referral-builder-workspace-skel__cards">
-                {[0, 1, 2, 3].map((i) => (
+                {[0, 1, 2].map((i) => (
                   <span key={i} className="owner-programs__skel owner-programs__referral-builder-workspace-skel__card" aria-hidden />
                 ))}
               </div>
@@ -2766,6 +2767,7 @@ export default function ProjectReferralBlockScreen() {
     >
       <ReferralBuilderWorkspaceOnboarding />
       <ReferralBlockCanvas sitePublicId={resolvedSitePublicId} />
+      <ReferralBuilderWorkspaceOnboardingCards />
     </section>
   );
 }

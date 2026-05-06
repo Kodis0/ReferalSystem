@@ -784,10 +784,10 @@
   font-size: 13px;
 }
 
-/* Сниппет: фон как у .lk-widget-install__capture-plate (--wi-capture-surface) */
+/* Сниппет: тёмная плашка + рамка #242f3d (согласовано с widget-install.css) */
 .lk-widget-install__card.owner-programs__site-snippet-card .lk-widget-install__snippet-card {
-  background: #242f3d;
-  border-color: rgba(255, 255, 255, 0.1);
+  background: #17212b;
+  border: 1px solid #242f3d;
 }
 
 [data-theme="light"] .lk-widget-install__card.owner-programs__site-snippet-card .lk-widget-install__snippet-card {
@@ -799,7 +799,7 @@
 .lk-widget-install__card.owner-programs__site-snippet-card .lk-widget-install__snippet-card-head {
   padding: 10px 18px;
   background: transparent;
-  border-bottom: 1px solid #2c3743;
+  border-bottom: 1px solid #242f3d;
 }
 
 [data-theme="light"]
@@ -5197,13 +5197,15 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   cursor: not-allowed;
 }
 
-/* Онбординг: между вкладками сайта (shell) и блоком «Рабочая область»; без hero-collapse grid — он забирал высоту flex и ломал канвас. */
+/* Онбординг: между вкладками сайта (shell) и блоком «Рабочая область»; без hero-collapse grid — он забирал высоту flex и ломал канвас.
+   Горизонтальных inset нет — на всю ширину дорожки LK (та же, что у рабочей области), без «узкой колонки» 872px. */
 .owner-programs__referral-builder-onboarding {
   flex-shrink: 0;
   width: 100%;
+  max-width: none;
   box-sizing: border-box;
   margin: 0;
-  padding: 0 24px;
+  padding: 0;
 }
 
 .owner-programs__referral-builder-onboarding-inner {
@@ -5223,41 +5225,29 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   max-width: none !important;
 }
 
-.owner-programs__referral-builder-onboarding-step {
-  box-sizing: border-box;
+/* Карточки шагов — под блоком «Рабочая область» (после канваса в разметке страницы). */
+.owner-programs__referral-builder-onboarding-below-workspace {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  background: rgba(113, 119, 248, 0.22);
-  color: #ffffff;
-  border: 1px solid rgba(113, 119, 248, 0.45);
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-[data-theme="light"] .owner-programs__referral-builder-onboarding-step {
-  background: rgba(79, 95, 255, 0.12);
-  color: #26325c;
-  border-color: rgba(79, 95, 255, 0.35);
+.owner-programs__referral-builder-onboarding-below-workspace
+  .owner-programs__referral-builder-onboarding-cards.lk-dashboard__my-programs-catalog-cards {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-@media (max-width: 720px) {
-  .owner-programs__referral-builder-onboarding {
-    padding: 0 16px;
-  }
-}
-
-@media (min-width: 961px) {
-  .owner-programs__referral-builder-onboarding
-    .owner-programs__referral-builder-onboarding-cards.lk-dashboard__my-programs-catalog-cards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+.owner-programs__referral-builder-onboarding-below-workspace
+  .owner-programs__referral-builder-onboarding-cards.lk-dashboard__my-programs-catalog-cards
+  > .lk-dashboard__my-programs-catalog-card {
+  min-width: 0;
+  width: 100%;
 }
 
 .owner-programs__referral-builder-canvas {

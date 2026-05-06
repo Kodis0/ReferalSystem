@@ -92,6 +92,19 @@ class SiteOwnerAnalyticsApiTests(TestCase):
         self.assertEqual(len(r.data["recent_sales"]), 1)
         self.assertEqual(r.data["recent_sales"][0]["amount"], "100.00")
 
+    def test_analytics_excludes_widget_leads_without_referral_partner(self):
+        """Organic widget submits (no resolved ref / no partner) must not inflate site KPIs."""
+        site, partner = self._site_and_partner()
+        ReferralLeadEvent.objects.create(site=site, partner=None, ref_code="", page_url="https://x/o")
+        ReferralLeadEvent.objects.create(site=site, partner=partner, ref_code=partner.ref_code, page_url="https://x/r")
+
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/analytics/?site_public_id={site.public_id}&period=7d"
+        r = self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["kpis"]["leads_count"], 1)
+        self.assertEqual(r.data["funnel"]["leads"], 1)
+
     def test_analytics_stranger_forbidden(self):
         site, _ = self._site_and_partner()
         stranger = User.objects.create_user(

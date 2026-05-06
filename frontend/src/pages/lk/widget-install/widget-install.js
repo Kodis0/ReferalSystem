@@ -375,7 +375,7 @@ function WidgetInstallSnippetCard({
   compact = false,
   snippetOnly = false,
 }) {
-  const snippetHlStyle = atomOneLight;
+  const snippetHlStyle = compact ? atomOneDarkReasonable : atomOneLight;
   const copied = copyHint === "Скопировано";
   const sectionClass = compact
     ? "lk-widget-install__card owner-programs__site-snippet-card"
