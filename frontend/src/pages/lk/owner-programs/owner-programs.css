@@ -5197,17 +5197,60 @@ html[data-lk-referral-builder-expanded] .owner-programs__page.owner-programs__si
   cursor: not-allowed;
 }
 
-/* Онбординг над канвасом: те же классы, что hero-каталог на «Мои программы» (dashboard.css). */
+/* Онбординг: между вкладками сайта (shell) и блоком «Рабочая область»; без hero-collapse grid — он забирал высоту flex и ломал канвас. */
 .owner-programs__referral-builder-onboarding {
   flex-shrink: 0;
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 10px;
+  margin: 0;
+  padding: 0 24px;
+}
+
+.owner-programs__referral-builder-onboarding-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.owner-programs__referral-builder-onboarding-banner {
+  margin-bottom: 0;
 }
 
 .owner-programs__referral-builder-onboarding-banner-copy {
   padding-right: 0 !important;
   max-width: none !important;
+}
+
+.owner-programs__referral-builder-onboarding-step {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  background: rgba(113, 119, 248, 0.22);
+  color: #ffffff;
+  border: 1px solid rgba(113, 119, 248, 0.45);
+}
+
+[data-theme="light"] .owner-programs__referral-builder-onboarding-step {
+  background: rgba(79, 95, 255, 0.12);
+  color: #26325c;
+  border-color: rgba(79, 95, 255, 0.35);
+}
+
+@media (max-width: 720px) {
+  .owner-programs__referral-builder-onboarding {
+    padding: 0 16px;
+  }
 }
 
 @media (min-width: 961px) {

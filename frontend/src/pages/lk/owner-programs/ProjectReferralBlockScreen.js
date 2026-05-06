@@ -2,20 +2,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { deferResizeObserverCallback } from "../../../resizeObserverDefer";
 import { flushSync } from "react-dom";
-import {
-  ClipboardCopy,
-  Code2,
-  Eye,
-  Hand,
-  MapPin,
-  Monitor,
-  Move,
-  Plug,
-  Smartphone,
-  Tablet,
-  Type,
-  X,
-} from "lucide-react";
+import { Code2, Hand, Monitor, Move, Smartphone, Tablet, Type, X } from "lucide-react";
 import { useLocation, useParams } from "react-router-dom";
 import { applyNodeChanges, Background, Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -1455,25 +1442,21 @@ function ReferralBuilderWorkspaceOnboarding() {
   const cards = [
     {
       id: "referral-builder-onboard-card-1",
-      Icon: Plug,
       title: "Сайт подключён",
       desc: "Мы подготовили рабочую область на основе вашего сайта.",
     },
     {
       id: "referral-builder-onboard-card-2",
-      Icon: MapPin,
       title: "Выберите место",
       desc: "Нажмите «+» там, где хотите разместить реферальный блок.",
     },
     {
       id: "referral-builder-onboard-card-3",
-      Icon: Eye,
       title: "Проверьте внешний вид",
       desc: "Добавьте шаблон и посмотрите, как он смотрится на странице.",
     },
     {
       id: "referral-builder-onboard-card-4",
-      Icon: ClipboardCopy,
       title: "Скопируйте код",
       desc: "Откройте код блока, скопируйте его и вставьте в Tilda.",
     },
@@ -1485,43 +1468,39 @@ function ReferralBuilderWorkspaceOnboarding() {
       aria-label="Как добавить блок на сайт"
       data-testid="referral-builder-onboarding"
     >
-      <div className="lk-dashboard__programs-catalog-hero-collapse lk-dashboard__programs-catalog-hero-collapse--open">
-        <div className="lk-dashboard__programs-catalog-hero-collapse-sizer">
-          <div className="lk-dashboard__my-programs-hero-stack">
-            <div className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero">
-              <div className="lk-dashboard__my-programs-catalog-banner-inner">
-                <div className="lk-dashboard__my-programs-catalog-banner-copy owner-programs__referral-builder-onboarding-banner-copy">
-                  <p className="lk-dashboard__my-programs-catalog-banner-title">Добавьте блок на сайт</p>
-                  <p className="lk-dashboard__my-programs-catalog-banner-sub">
-                    Сайт уже открыт в рабочей области. Нажмите «+», выберите шаблон и посмотрите, как блок будет
-                    выглядеть на странице.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="lk-dashboard__my-programs-catalog-cards owner-programs__referral-builder-onboarding-cards"
-              data-testid="referral-builder-onboarding-cards"
-            >
-              {cards.map(({ id, Icon, title, desc }) => (
-                <div
-                  key={id}
-                  className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
-                  role="group"
-                  aria-labelledby={`${id}-title`}
-                >
-                  <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
-                    <Icon size={22} strokeWidth={1.75} />
-                  </div>
-                  <p id={`${id}-title`} className="lk-dashboard__my-programs-catalog-card-title">
-                    {title}
-                  </p>
-                  <p className="lk-dashboard__my-programs-catalog-card-desc">{desc}</p>
-                </div>
-              ))}
+      <div className="owner-programs__referral-builder-onboarding-inner">
+        <div className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero owner-programs__referral-builder-onboarding-banner">
+          <div className="lk-dashboard__my-programs-catalog-banner-inner">
+            <div className="lk-dashboard__my-programs-catalog-banner-copy owner-programs__referral-builder-onboarding-banner-copy">
+              <p className="lk-dashboard__my-programs-catalog-banner-title">Добавьте блок на сайт</p>
+              <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                Сайт уже открыт в рабочей области. Нажмите «+», выберите шаблон и посмотрите, как блок будет выглядеть на
+                странице.
+              </p>
             </div>
           </div>
+        </div>
+
+        <div
+          className="lk-dashboard__my-programs-catalog-cards owner-programs__referral-builder-onboarding-cards"
+          data-testid="referral-builder-onboarding-cards"
+        >
+          {cards.map(({ id, title, desc }, index) => (
+            <div
+              key={id}
+              className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
+              role="group"
+              aria-labelledby={`${id}-title`}
+            >
+              <div className="owner-programs__referral-builder-onboarding-step" aria-hidden="true">
+                {index + 1}
+              </div>
+              <p id={`${id}-title`} className="lk-dashboard__my-programs-catalog-card-title">
+                {title}
+              </p>
+              <p className="lk-dashboard__my-programs-catalog-card-desc">{desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -2609,7 +2588,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
           <WorkspaceChromeAddIcon />
         </button>
       </div>
-      <ReferralBuilderWorkspaceOnboarding />
       <div
         ref={flowCanvasWrapRef}
         className={`owner-programs__referral-builder-canvas${
@@ -2786,6 +2764,7 @@ export default function ProjectReferralBlockScreen() {
       className="owner-programs__page owner-programs__site-page owner-programs__referral-builder-page"
       data-testid="referral-builder-shell"
     >
+      <ReferralBuilderWorkspaceOnboarding />
       <ReferralBlockCanvas sitePublicId={resolvedSitePublicId} />
     </section>
   );

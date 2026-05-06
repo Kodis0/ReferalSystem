@@ -1216,6 +1216,21 @@
   box-shadow: 0 0 0 3px var(--lk-srch-main-10);
 }
 
+/* Каталог: плашка поиска #17212b и в светлой теме (общие light-правила выше перебивают базовый каталог из-за порядка в файле) */
+[data-theme="light"] .lk-dashboard__programs_catalog .lk-dashboard__programs-search,
+[data-theme="light"] .lk-dashboard__programs_catalog .lk-dashboard__programs-search:hover:not(:focus-within),
+[data-theme="light"] .lk-dashboard__programs_catalog .lk-dashboard__programs-search:focus-within {
+  background: #17212b;
+}
+
+[data-theme="light"] .lk-dashboard__programs_catalog .lk-dashboard__programs-search-input {
+  color: #ffffff;
+}
+
+[data-theme="light"] .lk-dashboard__programs_catalog .lk-dashboard__programs-search-input::placeholder {
+  color: #7f91a4;
+}
+
 [data-theme="light"] .lk-dashboard__programs-filter-label {
   color: rgba(38, 50, 92, 0.55);
 }
