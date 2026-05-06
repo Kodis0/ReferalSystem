@@ -101,6 +101,13 @@ for _o in REFERRAL_CAPTURE_PUBLIC_ORIGINS:
     if _o not in CORS_ALLOWED_ORIGINS:
         CORS_ALLOWED_ORIGINS = list(CORS_ALLOWED_ORIGINS) + [_o]
 
+# Allow browser POST /referrals/capture/ from any *.tilda.ws HTTPS workspace (see
+# referrals.services.referral_capture_origin_allowed). Disable only if you proxy all Tilda
+# origins via DJANGO_CORS_ALLOWED_ORIGINS instead.
+REFERRAL_CAPTURE_ALLOW_TILDA_WS = (
+    os.getenv("REFERRAL_CAPTURE_ALLOW_TILDA_WS", "true").lower() == "true"
+)
+
 # Needed so the SPA can send `credentials: 'include'` for referral session capture.
 CORS_ALLOW_CREDENTIALS = True
 
@@ -115,7 +122,8 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 # Those endpoints set their own `Access-Control-*` headers from `Site.allowed_origins`.
 # Exclude them from django-cors-headers so OPTIONS preflight is answered by our views
 # (otherwise a new Tilda/custom domain must be duplicated in DJANGO_CORS_ALLOWED_ORIGINS).
-CORS_URLS_REGEX = r"^/(?!public/v1/).*$"
+# Same for `/referrals/capture/` (ReferralCaptureView sets CORS + allows *.tilda.ws).
+CORS_URLS_REGEX = r"^/(?!public/v1/)(?!referrals/capture/).*$"
 
 _csrf_raw = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
 if _csrf_raw:

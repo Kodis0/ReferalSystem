@@ -87,10 +87,35 @@ class ReferralCaptureView(APIView):
     """
     Anonymous + authenticated: records last-click attribution (session + optional user).
     CSRF-exempt so the SPA can POST with session cookie without CSRF token (same pattern as Tilda webhook).
+    CORS for this path is handled here (see ``core.settings.CORS_URLS_REGEX``) so Tilda origins
+    do not need to be listed one-by-one in ``DJANGO_CORS_ALLOWED_ORIGINS``.
     """
 
     authentication_classes = [JWTAuthentication, SessionAuthentication]
     permission_classes = []
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        origin = (request.headers.get("Origin") or "").strip()
+        if origin and referral_capture_origin_allowed(request):
+            response["Access-Control-Allow-Origin"] = origin
+            response["Access-Control-Allow-Credentials"] = "true"
+            response["Vary"] = "Origin"
+        return response
+
+    def options(self, request, *args, **kwargs):
+        if not referral_capture_origin_allowed(request):
+            return Response({"detail": "forbidden_origin"}, status=status.HTTP_403_FORBIDDEN)
+        resp = Response(status=status.HTTP_204_NO_CONTENT)
+        origin = (request.headers.get("Origin") or "").strip()
+        if origin:
+            resp["Access-Control-Allow-Origin"] = origin
+            resp["Access-Control-Allow-Credentials"] = "true"
+            resp["Vary"] = "Origin"
+        resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        resp["Access-Control-Allow-Headers"] = "Content-Type"
+        resp["Access-Control-Max-Age"] = "86400"
+        return resp
 
     def post(self, request):
         if not referral_capture_origin_allowed(request):

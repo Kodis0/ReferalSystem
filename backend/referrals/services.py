@@ -419,6 +419,8 @@ def referral_capture_origin_allowed(request) -> bool:
     """
     CSRF is disabled for this POST; require browser Origin (when sent) to match CORS allowlist.
     Missing Origin is allowed (same-site navigations, tests, non-browser clients).
+    When ``REFERRAL_CAPTURE_ALLOW_TILDA_WS`` is true, HTTPS ``*.tilda.ws`` workspaces are
+    allowed so embed traffic does not require listing every Tilda subdomain in env.
     """
     origin = (request.headers.get("Origin") or "").strip()
     if not origin:
@@ -432,6 +434,15 @@ def referral_capture_origin_allowed(request) -> bool:
         e = (entry or "").strip().rstrip("/")
         if e and origin_cmp == e:
             return True
+    if getattr(settings, "REFERRAL_CAPTURE_ALLOW_TILDA_WS", True):
+        try:
+            p = urlparse(origin)
+            if p.scheme == "https":
+                h = (p.hostname or "").lower()
+                if h == "tilda.ws" or h.endswith(".tilda.ws"):
+                    return True
+        except Exception:
+            pass
     return False
 
 

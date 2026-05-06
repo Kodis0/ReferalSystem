@@ -72,6 +72,44 @@ class ReferralCaptureTests(TestCase):
         )
         self.assertEqual(res.status_code, 403)
 
+    def test_capture_options_tilda_workspace_preflight(self):
+        origin = "https://start-virtual-flag.tilda.ws"
+        c = Client()
+        res = c.options("/referrals/capture/", HTTP_ORIGIN=origin)
+        self.assertEqual(res.status_code, 204)
+        self.assertEqual(res["Access-Control-Allow-Origin"], origin)
+        self.assertEqual(res["Access-Control-Allow-Credentials"], "true")
+        self.assertIn("POST", res["Access-Control-Allow-Methods"])
+
+    def test_capture_post_tilda_workspace_sets_cors_and_records_visit(self):
+        origin = "https://start-virtual-flag.tilda.ws"
+        c = Client()
+        res = c.post(
+            "/referrals/capture/",
+            data={"ref": self.partner.ref_code, "landing_url": "https://x/?ref=1"},
+            content_type="application/json",
+            HTTP_ORIGIN=origin,
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Access-Control-Allow-Origin"], origin)
+        self.assertEqual(res["Access-Control-Allow-Credentials"], "true")
+        self.assertEqual(ReferralVisit.objects.filter(partner=self.partner).count(), 1)
+
+    @override_settings(
+        CORS_ALLOWED_ORIGINS=[],
+        FRONTEND_URL="",
+        REFERRAL_CAPTURE_ALLOW_TILDA_WS=False,
+    )
+    def test_capture_rejects_tilda_when_flag_off(self):
+        c = Client()
+        res = c.post(
+            "/referrals/capture/",
+            data={"ref": self.partner.ref_code},
+            content_type="application/json",
+            HTTP_ORIGIN="https://start-virtual-flag.tilda.ws",
+        )
+        self.assertEqual(res.status_code, 403)
+
 
 class OrderAttributionAndCommissionTests(TestCase):
     def setUp(self):
