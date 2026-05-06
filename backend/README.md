@@ -36,7 +36,8 @@ python manage.py runserver
 - Покупатель: `email` и типовые алиасы (`Email`, `form_email`, …).
 - Сумма: `sum`, `amount`, `price`, `subtotal`, … → `Order.amount`; иначе `0.00`.
 - Валюта: `currency` / `Currency`.
-- **Реферальный код**: `ref`, `partner_ref`, `referral`, `ReferralCode` — должен совпасть с тем, что пользователь получил по ссылке `/?ref=...` (часто дублируют скрытым полем формы Tilda с тем же именем).
+- **Реферальный код**: `ref`, `partner_ref`, `referral`, `ReferralCode` — должен совпасть с тем, что в ссылке `/?ref=...`. Если отдельного поля нет, бэкенд пытается взять `ref` из любого значения, похожего на URL (часто приходит `pageurl` / `PageUrl` у вебхука магазина Tilda). Надёжнее всё же продублировать скрытое поле `ref` в форме оплаты/заказа.
+- **Сумма**: кроме `sum` / `amount` / `price`, поддерживаются `total`, `order_total`, `grandtotal`, `payment_amount`, `cost` и т.д. (см. `extract_tilda_order_fields` в `referrals.services`).
 
 ### Оплачен vs ожидает оплаты
 

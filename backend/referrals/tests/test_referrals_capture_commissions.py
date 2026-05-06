@@ -99,6 +99,34 @@ class OrderAttributionAndCommissionTests(TestCase):
         self.assertEqual(order.partner_id, self.partner.id)
         self.assertEqual(order.ref_code, self.partner.ref_code)
 
+    def test_order_gets_partner_ref_from_page_url_when_ref_key_missing(self):
+        """Tilda shop blocks often omit ``ref`` but send Page URL containing ``?ref=``."""
+        rc = self.partner.ref_code
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-from-pageurl",
+                "Email": self.customer.email,
+                "total": "42.50",
+                "pageurl": f"https://shop.example/item?utm=1&ref={rc}&src=tilda",
+                "paymentstatus": "pending",
+            }
+        )
+        order.refresh_from_db()
+        self.assertEqual(order.partner_id, self.partner.id)
+        self.assertEqual(order.amount, Decimal("42.50"))
+
+    def test_amount_reads_total_alias(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-total-alias",
+                "Email": self.customer.email,
+                "total": "17.25",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("17.25"))
+
     def test_commission_on_paid_order(self):
         order, _ = upsert_order_from_tilda_payload(
             {

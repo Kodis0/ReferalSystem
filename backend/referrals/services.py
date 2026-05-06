@@ -14,7 +14,7 @@ import string
 import time
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, NamedTuple, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from django.apps import apps
 from django.conf import settings
@@ -833,6 +833,65 @@ def _first_decimal(data: Mapping[str, Any], keys: Tuple[str, ...]) -> Decimal:
         return Decimal("0.00")
 
 
+def _extract_ref_from_url_like_string(s: str) -> str:
+    """
+    Parse ``ref`` query parameter from a full URL or from inline ``...?ref=...`` fragments.
+    Used when Tilda sends the storefront/page URL but no dedicated ``ref`` form field.
+    """
+    s = (s or "").strip()
+    if not s or len(s) > 8000:
+        return ""
+    if "://" in s:
+        q = urlparse(s).query
+        if q:
+            qs = parse_qs(q)
+            for key in ("ref", "REF"):
+                if key in qs and qs[key][0]:
+                    return unquote(qs[key][0].strip())[:32]
+    if s.startswith("?"):
+        qs = parse_qs(s[1:])
+        if "ref" in qs and qs["ref"][0]:
+            return unquote(qs["ref"][0].strip())[:32]
+    lower = s.lower()
+    marker = "ref="
+    pos = lower.find(marker)
+    while pos >= 0:
+        tail = s[pos + len(marker) :]
+        end = len(tail)
+        for ch in ("&", "#", " ", "\n", "\r", '"', "'", "<"):
+            i = tail.find(ch)
+            if i >= 0:
+                end = min(end, i)
+        cand = unquote(tail[:end].strip())
+        if cand:
+            return cand[:32]
+        pos = lower.find(marker, pos + 1)
+    return ""
+
+
+def _supplement_ref_code_from_flat(flat: Mapping[str, Any], primary: str) -> str:
+    """Prefer explicit ``ref`` keys; otherwise scan payload strings (often ``pageurl``) for ``ref=``."""
+    p = (primary or "").strip()
+    if p:
+        return p[:32]
+    priority_kw = ("url", "page", "link", "referrer", "from", "redirect", "return", "landing")
+    keys = list(flat.keys())
+    priority = [
+        k
+        for k in keys
+        if any(kw in k.lower() for kw in priority_kw)
+    ]
+    ordered = priority + [k for k in keys if k not in priority]
+    for k in ordered:
+        v = flat.get(k)
+        if v in (None, ""):
+            continue
+        code = _extract_ref_from_url_like_string(str(v))
+        if code:
+            return code[:32]
+    return ""
+
+
 # Status-like field: clear unpaid tokens take precedence over generic "payment" flags.
 _TILDA_UNPAID_STATUS = frozenset(
     {
@@ -1076,7 +1135,9 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
           ``subtotal``, ``Subtotal`` (decimal; ``0.00`` if missing/unparseable).
         - **Currency** — ``currency``, ``Currency`` (read in upsert from ``flat``, max 8 chars).
         - **Referral / partner code** — ``ref``, ``Ref``, ``REF``, ``partner_ref``,
-          ``referral``, ``ReferralCode`` (must mirror capture cookie / session ref).
+          ``referral``, ``ReferralCode``. If absent, any payload value that looks like a URL
+          containing ``?ref=`` / ``&ref=`` is parsed (typical Tilda shop webhooks use
+          ``pageurl`` / ``PageUrl`` with the full storefront link).
 
     **Paid vs pending**
         Primary: first non-empty among
@@ -1100,19 +1161,40 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
             "transact",
             "orderid",
             "OrderId",
+            "OrderID",
+            "order_id",
             "invoiceid",
             "InvoiceId",
             "paymentid",
             "PaymentId",
+            "OrderNumber",
+            "order_number",
         ),
     )
     customer_email = _first_str(
         data,
-        ("email", "Email", "E-mail", "mail", "EMail", "form_email", "Email_"),
+        (
+            "email",
+            "Email",
+            "E-mail",
+            "mail",
+            "EMail",
+            "form_email",
+            "Email_",
+            "OrderEmail",
+            "order_email",
+            "CustomerEmail",
+            "customer_email",
+            "BuyerEmail",
+            "buyer_email",
+        ),
     )
-    ref_code = _first_str(
+    ref_code = _supplement_ref_code_from_flat(
         data,
-        ("ref", "Ref", "REF", "partner_ref", "referral", "ReferralCode"),
+        _first_str(
+            data,
+            ("ref", "Ref", "REF", "partner_ref", "referral", "ReferralCode"),
+        ),
     )
     amount = _first_decimal(
         data,
@@ -1125,6 +1207,19 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
             "Price",
             "subtotal",
             "Subtotal",
+            "total",
+            "Total",
+            "TOTAL",
+            "order_total",
+            "OrderTotal",
+            "grandtotal",
+            "GrandTotal",
+            "payment_amount",
+            "PaymentAmount",
+            "cost",
+            "Cost",
+            "paymentsum",
+            "PaymentSum",
         ),
     )
 
