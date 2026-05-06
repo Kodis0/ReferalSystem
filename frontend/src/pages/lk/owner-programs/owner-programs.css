@@ -1727,6 +1727,16 @@
   flex-shrink: 0;
 }
 
+.owner-programs__service-card-avatar > .owner-programs__shell-avatar-placeholder svg {
+  width: 21px;
+  height: 21px;
+}
+
+.owner-programs__services-list-avatar.owner-programs__service-card-avatar > .owner-programs__shell-avatar-placeholder svg {
+  width: 18px;
+  height: 18px;
+}
+
 .owner-programs__shell-avatar-image {
   position: relative;
   z-index: 0;
@@ -2843,6 +2853,20 @@
 [data-theme="light"] .owner-programs__service-card-avatar {
   background: #7177f8;
   color: #ffffff;
+}
+
+/* Пустой аватар сайта (иконка камеры): как круг в шапке проекта, не фиолетовая заливка карточки */
+.owner-programs__service-card-avatar:has(.owner-programs__shell-avatar-placeholder) {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #7f91a4;
+  font-weight: 400;
+}
+
+[data-theme="light"] .owner-programs__service-card-avatar:has(.owner-programs__shell-avatar-placeholder) {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: #f4f5f7;
+  color: #83899f;
 }
 
 .owner-programs__service-card-avatar-img {

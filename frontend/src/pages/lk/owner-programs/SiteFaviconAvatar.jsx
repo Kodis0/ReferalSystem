@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ProjectShellAvatarIcon } from "./ProjectShellAvatarIcon";
 import { siteExternalFaviconUrl, siteFaviconHostname } from "./siteDisplay";
 
 function cacheBustedManualUrl(url, version) {
@@ -10,7 +11,7 @@ function cacheBustedManualUrl(url, version) {
 }
 
 /**
- * Аватар сайта/программы: своё фото → аккаунт (fallback) → favicon → буква.
+ * Аватар сайта/программы: своё фото → аккаунт (fallback) → favicon → буква или иконка камеры (`emptyPlaceholder`).
  * Индекс кандидата сбрасывается при любом изменении URLов props — без залипания старой картинки.
  */
 export function SiteFaviconAvatar({
@@ -21,6 +22,7 @@ export function SiteFaviconAvatar({
   letter,
   imgClassName,
   useExternalFavicon = true,
+  emptyPlaceholder = "letter",
 }) {
   const trimmedManual = typeof manualUrl === "string" ? manualUrl.trim() : "";
   const resolvedManualVersion =
@@ -53,6 +55,13 @@ export function SiteFaviconAvatar({
   const src = candidateIndex < candidates.length ? candidates[candidateIndex] || "" : "";
 
   if (!src) {
+    if (emptyPlaceholder === "shell") {
+      return (
+        <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">
+          <ProjectShellAvatarIcon />
+        </span>
+      );
+    }
     return <span>{letter}</span>;
   }
 

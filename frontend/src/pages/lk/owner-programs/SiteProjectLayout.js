@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Globe } from "lucide-react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
-import useCurrentUser from "../../../hooks/useCurrentUser";
 import { dispatchLkProgramListsRefetch, LUMOREF_SITE_STATUS_CHANGED_EVENT } from "../lkProgramListsSync";
 import { isUuidString } from "../../registration/postJoinNavigation";
 import "../dashboard/dashboard.css";
@@ -12,6 +11,7 @@ import "./owner-programs.css";
 import { fetchOwnerSitesList } from "./ownerSitesListApi";
 import { getSiteLifecycleStatus, sitePrimaryBrowseHref, sitePrimaryDomainLabel } from "./siteDisplay";
 import { withSitePublicIdQuery } from "./siteReachability";
+import { ProjectShellAvatarIcon } from "./ProjectShellAvatarIcon";
 import SiteShellToolbarSubscriber from "./SiteShellToolbarSubscriber";
 import { emitSiteOwnerActivity } from "./siteOwnerActivityBus";
 
@@ -98,21 +98,6 @@ async function fileToAvatarDataUrl(file) {
   return canvas.toDataURL("image/jpeg", 0.84);
 }
 
-function ProjectShellAvatarIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 28 28" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M22.17 6.42h-1.56l-.39-1.22A3.66 3.66 0 0 0 16.75 2.5h-5.5a3.66 3.66 0 0 0-3.47 2.7l-.4 1.22H5.83A3.66 3.66 0 0 0 2.17 10.08v9.09a3.66 3.66 0 0 0 3.66 3.66h16.34a3.66 3.66 0 0 0 3.66-3.66v-9.09a3.66 3.66 0 0 0-3.66-3.66Zm1.22 12.75c0 .67-.55 1.22-1.22 1.22H5.83c-.67 0-1.22-.55-1.22-1.22v-9.09c0-.67.55-1.22 1.22-1.22H8.5c.53 0 1-.34 1.16-.84l.65-1.95c.17-.5.63-.84 1.15-.84h5.08c.52 0 .98.34 1.15.84l.65 1.95c.17.5.63.84 1.15.84h2.68c.67 0 1.22.55 1.22 1.22v9.09Z"
-      />
-      <path
-        fill="currentColor"
-        d="M14 9.33a4.67 4.67 0 1 0 0 9.34 4.67 4.67 0 0 0 0-9.34Zm0 6.9a2.23 2.23 0 1 1 0-4.46 2.23 2.23 0 0 1 0 4.46Z"
-      />
-    </svg>
-  );
-}
-
 function CreateMenuChevronIcon({ open }) {
   return (
     <svg
@@ -191,11 +176,6 @@ export default function SiteProjectLayout() {
   const createMenuRef = useRef(null);
   const connectReferralScanUrlRef = useRef("");
   const locationViewMode = location.state?.projectViewMode;
-  const { user } = useCurrentUser();
-  const partnerAccountAvatarUrl =
-    typeof user?.avatar_data_url === "string" ? user.avatar_data_url.trim() : "";
-  /** На маршруте сайта: фото сайта или то же фото, что в настройках аккаунта партнёра. */
-  const siteShellVisualSrc = isSiteRouteShell ? avatarDataUrl || partnerAccountAvatarUrl : "";
   // Project's primary site: for project-level pages that resolve a default site where
   // the URL does not carry :sitePublicId (e.g. legacy settings). Not used for /members.
   // It must NOT be used as a substitute for canonical :sitePublicId when rendering
@@ -944,10 +924,10 @@ export default function SiteProjectLayout() {
 
   const shellBusy = headLoading && !hideShellChrome;
 
-  const shellAvatarHasMedia = isSiteRouteShell ? Boolean(siteShellVisualSrc) : Boolean(avatarDataUrl);
-  const shellAvatarShowImage = isSiteRouteShell ? Boolean(siteShellVisualSrc) : Boolean(avatarDataUrl);
-  const shellAvatarImageSrc = isSiteRouteShell ? siteShellVisualSrc : avatarDataUrl;
-  const shellAvatarShowRemove = isSiteRouteShell ? Boolean(siteShellVisualSrc && avatarDataUrl) : Boolean(avatarDataUrl);
+  const shellAvatarHasMedia = Boolean(avatarDataUrl);
+  const shellAvatarShowImage = Boolean(avatarDataUrl);
+  const shellAvatarImageSrc = avatarDataUrl;
+  const shellAvatarShowRemove = Boolean(avatarDataUrl);
 
   return (
     <div
@@ -1017,9 +997,7 @@ export default function SiteProjectLayout() {
                         <img
                           className="owner-programs__shell-avatar-image"
                           src={shellAvatarImageSrc}
-                          alt={
-                            isSiteRouteShell ? (avatarDataUrl ? "Фото сайта" : "Фото профиля") : "Фото проекта"
-                          }
+                          alt={isSiteRouteShell ? "Фото сайта" : "Фото проекта"}
                         />
                       ) : (
                         <span className="owner-programs__shell-avatar-placeholder" aria-hidden="true">

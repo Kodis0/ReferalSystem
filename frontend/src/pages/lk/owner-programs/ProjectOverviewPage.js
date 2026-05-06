@@ -855,7 +855,13 @@ export default function ProjectOverviewPage() {
                       <div className="owner-programs__service-card-top-row">
                         <div className="owner-programs__service-card-hero">
                           <div className="owner-programs__service-card-avatar">
-                            <SiteFaviconAvatar manualUrl={siteCardAvatarUrl} siteLike={site} letter={cardLetter} />
+                            <SiteFaviconAvatar
+                              manualUrl={siteCardAvatarUrl}
+                              siteLike={site}
+                              letter={cardLetter}
+                              useExternalFavicon={false}
+                              emptyPlaceholder="shell"
+                            />
                           </div>
                         </div>
                         <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
@@ -928,6 +934,8 @@ export default function ProjectOverviewPage() {
                             manualUrl={siteListAvatarUrl}
                             siteLike={site}
                             letter={listLetter}
+                            useExternalFavicon={false}
+                            emptyPlaceholder="shell"
                           />
                         </div>
                       </div>
