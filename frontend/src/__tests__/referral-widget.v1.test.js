@@ -278,6 +278,66 @@ describe("referral-widget.v1.js", () => {
     expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Dining Chair");
   });
 
+  it("adds hidden order sum from generic Tilda product blocks such as t922", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const card = document.createElement("div");
+    card.className = "t-col t922__card-container";
+    const title = document.createElement("div");
+    title.className = "t922__title js-product-name";
+    title.textContent = "Traffic Hybrid Bike";
+    const price = document.createElement("div");
+    price.className = "t922__price-value js-product-price";
+    price.textContent = "399";
+    const oldPrice = document.createElement("div");
+    oldPrice.className = "t922__price_old";
+    oldPrice.textContent = "599";
+    const buy = document.createElement("a");
+    buy.className = "t-btn t922__btn";
+    buy.href = "#order";
+    buy.textContent = "BUY NOW";
+    card.appendChild(title);
+    card.appendChild(price);
+    card.appendChild(oldPrice);
+    card.appendChild(buy);
+    document.body.appendChild(card);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    buy.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const form = document.createElement("form");
+    form.id = "order";
+    const em = document.createElement("input");
+    em.name = "email";
+    em.value = "a@b.co";
+    form.appendChild(em);
+    document.body.appendChild(form);
+    await flushMicrotasks();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("399");
+    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Traffic Hybrid Bike");
+  });
+
   it("resolves amount from nearest block context, not first global match", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {

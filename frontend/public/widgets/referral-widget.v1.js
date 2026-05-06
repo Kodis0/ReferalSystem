@@ -754,55 +754,112 @@
     return val;
   }
 
-  function readTildaProductContextFromElement(el) {
-    if (!el || el.nodeType !== 1) return null;
-    var card = null;
+  var PRODUCT_PRICE_SELECTOR =
+    ".js-product-price, .t-store__card__price-value, [data-product-price], [data-price], [itemprop='price'], " +
+    "[class*='price-value'], [field='price'], [field*='_price']";
+  var PRODUCT_TITLE_SELECTOR =
+    ".js-product-name, .t-store__card__title, [data-product-title], [data-title], [itemprop='name'], " +
+    "[class*='__title'], [field='title'], [field*='_title']";
+
+  function elementLooksLikeOldPrice(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var s = "";
     try {
-      card =
-        el.closest(".t776__content") ||
-        el.closest(".t-store__card") ||
-        el.closest(".js-product") ||
-        el.closest(".t-rec");
-    } catch (e) {
-      card = null;
-    }
-    if (!card) return null;
-    var priceEl = null;
-    var titleEl = null;
-    try {
-      priceEl = card.querySelector(".js-product-price, .t-store__card__price-value, [field*='price']");
-      titleEl = card.querySelector(".js-product-name, .t-store__card__title, [field*='title']");
-    } catch (e2) {
-      priceEl = null;
-      titleEl = null;
-    }
-    var amount = normalizeAmountText(readDomValueFromElement(priceEl));
-    var productName = readDomValueFromElement(titleEl);
-    if (!amount && !productName) return null;
-    return { amount: amount, productName: productName };
+      s =
+        String(el.className || "") +
+        " " +
+        String(el.getAttribute("field") || "") +
+        " " +
+        String(el.getAttribute("data-field") || "");
+    } catch (e) {}
+    s = s.toLowerCase();
+    return /old|price_old|oldprice|compare|strike/.test(s);
   }
 
-  function rememberTildaProductContextFromClick(rawTarget) {
+  function firstProductElement(root, selector, rejectOldPrice) {
+    if (!root || root.nodeType !== 1) return null;
+    try {
+      if (root.matches && root.matches(selector) && (!rejectOldPrice || !elementLooksLikeOldPrice(root))) return root;
+    } catch (e) {}
+    var nodes = [];
+    try {
+      nodes = root.querySelectorAll(selector);
+    } catch (e2) {
+      nodes = [];
+    }
+    for (var i = 0; i < nodes.length; i++) {
+      if (rejectOldPrice && elementLooksLikeOldPrice(nodes[i])) continue;
+      if (trimStr(readDomValueFromElement(nodes[i]))) return nodes[i];
+    }
+    return null;
+  }
+
+  function readProductContextFromContainer(root) {
+    if (!root || root.nodeType !== 1) return null;
+    var priceEl = firstProductElement(root, PRODUCT_PRICE_SELECTOR, true);
+    var amount = normalizeAmountText(readDomValueFromElement(priceEl));
+    if (!amount) return null;
+    var titleEl = firstProductElement(root, PRODUCT_TITLE_SELECTOR, false);
+    return { amount: amount, productName: readDomValueFromElement(titleEl) };
+  }
+
+  function readProductContextFromElement(el) {
+    if (!el || el.nodeType !== 1) return null;
+    var node = el;
+    var depth = 0;
+    while (node && node.nodeType === 1 && depth < 12) {
+      var ctx = readProductContextFromContainer(node);
+      if (ctx && ctx.amount) return ctx;
+      node = node.parentElement;
+      depth++;
+    }
+    return null;
+  }
+
+  function clickLooksLikeOrderIntent(link) {
+    if (!link || link.nodeType !== 1) return false;
+    var href = "";
+    var cls = "";
+    var text = "";
+    try {
+      href = String(link.getAttribute("href") || "").toLowerCase();
+      cls = String(link.className || "").toLowerCase();
+      text = String(link.textContent || "").toLowerCase();
+    } catch (e) {}
+    if (href.indexOf("#order") === 0 || href.indexOf("#order") > 0) return true;
+    if (/buy|order|cart|checkout|purchase|заказ|купить|оплат/.test(cls)) return true;
+    if (/buy\s*now|add to cart|order|checkout|купить|заказать|оплатить/.test(text)) return true;
+    return false;
+  }
+
+  function applyHiddenOrderFieldsToAllForms(cfg, adapter) {
+    var forms = [];
+    try {
+      forms = doc.querySelectorAll("form");
+    } catch (e) {
+      forms = [];
+    }
+    for (var i = 0; i < forms.length; i++) {
+      ensureHiddenOrderFields(forms[i], cfg, adapter);
+    }
+  }
+
+  function rememberProductContextFromClick(rawTarget, cfg, adapter) {
     var el = rawTarget;
     if (el && el.nodeType === 3 && el.parentElement) el = el.parentElement;
     if (!el || el.nodeType !== 1) return;
     var link = null;
     try {
-      link = el.closest("a, button, .t-btn, .t-submit");
+      link = el.closest("a, button, [role='button'], .t-btn, .t-submit");
     } catch (e) {
       link = null;
     }
-    if (!link) return;
-    var href = "";
-    try {
-      href = String(link.getAttribute("href") || "");
-    } catch (e2) {}
-    var cls = String(link.className || "");
-    if (href !== "#order" && href.indexOf("#order") !== 0 && cls.indexOf("t776__btn_second") < 0) return;
-    var ctx = readTildaProductContextFromElement(link);
+    if (!clickLooksLikeOrderIntent(link)) return;
+    var ctx = readProductContextFromElement(link);
     if (ctx) {
       lastTildaProductContext = ctx;
-      dbg("tilda product context", { hasAmount: !!ctx.amount, hasProductName: !!ctx.productName });
+      applyHiddenOrderFieldsToAllForms(cfg, adapter);
+      dbg("product context", { hasAmount: !!ctx.amount, hasProductName: !!ctx.productName });
     }
   }
 
@@ -816,14 +873,14 @@
     if (selCfg.productNameSelector) {
       productName = readDomBySelectorInContext(selCfg.productNameSelector, form, adapter);
     }
-    if (!amount && adapter && adapter.id === PLATFORMS.TILDA && lastTildaProductContext) {
+    if (!amount && lastTildaProductContext) {
       amount = lastTildaProductContext.amount || "";
       if (!productName) productName = lastTildaProductContext.productName || "";
     }
-    if (!amount && adapter && adapter.id === PLATFORMS.TILDA) {
+    if (!amount) {
       amount = normalizeAmountText(readDomBySelectorInContext(".js-product-price", form, adapter));
     }
-    if (!productName && adapter && adapter.id === PLATFORMS.TILDA) {
+    if (!productName) {
       productName = readDomBySelectorInContext(".js-product-name", form, adapter);
     }
     upsertHiddenField(form, "sum", amount);
@@ -1263,12 +1320,12 @@
     reportObservedOutcomeEnabled = resolveReportObservedOutcomeFromWidgetConfig(cfg);
     syncPublicApi();
 
-    if (adapter && adapter.id === PLATFORMS.TILDA && !doc._rsTildaProductClickContextWired) {
-      doc._rsTildaProductClickContextWired = true;
+    if (!doc._rsProductClickContextWired) {
+      doc._rsProductClickContextWired = true;
       doc.addEventListener(
         "click",
         function (ev) {
-          rememberTildaProductContextFromClick(ev.target);
+          rememberProductContextFromClick(ev.target, lastResolvedWidgetConfig, adapter);
         },
         true
       );
@@ -1295,6 +1352,7 @@
         var f = forms[i];
         dbg(STAGE.FOUND, { idx: i, id: f.id || "" });
         wireForm(f, ref, ingestUrl, adapter);
+        ensureHiddenOrderFields(f, lastResolvedWidgetConfig, adapter);
       }
     }
 
