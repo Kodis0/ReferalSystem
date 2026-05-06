@@ -2342,6 +2342,10 @@ def ingest_site_lead_submitted(
     uses ``select_for_update`` on ``Site`` to reduce races.
     """
     ref_code = (normalized.get("ref_code") or "").strip()[:32]
+    if not ref_code:
+        ref_code = (
+            _extract_ref_from_url_like_string((normalized.get("page_url") or "").strip()) or ""
+        )[:32]
     email = (normalized.get("customer_email") or "").strip()[:254]
     phone = (normalized.get("customer_phone") or "").strip()[:64]
     name = normalize_lead_name_for_storage(normalized.get("customer_name") or "")

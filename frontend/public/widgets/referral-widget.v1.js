@@ -14,7 +14,8 @@
  * Optional: data-rs-platform="tilda"|"generic" — override auto platform detection.
  * URL: ?rs_widget_debug=1 | ?rs_observe_success=1 | ?rs_report_observed_outcome=1 (same semantics as data-* flags).
  *
- * Behaviour: reads ?ref=, persists ref, adds hidden ref to forms, POSTs lead_submitted
+ * Behaviour: reads ?ref=, persists ref, POSTs /referrals/capture/ once (visit attribution),
+ * adds hidden ref to forms, POSTs lead_submitted
  * on native form submit (does not block Tilda / default form handling). If the platform
  * submits via JS without dispatching submit, a conservative click fallback on
  * submit-like controls still records one lead per user action (deduped with submit).
@@ -362,6 +363,32 @@
       return fromQuery;
     }
     return storageGet(storageKey);
+  }
+
+  /**
+   * Records ReferralVisit + session attribution on the API (same as SPA ReferralCaptureOnMount).
+   * Without this, Tilda-only traffic never hits POST /referrals/capture/ → «Переходы» stay 0.
+   */
+  function postReferralCaptureOnce(apiBase, siteId, ref) {
+    if (!apiBase || !siteId || !ref) return;
+    try {
+      var k = "rs_capture_ok_v1_" + siteId + "_" + ref;
+      if (sessionStorage.getItem(k)) return;
+      var url = apiBase.replace(/\/+$/, "") + "/referrals/capture/";
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          ref: ref,
+          landing_url: typeof window !== "undefined" && window.location ? window.location.href : "",
+        }),
+      })
+        .then(function (res) {
+          if (res && res.ok) sessionStorage.setItem(k, "1");
+        })
+        .catch(function () {});
+    } catch (e) {}
   }
 
   function trimStr(s) {
@@ -1138,6 +1165,8 @@
     var ingestUrl =
       (cfg && cfg.lead_ingest_url) ||
       apiBase + "/public/v1/events/leads?site=" + encodeURIComponent(siteId);
+
+    postReferralCaptureOnce(apiBase, siteId, resolveRef(storageKey));
 
     if (cfg && cfg.debug === true) {
       runtimeDebugEnabled = true;

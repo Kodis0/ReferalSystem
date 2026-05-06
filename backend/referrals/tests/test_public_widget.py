@@ -154,6 +154,29 @@ class PublicWidgetApiTests(TestCase):
         self.assertEqual(r.json().get("code"), "invalid_origin")
         self.assertEqual(r.json().get("detail"), "invalid_origin")
 
+    def test_lead_ingest_sets_partner_from_ref_in_page_url_when_ref_field_missing(self):
+        """Widget may send full page URL with ?ref= but omit top-level ref after navigation."""
+        q = f"?site={self.site.public_id}"
+        url = "/public/v1/events/leads" + q
+        rc = self.partner.ref_code
+        body = {
+            "event": "lead_submitted",
+            "email": "buyer@example.com",
+            "page_url": f"https://landing.example/store?ref={rc}&step=cart",
+            "form_id": "tilda-cart",
+        }
+        r = self.client.post(
+            url,
+            data=body,
+            format="json",
+            HTTP_ORIGIN=self.origin,
+            HTTP_X_PUBLISHABLE_KEY=self.site.publishable_key,
+        )
+        self.assertEqual(r.status_code, 201)
+        ev = ReferralLeadEvent.objects.get(site=self.site)
+        self.assertEqual(ev.partner_id, self.partner.id)
+        self.assertEqual(ev.ref_code, rc)
+
     def test_lead_ingest_creates_event_with_partner(self):
         q = f"?site={self.site.public_id}"
         url = "/public/v1/events/leads" + q
