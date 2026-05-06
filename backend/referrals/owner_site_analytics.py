@@ -1,8 +1,8 @@
 """
 Site-scoped owner analytics for the LK dashboard (KPIs, daily series, recent sales).
 
-Aggregates referrals (SiteMembership), widget leads attributed to site referrers
-(ReferralLeadEvent with partner among site members — same bar as visits/sales),
+Aggregates referrals (SiteMembership), widget leads with referral attribution
+(ReferralLeadEvent with non-null partner — excludes organic submits without ref),
 and partner-attributed visits/orders/commissions for members of the site.
 """
 from __future__ import annotations
@@ -84,9 +84,7 @@ def build_site_owner_analytics_payload(
         return q
 
     def leads_qs():
-        if not partner_ids:
-            return ReferralLeadEvent.objects.none()
-        q = ReferralLeadEvent.objects.filter(site=site, partner_id__in=partner_ids)
+        q = ReferralLeadEvent.objects.filter(site=site, partner__isnull=False)
         if since is not None:
             q = q.filter(created_at__gte=since)
         return q
@@ -142,24 +140,23 @@ def build_site_owner_analytics_payload(
     series_from = _start_of_day(series_start)
 
     leads_by_day: dict[date, dict[str, int]] = {}
-    if partner_ids:
-        for row in (
-            ReferralLeadEvent.objects.filter(
-                site=site,
-                partner_id__in=partner_ids,
-                created_at__gte=series_from,
-                created_at__lte=now,
-            )
-            .annotate(day=TruncDate("created_at", tzinfo=tz))
-            .values("day")
-            .annotate(leads=Count("id"))
-        ):
-            dd = row["day"]
-            if dd is None:
-                continue
-            if hasattr(dd, "date"):
-                dd = dd.date()
-            leads_by_day[dd] = {"leads": int(row["leads"])}
+    for row in (
+        ReferralLeadEvent.objects.filter(
+            site=site,
+            partner__isnull=False,
+            created_at__gte=series_from,
+            created_at__lte=now,
+        )
+        .annotate(day=TruncDate("created_at", tzinfo=tz))
+        .values("day")
+        .annotate(leads=Count("id"))
+    ):
+        dd = row["day"]
+        if dd is None:
+            continue
+        if hasattr(dd, "date"):
+            dd = dd.date()
+        leads_by_day[dd] = {"leads": int(row["leads"])}
 
     visits_by_day: dict[date, dict[str, int]] = {}
     if partner_ids:

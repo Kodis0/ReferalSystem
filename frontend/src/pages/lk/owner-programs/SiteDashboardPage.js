@@ -517,7 +517,12 @@ export default function SiteDashboardPage() {
     return byDay.map((row) => {
       const a = Number(row?.leads ?? 0);
       const b = Number(row?.visits ?? 0);
-      return (Number.isFinite(a) ? a : 0) + (Number.isFinite(b) ? b : 0);
+      const c = Number(row?.sales_count ?? 0);
+      return (
+        (Number.isFinite(a) ? a : 0) +
+        (Number.isFinite(b) ? b : 0) +
+        (Number.isFinite(c) ? c : 0)
+      );
     });
   }, [byDay]);
 
@@ -643,7 +648,7 @@ export default function SiteDashboardPage() {
                           Активность по дням
                         </h2>
                         <p className="owner-programs__site-dash-chart-plate-sub">
-                          Сумма заявок с виджета и переходов по реферальным ссылкам
+                          Заявки с виджета (по реферальной ссылке), переходы и оплаченные заказы по дням
                         </p>
                       </div>
                     </header>

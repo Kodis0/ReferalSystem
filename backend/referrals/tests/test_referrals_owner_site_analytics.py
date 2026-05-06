@@ -105,6 +105,28 @@ class SiteOwnerAnalyticsApiTests(TestCase):
         self.assertEqual(r.data["kpis"]["leads_count"], 1)
         self.assertEqual(r.data["funnel"]["leads"], 1)
 
+    def test_analytics_counts_referred_lead_even_when_partner_not_site_member(self):
+        """Widget submit resolved to a partner ref must count even without SiteMembership on this site."""
+        site, _partner_member = self._site_and_partner()
+        outsider = User.objects.create_user(
+            username="outsider_ref_partner",
+            email="outsider-ref@example.com",
+            password="secret12",
+        )
+        external_partner, _ = ensure_partner_profile(outsider)
+        ReferralLeadEvent.objects.create(
+            site=site,
+            partner=external_partner,
+            ref_code=external_partner.ref_code,
+            page_url="https://x/ext",
+        )
+
+        self.api.force_authenticate(self.owner)
+        url = f"/referrals/site/integration/analytics/?site_public_id={site.public_id}&period=7d"
+        r = self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["kpis"]["leads_count"], 1)
+
     def test_analytics_stranger_forbidden(self):
         site, _ = self._site_and_partner()
         stranger = User.objects.create_user(
