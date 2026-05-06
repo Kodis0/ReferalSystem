@@ -4045,6 +4045,7 @@
 
 .owner-programs__site-dash-card_table {
   margin-bottom: 8px;
+  background-color: var(--background-secondary-color);
 }
 
 .owner-programs__site-dash-card-title {

@@ -1031,6 +1031,116 @@ def _loose_payment_flag_unrecognized(flag_text: str) -> bool:
     return f.lower() not in _TILDA_PAID_LOOSE_FLAG
 
 
+_PAYMENT_WEBHOOK_AMOUNT_FLAG_ONLY = frozenset(
+    {
+        "0",
+        "1",
+        "true",
+        "false",
+        "yes",
+        "no",
+        "on",
+        "off",
+    }
+)
+
+
+def _looks_like_russian_phone_digits(digits: str) -> bool:
+    """Digit-only strings that look like RU mobiles — do not treat as a ruble amount."""
+    if not digits.isdigit():
+        return False
+    n = len(digits)
+    if n == 11 and digits[0] in ("7", "8"):
+        return True
+    if n == 10 and digits[0] == "9":
+        return True
+    return False
+
+
+def _parse_payment_field_as_possible_amount(raw: str) -> Decimal:
+    """
+    Tilda often sends ``payment`` as a loose paid flag (0/1). When it holds a decimal or a
+    plausible integer amount (and not a phone-like digit string), use it as rub amount.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return Decimal("0.00")
+    if s.lower() in _PAYMENT_WEBHOOK_AMOUNT_FLAG_ONLY:
+        return Decimal("0.00")
+    normalized = s.replace(" ", "").replace("\xa0", "").replace(",", ".")
+    if "." in normalized:
+        try:
+            d = Decimal(normalized).quantize(Decimal("0.01"))
+            return d if d > 0 else Decimal("0.00")
+        except (InvalidOperation, Exception):
+            return Decimal("0.00")
+    if normalized.isdigit():
+        if _looks_like_russian_phone_digits(normalized):
+            return Decimal("0.00")
+        try:
+            iv = int(normalized)
+            if iv <= 1:
+                return Decimal("0.00")
+            if iv >= 10**9:
+                return Decimal("0.00")
+            return Decimal(iv).quantize(Decimal("0.01"))
+        except Exception:
+            return Decimal("0.00")
+    try:
+        d = Decimal(normalized).quantize(Decimal("0.01"))
+        return d if d > 0 else Decimal("0.00")
+    except Exception:
+        return Decimal("0.00")
+
+
+def _supplement_order_amount_from_flat(flat: Mapping[str, Any], primary: Decimal) -> Decimal:
+    """Extra Tilda field names and ``payment`` when it carries an amount instead of a paid flag."""
+    try:
+        cur = primary.quantize(Decimal("0.01"))
+    except Exception:
+        cur = Decimal("0.00")
+    if cur > 0:
+        return cur
+
+    extra_keys = (
+        "payment_sum",
+        "Payment_sum",
+        "PaymentSum",
+        "paymentSum",
+        "formprice",
+        "Formprice",
+        "FormPrice",
+        "FORM_PRICE",
+        "product_price",
+        "ProductPrice",
+        "Productprice",
+        "OrderSum",
+        "ordersum",
+        "Order_sum",
+        "service_sum",
+        "ServiceSum",
+        "SumTotal",
+        "sumtotal",
+        "Sum_total",
+        "rub",
+        "Rub",
+        "amount_rub",
+        "AmountRub",
+        "cart_total",
+        "CartTotal",
+    )
+    v = _first_decimal(flat, extra_keys)
+    if v > 0:
+        return v
+
+    pay_raw = _first_str(flat, ("payment", "Payment"))
+    pay_amt = _parse_payment_field_as_possible_amount(pay_raw)
+    if pay_amt > 0:
+        return pay_amt
+
+    return cur
+
+
 def _log_tilda_webhook_ingestion(
     *,
     flat: dict,
@@ -1132,7 +1242,9 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
         - **Buyer email** — ``email``, ``Email``, ``E-mail``, ``mail``, ``EMail``,
           ``form_email``, ``Email_`` (attribution fallback when matching a user).
         - **Amount** — ``sum``, ``Sum``, ``amount``, ``Amount``, ``price``, ``Price``,
-          ``subtotal``, ``Subtotal`` (decimal; ``0.00`` if missing/unparseable).
+          ``subtotal``, ``Subtotal``, ``PaymentSum`` / ``payment_sum``, ``Formprice``, etc.
+          (decimal; ``0.00`` if missing/unparseable). If the storefront omits sum fields but
+          sends a numeric ``payment`` value that is not ``0``/``1``, it may be read as amount.
         - **Currency** — ``currency``, ``Currency`` (read in upsert from ``flat``, max 8 chars).
         - **Referral / partner code** — ``ref``, ``Ref``, ``REF``, ``partner_ref``,
           ``referral``, ``ReferralCode``. If absent, any payload value that looks like a URL
@@ -1220,8 +1332,11 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
             "Cost",
             "paymentsum",
             "PaymentSum",
+            "payment_sum",
+            "Payment_sum",
         ),
     )
+    amount = _supplement_order_amount_from_flat(data, amount)
 
     paid_raw = _first_str(
         data,

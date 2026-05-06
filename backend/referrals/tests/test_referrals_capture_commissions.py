@@ -127,6 +127,64 @@ class OrderAttributionAndCommissionTests(TestCase):
         )
         self.assertEqual(order.amount, Decimal("17.25"))
 
+    def test_amount_reads_formprice_and_payment_sum_aliases(self):
+        o1, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-formprice",
+                "Email": self.customer.email,
+                "Formprice": "88.00",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(o1.amount, Decimal("88.00"))
+        o2, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-pay-sum",
+                "Email": self.customer.email,
+                "payment_sum": "55.25",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(o2.amount, Decimal("55.25"))
+
+    def test_payment_field_numeric_amount_when_not_flag(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-pay-field-amt",
+                "Email": self.customer.email,
+                "payment": "1999.50",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("1999.50"))
+
+    def test_payment_flag_one_does_not_become_amount(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-pay-flag-only",
+                "Email": self.customer.email,
+                "payment": "1",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("0.00"))
+
+    def test_payment_phone_like_digits_not_used_as_amount(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-pay-phone-ish",
+                "Email": self.customer.email,
+                "payment": "79161234567",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("0.00"))
+
     def test_commission_on_paid_order(self):
         order, _ = upsert_order_from_tilda_payload(
             {
