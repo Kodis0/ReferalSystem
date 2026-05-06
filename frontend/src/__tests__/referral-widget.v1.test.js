@@ -221,6 +221,9 @@ describe("referral-widget.v1.js", () => {
 
     expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("79");
     expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Dining Chair");
+    expect(form.querySelector('input[type="hidden"][name="site_public_id"]').value).toBe(
+      "00000000-0000-0000-0000-000000000001",
+    );
   });
 
   it("adds hidden order sum from clicked Tilda product card", async () => {

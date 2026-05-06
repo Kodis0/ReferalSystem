@@ -9,6 +9,8 @@ from referrals.models import (
     CustomerAttribution,
     Order,
     ReferralVisit,
+    Site,
+    SiteMembership,
 )
 from referrals.services import (
     ensure_partner_profile,
@@ -201,6 +203,57 @@ class OrderAttributionAndCommissionTests(TestCase):
         self.assertEqual(c.commission_amount, Decimal("20.00"))
         self.partner.refresh_from_db()
         self.assertEqual(self.partner.balance_total, Decimal("20.00"))
+
+    def test_commission_uses_site_percent_from_order_payload(self):
+        site = Site.objects.create(
+            owner=self.partner_user,
+            publishable_key="pk-site-5pct",
+            config_json={"commission_percent": "5.00"},
+        )
+        SiteMembership.objects.create(
+            site=site,
+            user=self.partner_user,
+            partner=self.partner,
+            ref_code=self.partner.ref_code,
+        )
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-site-5pct",
+                "Email": self.customer.email,
+                "sum": "400000.00",
+                "ref": self.partner.ref_code,
+                "site_public_id": str(site.public_id),
+                "paymentstatus": "paid",
+            }
+        )
+        c = Commission.objects.get(order=order)
+        self.assertEqual(c.commission_percent, Decimal("5.00"))
+        self.assertEqual(c.commission_amount, Decimal("20000.00"))
+
+    def test_commission_uses_site_percent_from_membership_fallback(self):
+        site = Site.objects.create(
+            owner=self.partner_user,
+            publishable_key="pk-site-membership-7pct",
+            config_json={"commission_percent": "7.00"},
+        )
+        SiteMembership.objects.create(
+            site=site,
+            user=self.partner_user,
+            partner=self.partner,
+            ref_code=self.partner.ref_code,
+        )
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-site-member-7pct",
+                "Email": self.customer.email,
+                "sum": "1000.00",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        c = Commission.objects.get(order=order)
+        self.assertEqual(c.commission_percent, Decimal("7.00"))
+        self.assertEqual(c.commission_amount, Decimal("70.00"))
 
     def test_self_referral_no_commission(self):
         order, _ = upsert_order_from_tilda_payload(

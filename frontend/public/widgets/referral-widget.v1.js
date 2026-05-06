@@ -885,6 +885,7 @@
     }
     upsertHiddenField(form, "sum", amount);
     upsertHiddenField(form, "product_name", productName);
+    upsertHiddenField(form, "site_public_id", siteId);
   }
 
   /** Pipeline stages (local only; not sent to API). */

@@ -707,6 +707,44 @@ def _is_self_referral(order: Order, partner: PartnerProfile) -> bool:
     )
 
 
+def _order_site_from_payload(order: Order) -> Optional[Site]:
+    raw = order.raw_payload if isinstance(order.raw_payload, dict) else {}
+    site_id = _first_str(
+        raw,
+        (
+            "site_public_id",
+            "SitePublicId",
+            "site",
+            "Site",
+            "site_id",
+            "SiteId",
+        ),
+    )
+    if not site_id:
+        return None
+    return Site.objects.filter(public_id=site_id).first()
+
+
+def _order_site_from_membership(order: Order, partner: PartnerProfile) -> Optional[Site]:
+    if not partner or not order.ref_code:
+        return None
+    membership = (
+        SiteMembership.objects.filter(partner_id=partner.pk, ref_code=order.ref_code)
+        .select_related("site")
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+    return membership.site if membership else None
+
+
+def commission_percent_for_order(order: Order, partner: PartnerProfile) -> Decimal:
+    """Prefer the owning site's current commission percent; partner percent is legacy fallback."""
+    site = _order_site_from_payload(order) or _order_site_from_membership(order, partner)
+    if site is not None:
+        return site_commission_percent(site)
+    return partner.commission_percent
+
+
 def create_commission_for_paid_order(order: Order) -> Optional[Commission]:
     """
     Idempotent: at most one Commission per order (enforced by OneToOne).
@@ -745,7 +783,7 @@ def create_commission_for_paid_order(order: Order) -> Optional[Commission]:
         if existing:
             return existing
 
-        pct = partner.commission_percent
+        pct = commission_percent_for_order(locked, partner)
         base = locked.amount
         amount = (base * pct / Decimal("100")).quantize(Decimal("0.01"))
 
