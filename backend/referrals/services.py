@@ -20,6 +20,7 @@ from django.apps import apps
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import F, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .gamification import (
@@ -1332,6 +1333,8 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
     `app_public_base_url` should be the SPA origin without trailing slash, e.g. https://app.example.com
 
     `recent_leads` is intentionally minimal for partners (no raw name/phone/email/URL/query).
+    `attributed_orders_amount_total` sums amounts for paid orders plus pending orders with amount > 0.
+    `recent_orders` lists those orders (most recent first).
     """
     base = (app_public_base_url or "").rstrip("/")
     referral_link = f"{base}/?ref={partner.ref_code}" if base else f"/?ref={partner.ref_code}"
@@ -1340,6 +1343,13 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
     order_qs = Order.objects.filter(partner=partner)
     attributed_orders = order_qs.count()
     paid_orders = order_qs.filter(status=Order.Status.PAID).count()
+    visible_amount_qs = order_qs.filter(
+        Q(status=Order.Status.PAID)
+        | Q(status=Order.Status.PENDING, amount__gt=0)
+    )
+    attributed_orders_amount_total = visible_amount_qs.aggregate(t=Sum("amount"))["t"] or Decimal(
+        "0.00"
+    )
     commissions_agg = Commission.objects.filter(partner=partner).aggregate(
         total=Sum("commission_amount")
     )
@@ -1377,6 +1387,25 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
         for ev in recent_lead_events
     ]
 
+    recent_orders_qs = (
+        order_qs.filter(
+            Q(status=Order.Status.PAID)
+            | Q(status=Order.Status.PENDING, amount__gt=0)
+        )
+        .annotate(sort_ts=Coalesce("paid_at", "created_at"))
+        .order_by("-sort_ts", "-pk")[:20]
+    )
+    recent_orders = [
+        {
+            "id": o.id,
+            "amount": str(o.amount),
+            "currency": o.currency or "",
+            "status": o.status,
+            "created_at": o.created_at.isoformat(),
+        }
+        for o in recent_orders_qs
+    ]
+
     return {
         "ref_code": partner.ref_code,
         "referral_link": referral_link,
@@ -1387,10 +1416,14 @@ def partner_dashboard_payload(partner: PartnerProfile, *, app_public_base_url: s
         "visit_count": visit_count,
         "attributed_orders_count": attributed_orders,
         "paid_orders_count": paid_orders,
+        "attributed_orders_amount_total": str(
+            Decimal(attributed_orders_amount_total).quantize(Decimal("0.01"))
+        ),
         "commissions_total": str(commissions_total),
         "commission_history": commission_rows,
         "total_leads_count": total_leads_count,
         "recent_leads": recent_leads,
+        "recent_orders": recent_orders,
     }
 
 

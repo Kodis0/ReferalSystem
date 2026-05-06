@@ -3,7 +3,9 @@ Site-scoped owner analytics for the LK dashboard (KPIs, daily series, recent sal
 
 Aggregates referrals (SiteMembership), widget leads with referral attribution
 (ReferralLeadEvent with non-null partner — excludes organic submits without ref),
-and partner-attributed visits/orders/commissions for members of the site.
+and partner-attributed visits/orders for members of the site.
+Sales KPIs include paid orders plus pending orders with a positive amount (form submitted
+with sum before payment confirmation).
 """
 from __future__ import annotations
 
@@ -97,12 +99,20 @@ def build_site_owner_analytics_payload(
             q = q.filter(created_at__gte=since)
         return q
 
-    def paid_orders_qs():
+    def sales_visible_qs():
+        """Paid orders, or pending with amount (webhook / form with sum but no paid flag yet)."""
         if not partner_ids:
             return Order.objects.none()
-        q = Order.objects.filter(partner_id__in=partner_ids, status=Order.Status.PAID)
+        q = Order.objects.filter(partner_id__in=partner_ids).filter(
+            Q(status=Order.Status.PAID)
+            | Q(status=Order.Status.PENDING, amount__gt=0)
+        )
         if since is not None:
-            q = q.filter(Q(paid_at__gte=since) | Q(paid_at__isnull=True, created_at__gte=since))
+            q = q.filter(
+                Q(status=Order.Status.PAID, paid_at__gte=since)
+                | Q(status=Order.Status.PAID, paid_at__isnull=True, created_at__gte=since)
+                | Q(status=Order.Status.PENDING, amount__gt=0, created_at__gte=since)
+            )
         return q
 
     def commissions_qs():
@@ -117,7 +127,7 @@ def build_site_owner_analytics_payload(
     visits_count = visits_qs().count()
     leads_count = leads_qs().count()
 
-    paid_all = paid_orders_qs()
+    paid_all = sales_visible_qs()
     sales_count = paid_all.count()
     amount_agg = paid_all.aggregate(total=Sum("amount"))
     sales_amount = amount_agg["total"] if amount_agg["total"] is not None else Decimal("0.00")
@@ -176,6 +186,13 @@ def build_site_owner_analytics_payload(
     sales_by_day: dict[date, dict[str, Any]] = {}
     commissions_by_day: dict[date, dict[str, Any]] = {}
     if partner_ids:
+        merged_sales: dict[date, dict[str, Decimal | int]] = {}
+
+        def _merge_sales_day(dd: date, cnt: int, amt: Decimal) -> None:
+            cur = merged_sales.setdefault(dd, {"sales_count": 0, "sales_amount": Decimal("0.00")})
+            cur["sales_count"] = int(cur["sales_count"]) + cnt
+            cur["sales_amount"] = Decimal(cur["sales_amount"]) + amt
+
         paid_base = Order.objects.filter(partner_id__in=partner_ids, status=Order.Status.PAID).annotate(
             eff_ts=Coalesce("paid_at", "created_at"),
         )
@@ -191,9 +208,32 @@ def build_site_owner_analytics_payload(
             if hasattr(dd, "date"):
                 dd = dd.date()
             amt = row["sales_amount"] if row["sales_amount"] is not None else Decimal("0.00")
+            _merge_sales_day(dd, int(row["sales_count"]), Decimal(amt))
+
+        for row in (
+            Order.objects.filter(
+                partner_id__in=partner_ids,
+                status=Order.Status.PENDING,
+                amount__gt=0,
+                created_at__gte=series_from,
+                created_at__lte=now,
+            )
+            .annotate(day=TruncDate("created_at", tzinfo=tz))
+            .values("day")
+            .annotate(sales_count=Count("id"), sales_amount=Sum("amount"))
+        ):
+            dd = row["day"]
+            if dd is None:
+                continue
+            if hasattr(dd, "date"):
+                dd = dd.date()
+            amt = row["sales_amount"] if row["sales_amount"] is not None else Decimal("0.00")
+            _merge_sales_day(dd, int(row["sales_count"]), Decimal(amt))
+
+        for dd, v in merged_sales.items():
             sales_by_day[dd] = {
-                "sales_count": int(row["sales_count"]),
-                "sales_amount": str(Decimal(amt).quantize(Decimal("0.01"))),
+                "sales_count": int(v["sales_count"]),
+                "sales_amount": str(Decimal(v["sales_amount"]).quantize(Decimal("0.01"))),
             }
 
         for row in (
@@ -229,10 +269,15 @@ def build_site_owner_analytics_payload(
 
     recent_orders: list[dict[str, Any]] = []
     if partner_ids:
-        ro = Order.objects.filter(partner_id__in=partner_ids, status=Order.Status.PAID).order_by(
-            "-paid_at",
-            "-created_at",
-        )[:20]
+        ro = (
+            Order.objects.filter(partner_id__in=partner_ids)
+            .filter(
+                Q(status=Order.Status.PAID)
+                | Q(status=Order.Status.PENDING, amount__gt=0)
+            )
+            .annotate(sort_ts=Coalesce("paid_at", "created_at"))
+            .order_by("-sort_ts", "-pk")[:20]
+        )
         for o in ro:
             ts = o.paid_at or o.created_at
             recent_orders.append(
@@ -241,6 +286,7 @@ def build_site_owner_analytics_payload(
                     "at": ts.isoformat() if ts else o.created_at.isoformat(),
                     "amount": str(o.amount),
                     "currency": o.currency or "",
+                    "status": o.status,
                     "ref_code": (o.ref_code or "")[:32],
                     "customer_email_masked": mask_email_for_partner_dashboard(o.customer_email or ""),
                 }

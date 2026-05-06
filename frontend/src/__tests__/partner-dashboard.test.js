@@ -29,10 +29,12 @@ describe("PartnerDashboard", () => {
       visit_count: 0,
       attributed_orders_count: 0,
       paid_orders_count: 0,
+      attributed_orders_amount_total: "0.00",
       commissions_total: "0.00",
       commission_history: [],
       total_leads_count: 0,
       recent_leads: [],
+      recent_orders: [],
       ...overrides,
     };
   }

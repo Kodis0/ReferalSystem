@@ -706,8 +706,16 @@ export default function SiteDashboardPage() {
                   </div>
                 </article>
                 <div className="owner-programs__site-dash-row-kpis" aria-label="Продажи за период">
-                  <SiteDashKpiCard label="Продаж" value={formatInt(kpis.sales_count)} hint="Оплаченные заказы" />
-                  <SiteDashKpiCard label="Сумма продаж" value={formatMoney(kpis.sales_amount)} hint="Оплаченные, сумма" />
+                  <SiteDashKpiCard
+                    label="Продаж"
+                    value={formatInt(kpis.sales_count)}
+                    hint="Оплаченные и заказы с суммой до подтверждения оплаты"
+                  />
+                  <SiteDashKpiCard
+                    label="Сумма продаж"
+                    value={formatMoney(kpis.sales_amount)}
+                    hint="По этим же заказам (включая ожидающие подтверждение)"
+                  />
                 </div>
               </div>
 
@@ -756,13 +764,14 @@ export default function SiteDashboardPage() {
 
           <section className="owner-programs__site-dash-card owner-programs__site-dash-card_table" aria-labelledby="site-dash-sales-table-title">
             <h2 id="site-dash-sales-table-title" className="owner-programs__site-dash-card-title">
-              Последние продажи
+              Последние заказы
             </h2>
             {recentSales.length === 0 ? (
               <div className="owner-programs__site-dash-empty-block">
-                <p className="owner-programs__site-dash-empty-title">Пока нет оплаченных заказов</p>
+                <p className="owner-programs__site-dash-empty-title">Пока нет заказов с суммой</p>
                 <p className="owner-programs__site-dash-empty-text">
-                  Когда клиенты оплатят заказы по реферальным ссылкам участников, они появятся здесь.
+                  После отправки формы или оплаты с суммой по реферальным ссылкам участников записи появятся здесь
+                  (в т.ч. до подтверждения платежа).
                 </p>
               </div>
             ) : (
@@ -772,6 +781,7 @@ export default function SiteDashboardPage() {
                     <tr>
                       <th>Дата</th>
                       <th>Сумма</th>
+                      <th>Статус</th>
                       <th>Код</th>
                       <th>Email</th>
                     </tr>
@@ -784,6 +794,7 @@ export default function SiteDashboardPage() {
                           {formatMoney(row.amount)}
                           {row.currency ? ` ${row.currency}` : ""}
                         </td>
+                        <td>{row.status ?? "—"}</td>
                         <td>{row.ref_code || "—"}</td>
                         <td>{row.customer_email_masked || "—"}</td>
                       </tr>

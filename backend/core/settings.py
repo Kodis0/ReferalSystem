@@ -317,7 +317,7 @@ REFERRAL_DEFAULT_COMMISSION_PERCENT = os.getenv("REFERRAL_DEFAULT_COMMISSION_PER
 # Tilda webhook: if True, treat orders with amount > 0 as paid for commission when payment
 # fields are absent or non-definitive (never overrides explicit unpaid primary status).
 REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT = (
-    os.getenv("REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT", "False").lower() == "true"
+    os.getenv("REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT", "True").lower() == "true"
 )
 
 # Public widget POST /public/v1/events/leads: suppress duplicate submit attempts within this window.

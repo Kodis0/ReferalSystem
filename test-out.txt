@@ -1,0 +1,219 @@
+﻿python : Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+C:\Users\ekimt\AppData\Local\Temp\ps-script-08323c94-691e-4afb-8b57-a3f265c1254d.ps1:83 знак:54
++ ... em\backend; python manage.py test referrals --failfast -v 2 2>&1 | Ou ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Creating test d...che=shared')...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+Found 427 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: corsheaders, messages, rest_framework, staticfiles
+  Apply all migrations: admin, auth, contenttypes, referrals, sessions, users
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying users.0001_initial... OK
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying referrals.0001_initial... OK
+  Applying referrals.0002_site_and_lead_events... OK
+  Applying referrals.0003_referralleadevent_amount_currency_product_name... OK
+  Applying referrals.0004_referralleadevent_dedup_and_submission_stage... OK
+  Applying referrals.0005_referralleadevent_client_observed_outcome... OK
+  Applying referrals.0006_public_leadingestaudit... OK
+  Applying referrals.0007_site_lifecycle_and_membership... OK
+  Applying referrals.0008_project_and_site_project... OK
+  Applying referrals.0009_project_is_default... OK
+  Applying referrals.0010_site_last_widget_seen... OK
+  Applying referrals.0011_site_owner_activity_log... OK
+  Applying referrals.0012_site_widget_verification_fields... OK
+  Applying referrals.0013_default_owner_project_brand_avatar... OK
+  Applying referrals.0014_siteowneractivitylog_owner_nullable_site... OK
+  Applying referrals.0015_gamification... OK
+  Applying referrals.0016_gamification_attempt_replay_fields... OK
+  Applying referrals.0017_gamification_challenge_lives... OK
+  Applying referrals.0018_user_achievement... OK
+  Applying referrals.0019_referral_shop_points... OK
+  Applying referrals.0020_gamificationprofile_streak_shields_available... OK
+  Applying referrals.0021_gamificationprofile_streak_shields_max... OK
+  Applying referrals.0022_gamificationprofile_fast_life_regen_until... OK
+  Applying referrals.0023_shop_owned_frame_and_active_minigame_frame... OK
+  Applying referrals.0024_programbudgettopup_and_more... OK
+  Applying sessions.0001_initial... OK
+  Applying users.0002_customuser_is_verified... OK
+  Applying users.0003_alter_customuser_username... OK
+  Applying users.0004_customuser_public_id... OK
+  Applying users.0005_customuser_avatar_data_url... OK
+  Applying users.0006_customuser_personal_passport... OK
+  Applying users.0007_customuser_fio_account_type... OK
+  Applying users.0008_customuser_phone... OK
+  Applying users.0009_supportticket... OK
+  Applying users.0010_supportticket_is_closed... OK
+  Applying users.0011_customuser_telegram_id... OK
+  Applying users.0012_customuser_account_owner... OK
+  Applying users.0013_supportticket_closed_at... OK
+  Applying users.0014_webauthn_credential... OK
+  Applying users.0015_oauth_provider_links... OK
+test_award_returns_zero_when_xpevent_with_idempotency_key_already_exists (referrals.tests.test_achievements_mvp.Achieve
+mentXpAwardIdempotencyTests.test_award_returns_zero_when_xpevent_with_idempotency_key_already_exists)
+Duplicate key path: row visible after failed insert \u2192 idempotent no-op. ... ok
+test_integrity_error_without_matching_row_reraises (referrals.tests.test_achievements_mvp.AchievementXpAwardIdempotency
+Tests.test_integrity_error_without_matching_row_reraises) ... ok
+test_second_award_returns_zero_no_double_xp_one_xpevent (referrals.tests.test_achievements_mvp.AchievementXpAwardIdempo
+tencyTests.test_second_award_returns_zero_no_double_xp_one_xpevent) ... ok
+test_best_challenge_score_next_day_higher_only (referrals.tests.test_gamification.GamificationApiTests.test_best_challe
+nge_score_next_day_higher_only) ... ok
+test_best_challenge_score_only_increases (referrals.tests.test_gamification.GamificationApiTests.test_best_challenge_sc
+ore_only_increases) ... ok
+test_client_score_mismatch_sets_warning_awards_server_score (referrals.tests.test_gamification.GamificationApiTests.tes
+t_client_score_mismatch_sets_warning_awards_server_score) ... ok
+test_daily_challenge_base_xp_brackets (referrals.tests.test_gamification.GamificationApiTests.test_daily_challenge_base
+_xp_brackets) ... ok
+test_finish_awards_xp_once (referrals.tests.test_gamification.GamificationApiTests.test_finish_awards_xp_once) ... ok
+test_finish_without_start_returns_error (referrals.tests.test_gamification.GamificationApiTests.test_finish_without_sta
+rt_returns_error) ... ok
+test_foreign_attempt_rejected (referrals.tests.test_gamification.GamificationApiTests.test_foreign_attempt_rejected) ..
+. ok
+test_invalid_placement_returns_400_no_xpevent (referrals.tests.test_gamification.GamificationApiTests.test_invalid_plac
+ement_returns_400_no_xpevent) ... ok
+test_leaderboard_empty (referrals.tests.test_gamification.GamificationApiTests.test_leaderboard_empty) ... ok
+test_leaderboard_orders_by_best_score_today (referrals.tests.test_gamification.GamificationApiTests.test_leaderboard_or
+ders_by_best_score_today) ... ok
+test_leaderboard_requires_auth (referrals.tests.test_gamification.GamificationApiTests.test_leaderboard_requires_auth) 
+... ok
+test_moves_too_long_rejected (referrals.tests.test_gamification.GamificationApiTests.test_moves_too_long_rejected) ... 
+ok
+test_second_finish_does_not_award_again (referrals.tests.test_gamification.GamificationApiTests.test_second_finish_does
+_not_award_again) ... ok
+test_start_creates_new_attempt_each_call_and_consumes_life (referrals.tests.test_gamification.GamificationApiTests.test
+_start_creates_new_attempt_each_call_and_consumes_life) ... ok
+test_start_forbidden_when_no_lives (referrals.tests.test_gamification.GamificationApiTests.test_start_forbidden_when_no
+_lives) ... ok
+test_streak_increments_at_most_once_per_day_with_two_rounds (referrals.tests.test_gamification.GamificationApiTests.tes
+t_streak_increments_at_most_once_per_day_with_two_rounds) ... ok
+test_streak_increments_next_day (referrals.tests.test_gamification.GamificationApiTests.test_streak_increments_next_day
+) ... ok
+test_streak_multiplier_table (referrals.tests.test_gamification.GamificationApiTests.test_streak_multiplier_table) ... 
+ok
+test_streak_resets_after_skip (referrals.tests.test_gamification.GamificationApiTests.test_streak_resets_after_skip) ..
+. ok
+test_streak_shield_consumes_one_missed_day (referrals.tests.test_gamification.GamificationApiTests.test_streak_shield_c
+onsumes_one_missed_day) ... ok
+test_streak_shield_not_used_when_gap_exceeds_one_day (referrals.tests.test_gamification.GamificationApiTests.test_strea
+k_shield_not_used_when_gap_exceeds_one_day) ... ok
+test_summary_creates_profile (referrals.tests.test_gamification.GamificationApiTests.test_summary_creates_profile) ... 
+ok
+test_summary_profile_league_id_silver_when_sales_level_streak_gates_met (referrals.tests.test_gamification.Gamification
+ApiTests.test_summary_profile_league_id_silver_when_sales_level_streak_gates_met) ... ok
+test_summary_profile_league_id_start_when_level_below_gate_despite_sales (referrals.tests.test_gamification.Gamificatio
+nApiTests.test_summary_profile_league_id_start_when_level_below_gate_despite_sales) ... ok
+test_summary_profile_league_id_start_without_sales (referrals.tests.test_gamification.GamificationApiTests.test_summary
+_profile_league_id_start_without_sales) ... ok
+test_summary_restores_lives_after_four_hours (referrals.tests.test_gamification.GamificationApiTests.test_summary_resto
+res_lives_after_four_hours) ... ok
+test_xpevent_daily_challenge_idempotency_key_per_attempt (referrals.tests.test_gamification.GamificationApiTests.test_x
+pevent_daily_challenge_idempotency_key_per_attempt) ... ok
+test_level_9_at_10800_xp_and_level_10_at_13500 (referrals.tests.test_gamification.LevelCurveTests.test_level_9_at_10800
+_xp_and_level_10_at_13500) ... ok
+test_summary_profile_level_follows_new_curve (referrals.tests.test_gamification.LevelCurveTests.test_summary_profile_le
+vel_follows_new_curve) ... ok
+test_xp_at_threshold_is_exactly_that_level (referrals.tests.test_gamification.LevelCurveTests.test_xp_at_threshold_is_e
+xactly_that_level) ... ok
+test_xp_below_threshold_stays_previous_level (referrals.tests.test_gamification.LevelCurveTests.test_xp_below_threshold
+_stays_previous_level) ... ok
+test_local_today_is_django_localdate (referrals.tests.test_gamification.LocalTodayPatchTests.test_local_today_is_django
+_localdate) ... ok
+test_no_partner_skips_xp (referrals.tests.test_gamification.PurchaseReferralXpGrantTests.test_no_partner_skips_xp) ... 
+ok
+test_purchase_xp_idempotent (referrals.tests.test_gamification.PurchaseReferralXpGrantTests.test_purchase_xp_idempotent
+) ... ok
+test_self_referral_skips_xp (referrals.tests.test_gamification.PurchaseReferralXpGrantTests.test_self_referral_skips_xp
+) ... ok
+test_bronze_requires_all_three_gates (referrals.tests.test_gamification.ReferralLeagueFormulaTests.test_bronze_requires
+_all_three_gates) ... ok
+test_high_sales_low_level_stays_start (referrals.tests.test_gamification.ReferralLeagueFormulaTests.test_high_sales_low
+_level_stays_start) ... ok
+test_build_gamification_summary_points_block (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_b
+uild_gamification_summary_points_block) ... ok
+test_integrity_error_without_idempotent_row_reraises (referrals.tests.test_gamification.ReferralPurchasePointsGrantTest
+s.test_integrity_error_without_idempotent_row_reraises) ... ok
+test_no_partner_no_points (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_no_partner_no_points
+) ... ok
+test_non_rub_no_points_no_ledger (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_non_rub_no_po
+ints_no_ledger) ... ok
+test_points_use_sales_excluding_current_order_for_league (referrals.tests.test_gamification.ReferralPurchasePointsGrant
+Tests.test_points_use_sales_excluding_current_order_for_league)
+Without exclusion, total sales would reach silver; excluded sales stay bronze. ... ok
+test_purchase_points_accrual_and_ledger (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_purcha
+se_points_accrual_and_ledger) ... ok
+test_purchase_points_idempotent (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_purchase_point
+s_idempotent) ... ok
+test_self_referral_no_points (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_self_referral_no_
+points) ... ok
+test_silver_multiplier_large_order_after_prior_sales (referrals.tests.test_gamification.ReferralPurchasePointsGrantTest
+s.test_silver_multiplier_large_order_after_prior_sales) ... ok
+test_start_multiplier_100k_rub_order (referrals.tests.test_gamification.ReferralPurchasePointsGrantTests.test_start_mul
+tiplier_100k_rub_order) ... ok
+test_fast_life_regen_cap_returns_limit (referrals.tests.test_gamification.ReferralShopApiTests.test_fast_life_regen_cap
+_returns_limit) ... ok
+test_fast_life_regen_extend_active (referrals.tests.test_gamification.ReferralShopApiTests.test_fast_life_regen_extend_
+active) ... ok
+test_fast_life_regen_idempotent (referrals.tests.test_gamification.ReferralShopApiTests.test_fast_life_regen_idempotent
+) ... ok
+test_fast_life_regen_not_enough_points (referrals.tests.test_gamification.ReferralShopApiTests.test_fast_life_regen_not
+_enough_points) ... ok
+test_fast_life_regen_redeem_success (referrals.tests.test_gamification.ReferralShopApiTests.test_fast_life_regen_redeem
+_success) ... ok
+test_frame_garland_redeem_not_purchasable (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_garland_re
+deem_not_purchasable) ... ok
+test_frame_neon_line_already_owned (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_neon_line_already
+_owned) ... ok
+test_frame_neon_line_buy_success (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_neon_line_buy_succe
+ss) ... ok
+test_frame_neon_line_idempotent (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_neon_line_idempotent
+) ... ok
+test_frame_neon_line_not_enough_points (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_neon_line_not
+_enough_points) ... ok
+test_frame_pixel_arcade_already_owned (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_pixel_arcade_a
+lready_owned) ... ok
+test_frame_pixel_arcade_buy_success (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_pixel_arcade_buy
+_success) ... FAIL
+
+======================================================================
+FAIL: test_frame_pixel_arcade_buy_success (referrals.tests.test_gamification.ReferralShopApiTests.test_frame_pixel_arca
+de_buy_success)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\GitRepository\ReferalSystem\backend\referrals\tests\test_gamification.py", line 1248, in test_frame_pixel_ar
+cade_buy_success
+    self.assertEqual(row.metadata.get("reward_title"), "Pixel Arcade")
+AssertionError: '╟ьхщър' != 'Pixel Arcade'
+- ╟ьхщър
++ Pixel Arcade
+
+
+----------------------------------------------------------------------
+Ran 62 tests in 0.797s
+
+FAILED (failures=1)
+Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+
+  Applying users.0016_password_reset_code... OK
+System check identified no issues (0 silenced).

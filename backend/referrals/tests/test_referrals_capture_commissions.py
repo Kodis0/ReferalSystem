@@ -326,6 +326,7 @@ class OrderAttributionAndCommissionTests(TestCase):
         self.assertEqual(order.external_id, "")
         self.assertIn("missing_external_id_for_dedupe", " ".join(cm.output))
 
+    @override_settings(REFERRAL_MVP_ASSUME_PAID_IF_AMOUNT_PRESENT=False)
     def test_unknown_payment_status_stays_pending_and_logs(self):
         with self.assertLogs("referrals.services", level="WARNING") as cm:
             order, _ = upsert_order_from_tilda_payload(
@@ -465,6 +466,9 @@ class MvpAssumePaidCommissionTests(TestCase):
             self.partner, app_public_base_url="https://app.example.com"
         )
         self.assertEqual(dash["paid_orders_count"], 1)
+        self.assertEqual(dash["attributed_orders_amount_total"], "30.00")
+        self.assertEqual(len(dash["recent_orders"]), 1)
+        self.assertEqual(dash["recent_orders"][0]["status"], Order.Status.PAID)
         self.assertEqual(Decimal(dash["commissions_total"]), Decimal("3.00"))
         self.assertEqual(len(dash["commission_history"]), 1)
         self.assertEqual(dash["total_leads_count"], 0)

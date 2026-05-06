@@ -68,6 +68,7 @@ function PartnerDashboard() {
 
   const history = Array.isArray(data?.commission_history) ? data.commission_history : [];
   const recentLeads = Array.isArray(data?.recent_leads) ? data.recent_leads : [];
+  const recentOrders = Array.isArray(data?.recent_orders) ? data.recent_orders : [];
 
   return (
     <div className="lk-dashboard lk-partner">
@@ -127,6 +128,10 @@ function PartnerDashboard() {
               <div className="lk-partner__stat-value">{data.paid_orders_count}</div>
             </div>
             <div className="lk-partner__stat">
+              <div className="lk-partner__stat-label">Сумма заказов</div>
+              <div className="lk-partner__stat-value">{data.attributed_orders_amount_total ?? "—"}</div>
+            </div>
+            <div className="lk-partner__stat">
               <div className="lk-partner__stat-label">Баланс доступно</div>
               <div className="lk-partner__stat-value">{data.balance_available}</div>
             </div>
@@ -139,6 +144,34 @@ function PartnerDashboard() {
               <div className="lk-partner__stat-value">{data.commissions_total}</div>
             </div>
           </div>
+
+          <h2 className="lk-partner__section-title">Недавние заказы</h2>
+          {recentOrders.length === 0 ? (
+            <p className="lk-partner__muted">Пока нет заказов с суммой по вашей ссылке</p>
+          ) : (
+            <div className="lk-partner__table-wrap">
+              <table className="lk-partner__table">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Сумма</th>
+                    <th>Валюта</th>
+                    <th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentOrders.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.created_at?.replace("T", " ").slice(0, 19)}</td>
+                      <td>{row.amount ?? "—"}</td>
+                      <td>{row.currency || "—"}</td>
+                      <td>{row.status ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <h2 className="lk-partner__section-title">Недавние лиды</h2>
           {recentLeads.length === 0 ? (
