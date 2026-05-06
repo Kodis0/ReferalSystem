@@ -1616,6 +1616,11 @@ def member_program_order_scope_q(
     Orders belonging to a member program: ``Order.site_id`` when set, plus legacy paid rows
     with ``site_id`` NULL when they can be attributed to this program (same rules as
     membership ref snapshots; avoids showing zeros after ``Order.site`` rollout).
+
+    If several programs share the same membership ``ref_code`` (or several rows have an
+    empty ref snapshot), legacy rows without ``site_id`` cannot be split safely across all
+    of them: they are counted only for the **earliest** ``SiteMembership`` row by ``pk`` so
+    totals stay non-zero somewhere without duplicating the same money on every card.
     """
     q_site = Q(site_id=site.pk)
     if membership is None:
@@ -1623,10 +1628,16 @@ def member_program_order_scope_q(
     uid = partner.user_id
     mref = (membership.ref_code or "").strip()
     if mref:
-        if SiteMembership.objects.filter(user_id=uid, ref_code=mref).count() > 1:
+        first_same_ref = (
+            SiteMembership.objects.filter(user_id=uid, ref_code=mref).order_by("pk").first()
+        )
+        if first_same_ref is None or membership.pk != first_same_ref.pk:
             return q_site
         return q_site | Q(site_id__isnull=True, ref_code=mref)
-    if SiteMembership.objects.filter(user_id=uid, ref_code="").count() != 1:
+    first_empty_ref = (
+        SiteMembership.objects.filter(user_id=uid, ref_code="").order_by("pk").first()
+    )
+    if first_empty_ref is None or membership.pk != first_empty_ref.pk:
         return q_site
     return q_site | Q(site_id__isnull=True, ref_code=partner.ref_code)
 

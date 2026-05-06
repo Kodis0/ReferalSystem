@@ -1,6 +1,7 @@
 """Soft-archive Site: preserve memberships/keys; restore by domain; Order.site scoping for member stats."""
 
 import uuid
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -213,6 +214,56 @@ class OrderSiteAndMemberStatsTests(TestCase):
         self.assertEqual(totals_b["referrer_sales_total"], "50.00")
         global_totals = member_referrer_money_totals(self.partner)
         self.assertEqual(global_totals["referrer_sales_total"], "150.00")
+
+    def test_legacy_null_attributed_to_first_membership_when_duplicate_ref(self):
+        """Same ref on two programs: legacy paid rows without site count once (lowest membership pk)."""
+        site_a = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_ld_a_" + uuid.uuid4().hex,
+            allowed_origins=["https://ld-a.example"],
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+        )
+        site_b = Site.objects.create(
+            owner=self.owner,
+            publishable_key="pk_ld_b_" + uuid.uuid4().hex,
+            allowed_origins=["https://ld-b.example"],
+            status=Site.Status.VERIFIED,
+            verified_at=timezone.now(),
+        )
+        m_a = SiteMembership.objects.create(
+            site=site_a,
+            user=self.partner_user,
+            partner=self.partner,
+            ref_code=self.partner.ref_code,
+        )
+        m_b = SiteMembership.objects.create(
+            site=site_b,
+            user=self.partner_user,
+            partner=self.partner,
+            ref_code=self.partner.ref_code,
+        )
+        Order.objects.create(
+            dedupe_key="tilda:legacy-dup-ref-one",
+            external_id="legacy-dup-ref-one",
+            payload_fingerprint="b" * 64,
+            partner=self.partner,
+            ref_code=self.partner.ref_code,
+            amount=Decimal("77.00"),
+            status=Order.Status.PAID,
+            paid_at=timezone.now(),
+            site_id=None,
+        )
+
+        ta = member_referrer_money_totals(self.partner, site=site_a, membership=m_a)
+        tb = member_referrer_money_totals(self.partner, site=site_b, membership=m_b)
+        first = m_a if m_a.pk < m_b.pk else m_b
+        if first.pk == m_a.pk:
+            self.assertEqual(ta["referrer_sales_total"], "77.00")
+            self.assertEqual(tb["referrer_sales_total"], "0.00")
+        else:
+            self.assertEqual(tb["referrer_sales_total"], "77.00")
+            self.assertEqual(ta["referrer_sales_total"], "0.00")
 
     def test_logs_warning_when_partner_but_site_unresolved(self):
         site_a = Site.objects.create(
