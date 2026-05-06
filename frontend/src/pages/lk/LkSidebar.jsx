@@ -245,6 +245,8 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
 
   let programsListActive = currentPath === "/lk/programs";
   let connectedProgramsActive = currentPath === "/lk/my-programs";
+  const balanceActive = currentPath === "/lk/balance";
+  const documentsActive = currentPath === "/lk/documents";
   const miniGamePlayActive = currentPath === "/lk/mini-game";
   const miniGameProgressActive = currentPath === "/lk/mini-game/progress";
   const miniGameRatingActive = currentPath === "/lk/mini-game/rating";
@@ -814,7 +816,12 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
                 </g>
               </g>
             </svg>
-            <span className="lk-sidebar__nav-text">Новости и обновления</span>
+            <span className="lk-sidebar__nav-label-row">
+              <span className="lk-sidebar__nav-text">Новости и обновления</span>
+              <span className="lk-sidebar__nav-soon" translate="no">
+                SOON
+              </span>
+            </span>
           </button>
 
           <button
@@ -862,7 +869,12 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
                 </g>
               </g>
             </svg>
-            <span className="lk-sidebar__nav-text">Сообщить о баге</span>
+            <span className="lk-sidebar__nav-label-row">
+              <span className="lk-sidebar__nav-text">Сообщить о баге</span>
+              <span className="lk-sidebar__nav-soon" translate="no">
+                SOON
+              </span>
+            </span>
           </button>
 
           <button
@@ -903,7 +915,12 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
                 </span>
               ) : null}
             </span>
-            <span className="lk-sidebar__nav-text">Предложить идею</span>
+            <span className="lk-sidebar__nav-label-row">
+              <span className="lk-sidebar__nav-text">Предложить идею</span>
+              <span className="lk-sidebar__nav-soon" translate="no">
+                SOON
+              </span>
+            </span>
           </button>
 
           <Link
@@ -929,6 +946,74 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
           >
             <MiniGameRatingNavIcon />
             <span className="lk-sidebar__nav-text">Рейтинг</span>
+          </Link>
+
+          <div className="lk-sidebar__nav-divider" aria-hidden="true" />
+
+          <Link
+            to="/lk/balance"
+            className={itemClass(balanceActive)}
+            aria-current={balanceActive ? "page" : undefined}
+          >
+            <svg
+              className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_balance"
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M4 7.5H19C20.1046 7.5 21 8.39543 21 9.5V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V6C3 4.89543 3.89543 4 5 4H17"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M16 13.5H21V17.5H16C14.8954 17.5 14 16.6046 14 15.5C14 14.3954 14.8954 13.5 16 13.5Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M17 15.5H17.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span className="lk-sidebar__nav-text">Баланс и платежи</span>
+          </Link>
+
+          <Link
+            to="/lk/documents"
+            className={itemClass(documentsActive)}
+            aria-current={documentsActive ? "page" : undefined}
+          >
+            <svg
+              className="lk-sidebar__nav-icon-svg lk-sidebar__nav-icon-svg_documents"
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M7 3H14.5L19 7.5V21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M14 3V8H19"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M9 13H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M9 17H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span className="lk-sidebar__nav-text">Документы</span>
           </Link>
         </nav>
         </div>

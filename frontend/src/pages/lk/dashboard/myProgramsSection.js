@@ -606,6 +606,13 @@ export function MyProgramsSection() {
                   Откройте каталог, выберите программу и получите персональную ссылку.
                 </p>
               </div>
+              <button
+                type="button"
+                className="lk-dashboard__programs-empty-catalog-btn"
+                onClick={() => navigate("/lk/programs")}
+              >
+                Перейти в каталог
+              </button>
             </div>
           ) : filteredPrograms.length === 0 ? (
             <p className="lk-dashboard__programs-muted">По вашему запросу программ не найдено.</p>

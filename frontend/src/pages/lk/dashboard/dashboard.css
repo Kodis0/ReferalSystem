@@ -365,7 +365,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   width: 100%;
-  margin: 0 0 48px;
+  margin: 0;
   box-sizing: border-box;
 }
 
@@ -457,6 +457,7 @@
   min-width: 0;
   max-width: none;
   width: auto;
+  background: #17212b;
 }
 
 .lk-dashboard__programs-title {
@@ -817,6 +818,10 @@
 
 .lk-dashboard__programs-empty-card {
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
   width: 100%;
   padding: 24px;
   border-radius: 12px;
@@ -840,6 +845,37 @@
   color: #7f91a4;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.lk-dashboard__programs-empty-catalog-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 152px;
+  height: 37px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 12px;
+  background: #7177f8;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lk-dashboard__programs-empty-catalog-btn:hover,
+.lk-dashboard__programs-empty-catalog-btn:focus-visible {
+  background: #6268e8;
+  color: #ffffff;
+}
+
+.lk-dashboard__programs-empty-catalog-btn:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.45);
+  outline-offset: 2px;
 }
 
 .lk-dashboard__programs-list {

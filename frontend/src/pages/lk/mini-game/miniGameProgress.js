@@ -42,7 +42,6 @@ import { buildPerimeterGarlandBulbs } from "./garlandBulbs";
 import { PixelArcadeFrameTravelSvg } from "./PixelArcadeFrameTravelSvg";
 import { NeonLineFrameTravelSvg } from "./NeonLineFrameTravelSvg";
 import { PacmanChaseFrameTravelSvg } from "./PacmanChaseFrameTravelSvg";
-
 const MINI_GAME_SHOP_FRAME_GARLAND_BULBS = buildPerimeterGarlandBulbs();
 
 const MINI_GAME_FRAME_SHOP_COPY = {
@@ -306,7 +305,7 @@ export default function MiniGameProgressPage() {
   const [summaryLoadState, setSummaryLoadState] = useState("loading");
   const [summaryError, setSummaryError] = useState(null);
   const [timerTick, setTimerTick] = useState(0);
-  const [progressTab, setProgressTab] = useState("progress");
+  const [progressTab, setProgressTab] = useState("gameProgress");
 
   const [shopPayload, setShopPayload] = useState(null);
   const [shopLoadState, setShopLoadState] = useState("idle");
@@ -883,19 +882,31 @@ export default function MiniGameProgressPage() {
       <nav
         className="owner-programs__tabs"
         role="tablist"
-        aria-label="Прогресс, магазин и достижения"
+        aria-label="Игровой прогресс, лиги, магазин и достижения"
       >
         <button
           type="button"
-          id="mini-game-progress-tab-progress"
+          id="mini-game-progress-tab-game-progress"
           role="tab"
-          aria-selected={progressTab === "progress"}
-          aria-controls="mini-game-progress-panel-progress"
-          tabIndex={progressTab === "progress" ? 0 : -1}
-          className={tabClass(progressTab === "progress")}
-          onClick={() => setProgressTab("progress")}
+          aria-selected={progressTab === "gameProgress"}
+          aria-controls="mini-game-progress-panel-game-progress"
+          tabIndex={progressTab === "gameProgress" ? 0 : -1}
+          className={tabClass(progressTab === "gameProgress")}
+          onClick={() => setProgressTab("gameProgress")}
         >
-          Прогресс
+          Игровой прогресс
+        </button>
+        <button
+          type="button"
+          id="mini-game-progress-tab-leagues"
+          role="tab"
+          aria-selected={progressTab === "leagues"}
+          aria-controls="mini-game-progress-panel-leagues"
+          tabIndex={progressTab === "leagues" ? 0 : -1}
+          className={tabClass(progressTab === "leagues")}
+          onClick={() => setProgressTab("leagues")}
+        >
+          Лиги
         </button>
         <button
           type="button"
@@ -924,10 +935,10 @@ export default function MiniGameProgressPage() {
       </nav>
 
       <div
-        id="mini-game-progress-panel-progress"
+        id="mini-game-progress-panel-game-progress"
         role="tabpanel"
-        aria-labelledby="mini-game-progress-tab-progress"
-        hidden={progressTab !== "progress"}
+        aria-labelledby="mini-game-progress-tab-game-progress"
+        hidden={progressTab !== "gameProgress"}
         className="mini-game-progress__tab-panel"
       >
         {summaryLoadState === "loading" ? (
@@ -953,60 +964,31 @@ export default function MiniGameProgressPage() {
         ) : null}
 
         {summaryLoadState === "ready" ? (
-          <div className="block-blast-game">
-            <section className="mini-game-progress__hero-row" aria-label="Лига и прогресс к следующей лиге">
-              <article
-                className={[
-                  "block-blast-game__profile-card mini-game-progress__league-card",
-                  currentLeagueCard?.id
-                    ? `mini-game-progress__league-card--${currentLeagueCard.id}`
-                    : "mini-game-progress__league-card--start",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                style={getLeagueCardInlineBgStyle(currentLeagueCard?.id)}
-              >
-                <Link
-                  className="mini-game-progress__leagues-list-link"
-                  to="/lk/mini-game/leagues"
+          <div className="block-blast-game mini-game-progress__game-progress-stack">
+            <div className="lk-dashboard__programs-catalog-hero-collapse mini-game-progress__game-progress-info-collapse lk-dashboard__programs-catalog-hero-collapse--open">
+              <div className="lk-dashboard__programs-catalog-hero-collapse-sizer">
+                <section
+                  className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero mini-game-progress__game-progress-info-banner"
+                  aria-label="Как работает игровой прогресс"
                 >
-                  Список
-                </Link>
-                <h4 className="block-blast-game__profile-card-label">Лига</h4>
-                <p className="mini-game-progress__league-name">{currentLeagueName}</p>
-                <p className="mini-game-progress__league-caption">Текущая лига</p>
-              </article>
-              <article
-                className="block-blast-game__profile-card mini-game-progress__donut-card"
-                aria-label={nextLeagueDonutAria}
-              >
-                <h4 className="block-blast-game__profile-card-label">Следующая лига</h4>
-                <div className="mini-game-progress__donut-wrap">
-                  <ProgressDonut pct={nextLeaguePct} />
-                  <div className="mini-game-progress__donut-center">
-                    <span className="mini-game-progress__donut-pct">{nextLeaguePct}%</span>
-                    <span className="mini-game-progress__donut-level">
-                      {leagueDonut.isMax
-                        ? "Максимум"
-                        : `до ${leagueDonut.nextLeague?.name ?? ""}`}
-                    </span>
+                  <div className="lk-dashboard__my-programs-catalog-banner-inner mini-game-progress__game-progress-info-banner-inner">
+                    <div className="lk-dashboard__my-programs-catalog-banner-copy">
+                      <p className="lk-dashboard__my-programs-catalog-banner-title">
+                        Как работает игровой прогресс
+                      </p>
+                      <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                        Играйте, набирайте опыт и повышайте уровень. Серия растёт, когда вы возвращаетесь в игру каждый
+                        день, и даёт бонусный множитель к прогрессу. Жизни нужны для попыток, а защита серии помогает
+                        сохранить серию, если вы пропустили день.
+                      </p>
+                      <Link className="lk-dashboard__my-programs-catalog-banner-cta" to="/lk/mini-game">
+                        Играть
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              </article>
-            </section>
-
-            {leagueDonut.nextLeague ? (
-              <article
-                className="mini-game-progress__next-league-card"
-                aria-label={`Условия и награды перехода в лигу ${leagueDonut.nextLeague.name}`}
-              >
-                <MiniGameLeagueUnlockCardForTargetLeague
-                  summary={gamificationSummary}
-                  targetLeagueId={leagueDonut.nextLeague.id}
-                />
-              </article>
-            ) : null}
-
+                </section>
+              </div>
+            </div>
             <section
               className="block-blast-game__profile-cards mini-game-progress__progress-profile-cards"
               aria-labelledby="mini-game-progress-heading"
@@ -1150,6 +1132,116 @@ export default function MiniGameProgressPage() {
       </div>
 
       <div
+        id="mini-game-progress-panel-leagues"
+        role="tabpanel"
+        aria-labelledby="mini-game-progress-tab-leagues"
+        hidden={progressTab !== "leagues"}
+        className="mini-game-progress__tab-panel"
+      >
+        {summaryLoadState === "loading" ? (
+          <p className="mini-game-rating__note">Загрузка…</p>
+        ) : null}
+        {summaryLoadState === "error" ? (
+          <>
+            <p className="mini-game-rating__note">
+              {summaryError === "no_token"
+                ? "Войдите в аккаунт, чтобы видеть прогресс."
+                : "Не удалось загрузить данные. Попробуйте обновить страницу."}
+            </p>
+            {summaryError !== "no_token" ? (
+              <button
+                type="button"
+                className="lk-dashboard__my-programs-catalog-banner-cta"
+                onClick={() => loadGamificationSummary()}
+              >
+                Повторить
+              </button>
+            ) : null}
+          </>
+        ) : null}
+
+        {summaryLoadState === "ready" ? (
+          <div className="block-blast-game mini-game-progress__leagues-stack">
+            <div className="lk-dashboard__programs-catalog-hero-collapse mini-game-progress__league-info-collapse lk-dashboard__programs-catalog-hero-collapse--open">
+              <div className="lk-dashboard__programs-catalog-hero-collapse-sizer">
+                <section
+                  className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero mini-game-progress__league-info-banner"
+                  aria-label="Лиги и награды"
+                >
+                  <div className="lk-dashboard__my-programs-catalog-banner-inner mini-game-progress__league-info-banner-inner">
+                    <div className="lk-dashboard__my-programs-catalog-banner-copy">
+                      <p className="lk-dashboard__my-programs-catalog-banner-title">
+                        Поднимайтесь в лигах
+                      </p>
+                      <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                        Переходите на более высокие лиги, выполняйте условия прогресса и открывайте особые вознаграждения для активных участников.
+                      </p>
+                      <Link className="lk-dashboard__my-programs-catalog-banner-cta" to="/lk/mini-game/leagues">
+                        Смотреть лиги
+                      </Link>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <section className="mini-game-progress__hero-row" aria-label="Лига и прогресс к следующей лиге">
+              <article
+                className={[
+                  "block-blast-game__profile-card mini-game-progress__league-card",
+                  currentLeagueCard?.id
+                    ? `mini-game-progress__league-card--${currentLeagueCard.id}`
+                    : "mini-game-progress__league-card--start",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={getLeagueCardInlineBgStyle(currentLeagueCard?.id)}
+              >
+                <Link
+                  className="mini-game-progress__leagues-list-link"
+                  to="/lk/mini-game/leagues"
+                >
+                  Список
+                </Link>
+                <h4 className="block-blast-game__profile-card-label">Лига</h4>
+                <p className="mini-game-progress__league-name">{currentLeagueName}</p>
+                <p className="mini-game-progress__league-caption">Текущая лига</p>
+              </article>
+              <article
+                className="block-blast-game__profile-card mini-game-progress__donut-card"
+                aria-label={nextLeagueDonutAria}
+              >
+                <h4 className="block-blast-game__profile-card-label">Следующая лига</h4>
+                <div className="mini-game-progress__donut-wrap">
+                  <ProgressDonut pct={nextLeaguePct} />
+                  <div className="mini-game-progress__donut-center">
+                    <span className="mini-game-progress__donut-pct">{nextLeaguePct}%</span>
+                    <span className="mini-game-progress__donut-level">
+                      {leagueDonut.isMax
+                        ? "Максимум"
+                        : `до ${leagueDonut.nextLeague?.name ?? ""}`}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            </section>
+
+            {leagueDonut.nextLeague ? (
+              <article
+                className="mini-game-progress__next-league-card"
+                aria-label={`Условия и награды перехода в лигу ${leagueDonut.nextLeague.name}`}
+              >
+                <MiniGameLeagueUnlockCardForTargetLeague
+                  summary={gamificationSummary}
+                  targetLeagueId={leagueDonut.nextLeague.id}
+                />
+              </article>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div
         id="mini-game-progress-panel-shop"
         role="tabpanel"
         aria-labelledby="mini-game-progress-tab-shop"
@@ -1181,6 +1273,7 @@ export default function MiniGameProgressPage() {
         {summaryLoadState === "ready" ? (
           <div className="mini-game-progress__shop-wrap">
             <div className="block-blast-game">
+            <div className="mini-game-progress__shop-summary-rows">
             <section
               className="block-blast-game__profile-cards mini-game-progress__shop-cards"
               aria-label="Баллы магазина и множитель лиги"
@@ -1272,6 +1365,7 @@ export default function MiniGameProgressPage() {
                 </div>
               </article>
             </section>
+            </div>
 
             {shopLoadState === "loading" ? (
               <p className="mini-game-rating__note mini-game-progress__shop-catalog-note">Загрузка каталога…</p>

@@ -27,6 +27,7 @@ from .models import (
     PartnerProfile,
     ReferralPointTransaction,
     ReferralShopOwnedItem,
+    SiteMembership,
     XPEvent,
 )
 
@@ -1366,6 +1367,25 @@ def _looks_like_email(value: str) -> bool:
     return "@" in value
 
 
+def _referral_leaderboard_avatar_data_url(user) -> str:
+    raw = getattr(user, "avatar_data_url", None)
+    if not isinstance(raw, str):
+        return ""
+    return raw.strip()
+
+
+def _referral_joined_programs_counts_by_user(user_ids: list[int]) -> dict[int, int]:
+    """How many referral programs (sites) each user has joined via ``SiteMembership``."""
+    if not user_ids:
+        return {}
+    rows = (
+        SiteMembership.objects.filter(user_id__in=user_ids)
+        .values("user_id")
+        .annotate(c=Count("id"))
+    )
+    return {int(row["user_id"]): int(row["c"]) for row in rows}
+
+
 def _referral_leaderboard_display_name(user) -> str:
     """Public leaderboard label: ФИО / username / public_id / fallback — never raw email."""
     if user is None:
@@ -1506,6 +1526,10 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
 
     top_limit = max(1, min(int(REFERRAL_LEADERBOARD_TOP_N), 500))
 
+    uids_for_program_counts = {int(r["user"].id) for r in ranked[:top_limit]}
+    uids_for_program_counts.add(int(request_user.id))
+    joined_program_counts = _referral_joined_programs_counts_by_user(list(uids_for_program_counts))
+
     def entry_dict(r: dict[str, Any], *, is_current_user: bool) -> dict[str, Any]:
         u = r["user"]
         sales_rub = int(r["sales_amount"])
@@ -1515,10 +1539,12 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
             "rank": int(r["rank"]),
             "user_id": int(u.id),
             "display_name": _referral_leaderboard_display_name(u),
+            "avatar_data_url": _referral_leaderboard_avatar_data_url(u),
             "is_current_user": bool(is_current_user),
             "league": calculate_referral_league_id(sales_all_rub, lvl, int(r["streak_days"])),
             "sales_amount": sales_rub,
             "paid_orders_count": int(r["paid_orders_count"]),
+            "joined_programs_count": int(joined_program_counts.get(int(u.id), 0)),
             "xp_total": int(r["xp_total"]),
             "streak_days": int(r["streak_days"]),
         }
@@ -1539,9 +1565,13 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
             all_time_sales_by_partner.get(pp_self.id, 0) if pp_self is not None else 0
         )
         current_user = {
+            "user_id": int(request_user.id),
             "rank": None,
+            "display_name": _referral_leaderboard_display_name(request_user),
+            "avatar_data_url": _referral_leaderboard_avatar_data_url(request_user),
             "sales_amount": 0,
             "paid_orders_count": 0,
+            "joined_programs_count": int(joined_program_counts.get(int(request_user.id), 0)),
             "xp_total": xp_self,
             "streak_days": streak_self,
             "league": calculate_referral_league_id(
@@ -1562,9 +1592,13 @@ def build_gamification_leaderboard(request_user, period: str, *, now=None) -> di
             fifth_sales = int(ranked[fi]["sales_amount"])
         gap = max(0, fifth_sales - sales_u) if rank_u > 5 else 0
         current_user = {
+            "user_id": int(request_user.id),
             "rank": rank_u,
+            "display_name": _referral_leaderboard_display_name(request_user),
+            "avatar_data_url": _referral_leaderboard_avatar_data_url(request_user),
             "sales_amount": sales_u,
             "paid_orders_count": int(ur["paid_orders_count"]),
+            "joined_programs_count": int(joined_program_counts.get(int(request_user.id), 0)),
             "xp_total": int(ur["xp_total"]),
             "streak_days": int(ur["streak_days"]),
             "league": calculate_referral_league_id(

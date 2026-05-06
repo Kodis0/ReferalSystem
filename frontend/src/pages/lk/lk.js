@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate, Navigate, Outlet, useParams } from "react-router-dom";
+import { Routes, Route, Link, useLocation, useNavigate, Navigate, Outlet, useParams } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -47,6 +47,8 @@ import SupportTicketPage from "./support/SupportTicketPage";
 import SiteDashboardPage from "./owner-programs/SiteDashboardPage";
 import SiteHistoryPage from "./owner-programs/SiteHistoryPage";
 import ProjectReferralBlockScreen from "./owner-programs/ProjectReferralBlockScreen";
+import DocumentsPage from "./documents/DocumentsPage";
+import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
 import BalancePage from "./balance/BalancePage";
@@ -74,6 +76,23 @@ function SiteShellDefaultToDashboard() {
   }
   const sid = encodeURIComponent(raw);
   return <Navigate to={`/lk/partner/project/${pid}/sites/${sid}/dashboard`} replace />;
+}
+
+function ownerProjectTargetHref(project) {
+  if (typeof project?.id !== "number") return "/lk/partner";
+  const params = new URLSearchParams();
+  if (project?.primary_site_public_id) {
+    params.set("site_public_id", project.primary_site_public_id);
+  }
+  const search = params.toString();
+  return `/lk/partner/project/${project.id}/sites${search ? `?${search}` : ""}`;
+}
+
+function isOwnerProjectRoute(pathname, projectId) {
+  if (typeof projectId !== "number") return false;
+  const normalizedPath = String(pathname || "").toLowerCase();
+  const prefix = `/lk/partner/project/${projectId}`.toLowerCase();
+  return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`);
 }
 
 function formatAccountId(user) {
@@ -299,17 +318,21 @@ function LK() {
   const menuRef = useRef(null);
   const supportRef = useRef(null);
   const personalizationRef = useRef(null);
+  const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, setUser, fetchUser } = useCurrentUser();
   const { logout, refreshAccessToken, setUser: setAuthUser } = useAuth();
   const [ideaNavBadgeCount, setIdeaNavBadgeCount] = useState(0);
   const [programBudgetBalance, setProgramBudgetBalance] = useState(DEFAULT_PROGRAM_BUDGET_BALANCE);
   const [programBudgetCurrency, setProgramBudgetCurrency] = useState("RUB");
+  const [defaultOwnerProjectId, setDefaultOwnerProjectId] = useState(null);
+  const [defaultOwnerProjectHref, setDefaultOwnerProjectHref] = useState("/lk/partner");
 
   const accountId = formatAccountId(user);
   const accountSwitcherSessions = listSessionsForSwitcher(user);
   const currentAccountKey = accountKeyFromUser(user);
   const walletBalanceLabel = formatProgramBudgetMoney(programBudgetBalance, programBudgetCurrency);
+  const isOnDefaultOwnerProject = isOwnerProjectRoute(pathname, defaultOwnerProjectId);
 
   const handleSwitchAccount = useCallback(
     async (session) => {
@@ -396,6 +419,37 @@ function LK() {
     loadProgramBudgetBalance();
     window.addEventListener(PROGRAM_BUDGET_UPDATED_EVENT, onProgramBudgetUpdated);
     return () => window.removeEventListener(PROGRAM_BUDGET_UPDATED_EVENT, onProgramBudgetUpdated);
+  }, [currentAccountKey]);
+
+  useEffect(() => {
+    let alive = true;
+    setDefaultOwnerProjectId(null);
+    setDefaultOwnerProjectHref("/lk/partner");
+
+    async function loadDefaultOwnerProject() {
+      try {
+        const { ok, projects = [] } = await fetchOwnerSitesList();
+        if (!alive) return;
+        if (!ok) {
+          setDefaultOwnerProjectId(null);
+          setDefaultOwnerProjectHref("/lk/partner");
+          return;
+        }
+        const defaultProject = projects.find((project) => project?.is_default) || projects[0];
+        setDefaultOwnerProjectId(typeof defaultProject?.id === "number" ? defaultProject.id : null);
+        setDefaultOwnerProjectHref(ownerProjectTargetHref(defaultProject));
+      } catch {
+        if (!alive) return;
+        setDefaultOwnerProjectId(null);
+        setDefaultOwnerProjectHref("/lk/partner");
+      }
+    }
+
+    loadDefaultOwnerProject();
+
+    return () => {
+      alive = false;
+    };
   }, [currentAccountKey]);
 
   useEffect(() => {
@@ -489,7 +543,20 @@ function LK() {
       >
         <div className="lk-header__inner">
           <div className="lk-header__left">
-            <Link to="/" aria-label="LUMO Referrals" className="lk-header__logo-link">
+            <Link
+              to={defaultOwnerProjectHref}
+              aria-label="LUMO Referrals"
+              className="lk-header__logo-link"
+              onClick={(event) => {
+                setMenuOpen(false);
+                setSupportOpen(false);
+                setPersonalizationOpen(false);
+                setLanguageOpen(false);
+                if (isOnDefaultOwnerProject) {
+                  event.preventDefault();
+                }
+              }}
+            >
               {/* Лого шапки: LkHeaderBrandMark (Group 17). LoginBrandLogo — только login/registration. */}
               <LkHeaderBrandMark />
             </Link>
@@ -896,6 +963,7 @@ function LK() {
             <Route path="settings/change-password" element={<ChangePasswordPage user={user} />} />
             <Route path="settings" element={<Settings user={user} fetchUser={fetchUser} setUser={setUser} />} />
             <Route path="balance" element={<BalancePage />} />
+            <Route path="documents" element={<DocumentsPage />} />
             <Route path="news" element={<NewsPage />} />
             <Route path="bug" element={<BugPage />} />
             <Route path="idea" element={<IdeaPage />} />

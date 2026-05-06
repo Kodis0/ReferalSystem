@@ -284,6 +284,12 @@
   gap: 16px;
 }
 
+.lk-sidebar__nav-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--lk-sb-border);
+}
+
 button.lk-sidebar__nav-link {
   appearance: none;
   width: 100%;
@@ -989,6 +995,97 @@ button.lk-sidebar__nav-link {
   animation: lk-mini-game-rating-crown-nod 0.62s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
 }
 
+.lk-sidebar__nav-icon-svg_balance,
+.lk-sidebar__nav-icon-svg_documents {
+  overflow: visible;
+}
+
+.lk-sidebar__nav-icon-svg_balance path,
+.lk-sidebar__nav-icon-svg_documents path {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+
+@keyframes lk-balance-wallet-body-pop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  42% {
+    transform: translateY(-1.5px) scale(1.04);
+  }
+  72% {
+    transform: translateY(0.5px) scale(0.98);
+  }
+}
+
+@keyframes lk-balance-wallet-pocket-slide {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  45% {
+    transform: translateX(2px);
+  }
+  72% {
+    transform: translateX(-0.5px);
+  }
+}
+
+@keyframes lk-documents-sheet-flip {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  40% {
+    transform: translateY(-2px) rotate(-3deg);
+  }
+  72% {
+    transform: translateY(0.5px) rotate(1.5deg);
+  }
+}
+
+@keyframes lk-documents-line-scan {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_balance path:nth-child(1),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_balance path:nth-child(1),
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_balance path:nth-child(3),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_balance path:nth-child(3) {
+  animation: lk-balance-wallet-body-pop 0.58s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_balance path:nth-child(2),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_balance path:nth-child(2) {
+  animation: lk-balance-wallet-pocket-slide 0.58s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_documents path:nth-child(1),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_documents path:nth-child(1),
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_documents path:nth-child(2),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_documents path:nth-child(2) {
+  animation: lk-documents-sheet-flip 0.58s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_documents path:nth-child(3),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_documents path:nth-child(3) {
+  animation: lk-documents-line-scan 0.42s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
+  animation-delay: 0.05s;
+}
+
+.lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_documents path:nth-child(4),
+.lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_documents path:nth-child(4) {
+  animation: lk-documents-line-scan 0.42s cubic-bezier(0.34, 1.2, 0.64, 1) 1 both;
+  animation-delay: 0.12s;
+}
+
 .lk-sidebar__nav-icon-svg_programs-catalog {
   overflow: hidden;
   border-radius: 3px;
@@ -1102,7 +1199,11 @@ button.lk-sidebar__nav-link {
   .lk-sidebar__nav-link:hover .lk-sidebar__mini-game-progress-bars path,
   .lk-sidebar__nav-link:focus-visible .lk-sidebar__mini-game-progress-bars path,
   .lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_mini-game-rating path,
-  .lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_mini-game-rating path {
+  .lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_mini-game-rating path,
+  .lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_balance path,
+  .lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_balance path,
+  .lk-sidebar__nav-link:hover .lk-sidebar__nav-icon-svg_documents path,
+  .lk-sidebar__nav-link:focus-visible .lk-sidebar__nav-icon-svg_documents path {
     animation: none;
   }
 }
@@ -1302,6 +1403,50 @@ button.lk-sidebar__nav-link {
 .lk-sidebar__nav-link:focus-visible .lk-sidebar__bug-limbs {
   animation: lk-bug-limbs-jitter 0.54s cubic-bezier(0.34, 1.25, 0.64, 1) 1 both;
   animation-delay: 0.08s;
+}
+
+.lk-sidebar__nav-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lk-sidebar__nav-label-row .lk-sidebar__nav-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Как chip primary size_s в референсе: фон main-color, caption */
+.lk-sidebar__nav-soon {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #ffffff;
+  background: #7177f8;
+  user-select: none;
+}
+
+[data-theme="light"] .lk-sidebar__nav-soon {
+  color: #ffffff;
+  background: #7177f8;
 }
 
 .lk-sidebar__nav-text {
