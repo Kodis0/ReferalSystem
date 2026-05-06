@@ -353,7 +353,7 @@ export function useSiteShellIntegrationActions({
         "";
       const title =
         typeof confirmTitleOverride === "string" && confirmTitleOverride.trim() ? confirmTitleOverride.trim() : fromData || "Сайт";
-      if (!window.confirm(`Удалить сайт "${title}"?`)) return;
+      if (!window.confirm(`Архивировать сайт "${title}"?`)) return;
       const pid =
         typeof projectEntry?.id === "number"
           ? projectEntry.id

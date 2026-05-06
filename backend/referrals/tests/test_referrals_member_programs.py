@@ -620,7 +620,7 @@ class MyProgramsApiTests(TestCase):
         prog = r.data["program"]
         self.assertTrue(prog["joined"])
         self.assertEqual(prog["referrer_sales_total"], "100.00")
-        self.assertEqual(prog["referrer_commission_total"], "10.00")
+        self.assertEqual(prog["referrer_commission_total"], "5.00")
         self.assertEqual(len(prog["recent_orders"]), 1)
         self.assertEqual(prog["recent_orders"][0]["amount"], "100.00")
         self.assertEqual(prog["recent_orders"][0]["status"], "paid")
@@ -629,7 +629,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r2.status_code, 200)
         prog2 = r2.data["program"]
         self.assertEqual(prog2["referrer_sales_total"], "100.00")
-        self.assertEqual(prog2["referrer_commission_total"], "10.00")
+        self.assertEqual(prog2["referrer_commission_total"], "5.00")
         self.assertEqual(len(prog2["recent_orders"]), 1)
         self.assertEqual(prog2["recent_orders"][0]["amount"], "100.00")
         self.assertEqual(prog2["recent_orders"][0]["status"], "paid")

@@ -144,15 +144,15 @@ def _merge_member_referrer_money(payload, user, membership):
             }
         )
         return
-    payload.update(member_referrer_money_totals(partner))
-    recent_orders_qs = (
-        Order.objects.filter(partner=partner)
-        .filter(
-            Q(status=Order.Status.PAID)
-            | Q(status=Order.Status.PENDING, amount__gt=0)
-        )
-        .order_by("-created_at", "-pk")[:20]
+    site_scope = membership.site if membership is not None else None
+    payload.update(member_referrer_money_totals(partner, site=site_scope))
+    recent_orders_qs = Order.objects.filter(partner=partner).filter(
+        Q(status=Order.Status.PAID)
+        | Q(status=Order.Status.PENDING, amount__gt=0)
     )
+    if site_scope is not None:
+        recent_orders_qs = recent_orders_qs.filter(site_id=site_scope.pk)
+    recent_orders_qs = recent_orders_qs.order_by("-created_at", "-pk")[:20]
     payload["recent_orders"] = [
         {
             "id": o.id,

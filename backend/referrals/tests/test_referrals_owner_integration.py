@@ -1725,7 +1725,7 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.data["detail"], "site_public_id_required")
         self.assertEqual(r.data.get("code"), "site_public_id_required")
 
-    def test_owner_can_delete_site_and_cascades_related(self):
+    def test_owner_can_delete_site_soft_archives_preserves_related_rows(self):
         site = Site.objects.create(
             owner=self.owner,
             publishable_key="pk_del_own_" + uuid.uuid4().hex,
@@ -1753,9 +1753,11 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["status"], "deleted")
         self.assertFalse(Site.objects.filter(public_id=sid).exists())
-        self.assertEqual(SiteMembership.objects.filter(site_id=site.id).count(), 0)
-        self.assertEqual(ReferralLeadEvent.objects.filter(site_id=site.id).count(), 0)
-        self.assertEqual(PublicLeadIngestAudit.objects.filter(site_id=site.id).count(), 0)
+        archived = Site.all_objects.get(public_id=sid)
+        self.assertIsNotNone(archived.archived_at)
+        self.assertEqual(SiteMembership.objects.filter(site_id=site.id).count(), 1)
+        self.assertEqual(ReferralLeadEvent.objects.filter(site_id=site.id).count(), 1)
+        self.assertEqual(PublicLeadIngestAudit.objects.filter(site_id=site.id).count(), 1)
 
     def test_owner_can_delete_single_project_child_site_without_deleting_project(self):
         """DELETE ``/referrals/project/<id>/site/create/`` with ``site_public_id`` removes one child site (same path as POST create)."""
@@ -1779,6 +1781,8 @@ class SiteOwnerIntegrationApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["status"], "deleted")
         self.assertFalse(Site.objects.filter(id=first_site.id).exists())
+        fs = Site.all_objects.get(id=first_site.id)
+        self.assertIsNotNone(fs.archived_at)
         self.assertTrue(Site.objects.filter(id=second_site.id).exists())
         self.assertTrue(Project.objects.filter(id=project.id).exists())
         r_after = self.api.get(f"/referrals/project/{project.id}/")

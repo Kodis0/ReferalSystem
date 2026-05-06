@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from referrals.gamification import (
+    REFERRAL_SHOP_REWARDS,
     build_gamification_summary,
     calculate_daily_challenge_base_xp,
     calculate_level,
@@ -1245,7 +1246,10 @@ class ReferralShopApiTests(TestCase):
         self.assertEqual(row.amount, -30_000)
         self.assertEqual(row.metadata.get("reward_code"), "frame_pixel_arcade")
         self.assertEqual(row.metadata.get("item_type"), "frame")
-        self.assertEqual(row.metadata.get("reward_title"), "Pixel Arcade")
+        self.assertEqual(
+            row.metadata.get("reward_title"),
+            REFERRAL_SHOP_REWARDS["frame_pixel_arcade"]["title"],
+        )
 
     def test_frame_pixel_arcade_not_enough_points(self):
         GamificationProfile.objects.create(user=self.user, points_balance=100)

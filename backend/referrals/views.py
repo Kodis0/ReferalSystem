@@ -21,7 +21,6 @@ from .owner_site_activity import (
     log_owner_project_created,
     log_owner_project_deleted,
     log_owner_project_updated,
-    log_owner_site_deleted,
     log_site_activated,
     log_site_connection_rechecked,
     log_site_created_in_project,
@@ -58,6 +57,7 @@ from .widget_install_verify import (
     human_message_for_page_scan_url_error,
     run_widget_install_headless_check,
 )
+from .site_archive import archive_site, find_archived_site_for_restore, restore_site
 from .services import (
     SITE_DISPLAY_NAME_CONFIG_KEY,
     build_site_connection_check,
@@ -540,6 +540,25 @@ class ProjectSiteOwnerCreateView(APIView):
         data = ser.validated_data
         origin_val = (data.get("origin") or "").strip()
         allowed_origins = [origin_val] if origin_val else []
+
+        archived = find_archived_site_for_restore(
+            owner_id=request.user.pk,
+            project_id=project.pk,
+            allowed_origins=allowed_origins,
+        )
+        if archived is not None:
+            restore_site(archived)
+            archived.allowed_origins = allowed_origins
+            archived.platform_preset = data["platform_preset"]
+            cfg = dict(archived.config_json or {})
+            cfg[SITE_DISPLAY_NAME_CONFIG_KEY] = data["site_display_name"]
+            archived.config_json = cfg
+            archived.save(
+                update_fields=["allowed_origins", "platform_preset", "config_json", "updated_at"]
+            )
+            out = SiteOwnerIntegrationSerializer(archived, context={"request": request})
+            return Response(out.data, status=status.HTTP_200_OK)
+
         site = Site.objects.create(
             owner=request.user,
             project=project,
@@ -572,8 +591,7 @@ class ProjectSiteOwnerCreateView(APIView):
             site = None
         if site is None:
             return Response(_owner_api_error_body("site_missing"), status=status.HTTP_404_NOT_FOUND)
-        log_owner_site_deleted(site=site, actor=request.user, via="project_child")
-        site.delete()
+        archive_site(site=site, actor=request.user, via="project_child")
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
 
@@ -625,8 +643,7 @@ class SiteOwnerIntegrationView(APIView):
         site, error = _resolve_owner_site(request)
         if error is not None:
             return error
-        log_owner_site_deleted(site=site, actor=request.user, via="integration")
-        site.delete()
+        archive_site(site=site, actor=request.user, via="integration")
         return Response({"status": "deleted"}, status=status.HTTP_200_OK)
 
 

@@ -26,11 +26,11 @@ function SiteShellVerifyIcon({ size = 22 }) {
 }
 
 /**
- * Кнопки в шапке сайта (удалить / вкл-выкл сбор / проверить / обновить).
+ * Кнопки в шапке сайта (архивировать / вкл-выкл сбор / проверить / обновить).
  * Общий для `widget-install` и `SiteShellToolbarSubscriber`.
  *
  * @param {"toolbar"|"menu"} [props.variant] — `menu`: пункты как в выпадающем меню карточки сайта.
- * @param {string} [props.deleteConfirmTitle] — подпись для confirm при удалении (например имя из списка сайтов).
+ * @param {string} [props.deleteConfirmTitle] — подпись для confirm при архивации (например имя из списка сайтов).
  */
 export default function SiteShellWidgetActionsBar({
   actionsRef,
@@ -72,13 +72,13 @@ export default function SiteShellWidgetActionsBar({
           onClick={() => actionsRef.current.onDeleteSite?.(deleteConfirmTitle)}
           disabled={deleteSiteBusy}
           role="menuitem"
-          aria-label="Удалить сайт"
+          aria-label="Архивировать сайт"
           data-testid={deleteMenuTestId || "site-shell-action-delete"}
         >
           <span className="owner-programs__service-card-menu-item_icon" aria-hidden="true">
             <Trash2 size={iconSize} strokeWidth={2} />
           </span>
-          <span>Удалить сайт</span>
+          <span>Архивировать сайт</span>
         </button>
         <button
           type="button"
@@ -133,7 +133,7 @@ export default function SiteShellWidgetActionsBar({
         className="owner-programs__icon-action owner-programs__icon-action_danger"
         onClick={() => actionsRef.current.onDeleteSite?.(deleteConfirmTitle)}
         disabled={deleteSiteBusy}
-        aria-label="Удалить сайт"
+        aria-label="Архивировать сайт"
         data-testid="site-shell-action-delete"
       >
         <Trash2 size={iconSize} strokeWidth={2} aria-hidden />

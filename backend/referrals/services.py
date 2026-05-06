@@ -726,19 +726,62 @@ def _order_site_from_payload(order: Order) -> Optional[Site]:
     )
     if not site_id:
         return None
-    return Site.objects.filter(public_id=site_id).first()
+    return Site.all_objects.filter(public_id=site_id).first()
 
 
 def _order_site_from_membership(order: Order, partner: PartnerProfile) -> Optional[Site]:
     if not partner or not order.ref_code:
         return None
-    membership = (
-        SiteMembership.objects.filter(partner_id=partner.pk, ref_code=order.ref_code)
-        .select_related("site")
-        .order_by("-created_at", "-pk")
-        .first()
+    uid = partner.user_id
+    ref_matches = SiteMembership.objects.filter(user_id=uid, ref_code=order.ref_code).select_related(
+        "site"
     )
-    return membership.site if membership else None
+    n = ref_matches.count()
+    if n == 1:
+        return ref_matches.first().site
+    if n > 1:
+        return None
+    # Rows missing ref_code snapshot: only safe when a single program exists for this user.
+    empty_qs = SiteMembership.objects.filter(user_id=uid, ref_code="").select_related("site")
+    if empty_qs.count() == 1:
+        return empty_qs.first().site
+    return None
+
+
+def _maybe_attach_order_site(order: Order, flat: dict) -> None:
+    """
+    Best-effort Order.site for member-program scoped stats. Leaves site null when unknown.
+    """
+    if order.site_id:
+        return
+    site = _order_site_from_payload(order)
+    if site is None:
+        pk = _first_str(
+            flat,
+            (
+                "publishable_key",
+                "PublishableKey",
+                "publishableKey",
+                "widget_publishable_key",
+                "site_publishable_key",
+            ),
+        )
+        if pk:
+            site = Site.all_objects.filter(publishable_key=(pk or "").strip()).first()
+    if site is None and order.partner_id:
+        partner = PartnerProfile.objects.filter(pk=order.partner_id).first()
+        if partner is not None:
+            site = _order_site_from_membership(order, partner)
+    if site is not None:
+        Order.objects.filter(pk=order.pk).update(site_id=site.pk)
+        return
+    if order.partner_id:
+        logger.warning(
+            "referrals.order_site_unresolved order_id=%s partner_id=%s dedupe_key=%s",
+            order.pk,
+            order.partner_id,
+            order.dedupe_key,
+        )
 
 
 def commission_percent_for_order(order: Order, partner: PartnerProfile) -> Decimal:
@@ -1464,6 +1507,9 @@ def _apply_order_upsert_side_effects(
         )
         order.refresh_from_db(fields=["partner_id", "ref_code"])
 
+    _maybe_attach_order_site(order, flat)
+    order.refresh_from_db()
+
     if order.status == Order.Status.PAID:
         create_commission_for_paid_order(order)
         grant_purchase_points_for_paid_referral_order(order)
@@ -1561,18 +1607,23 @@ def upsert_order_from_tilda_payload(
     return order, created
 
 
-def member_referrer_money_totals(partner: PartnerProfile) -> dict[str, str]:
+def member_referrer_money_totals(partner: PartnerProfile, site: Optional[Site] = None) -> dict[str, str]:
     """
     Sum of paid order amounts and commission rows for this referrer.
 
-    ``Order`` rows are not keyed by ``Site`` in the schema; totals align with the partner
-    dashboard aggregates for this ``PartnerProfile`` (attributed paid orders and commissions).
+    When ``site`` is set (member program detail), totals are scoped to ``Order.site``
+    and commissions on those orders. Omit ``site`` for legacy/global partner aggregates.
     """
     paid_orders = Order.objects.filter(partner=partner, status=Order.Status.PAID)
+    comm_agg_qs = Commission.objects.filter(partner=partner)
+    if site is not None:
+        paid_orders = paid_orders.filter(site_id=site.pk)
+        comm_agg_qs = comm_agg_qs.filter(order__site_id=site.pk)
+
     sales_agg = paid_orders.aggregate(total=Sum("amount"))
     sales_total = sales_agg["total"] or Decimal("0.00")
 
-    comm_agg = Commission.objects.filter(partner=partner).aggregate(total=Sum("commission_amount"))
+    comm_agg = comm_agg_qs.aggregate(total=Sum("commission_amount"))
     commission_total = comm_agg["total"] or Decimal("0.00")
 
     q = Decimal("0.01")
@@ -1705,7 +1756,8 @@ def generate_publishable_key() -> str:
     """Return a unique publishable_key for Site (browser-exposed site credential)."""
     for _ in range(80):
         key = secrets.token_urlsafe(32)
-        if not Site.objects.filter(publishable_key=key).exists():
+        # Archived rows keep keys; must not collide on insert (unique constraint).
+        if not Site.all_objects.filter(publishable_key=key).exists():
             return key
     raise RuntimeError("Could not allocate a unique publishable_key")
 

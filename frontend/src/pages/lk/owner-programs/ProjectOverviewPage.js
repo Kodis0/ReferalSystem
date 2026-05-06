@@ -542,7 +542,7 @@ export default function ProjectOverviewPage() {
   const handleDeleteSite = useCallback(
     async (site) => {
       const title = serviceTitle(site);
-      const confirmed = window.confirm(`Удалить сайт "${title}"?`);
+      const confirmed = window.confirm(`Архивировать сайт "${title}"?`);
       if (!confirmed) return;
       if (typeof projectEntry?.id !== "number") {
         setDeleteError("Не удалось определить проект для удаления сайта");

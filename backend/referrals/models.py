@@ -106,6 +106,13 @@ class Project(models.Model):
         return f"Project {label} (owner={self.owner_id})"
 
 
+class ActiveSiteManager(models.Manager):
+    """Default queryset excludes soft-archived sites (``archived_at`` set)."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(archived_at__isnull=True)
+
+
 class Site(models.Model):
     """
     First-class integration target (multi-site / embed widget + optional webhook).
@@ -191,6 +198,10 @@ class Site(models.Model):
     last_verification_error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = ActiveSiteManager()
+    all_objects = models.Manager()
 
     class Meta:
         ordering = ["-created_at"]
@@ -580,6 +591,13 @@ class Order(models.Model):
     )
     partner = models.ForeignKey(
         PartnerProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
+    site = models.ForeignKey(
+        "Site",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
