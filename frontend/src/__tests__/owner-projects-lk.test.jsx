@@ -3373,7 +3373,7 @@ describe("Canonical site identity contract", () => {
     expect(videos[0]).toHaveStyle({ zIndex: "1" });
   });
 
-  it("builder blocks: selecting block, inspector title, and delete", async () => {
+  it("builder blocks: selecting block and delete with Backspace", async () => {
     mockOwnerAndIntegration({
       owner: makeOwnerProjectsPayload([
         makeProject({
@@ -3443,15 +3443,7 @@ describe("Canonical site identity contract", () => {
     fireEvent.click(blockEl);
     expect(blockEl).toHaveAttribute("data-selected", "true");
 
-    const titleInput = screen.getByTestId("builder-inspector-title");
-    await userEvent.clear(titleInput);
-    await userEvent.type(titleInput, "Заголовок из инспектора");
-
-    await waitFor(() => {
-      expect(within(blockEl).getByText("Заголовок из инспектора")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByTestId("builder-inspector-delete"));
+    fireEvent.keyDown(window, { key: "Backspace" });
 
     await waitFor(() => {
       expect(within(pageStack).queryByTestId("editable-referral-block-preview")).not.toBeInTheDocument();

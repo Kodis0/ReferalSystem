@@ -552,6 +552,7 @@
 .lk-dashboard__programs_catalog .lk-dashboard__programs-search {
   width: 100%;
   max-width: none;
+  background: #17212b;
 }
 
 .lk-dashboard__programs_catalog .lk-dashboard__programs-filters-wrap {

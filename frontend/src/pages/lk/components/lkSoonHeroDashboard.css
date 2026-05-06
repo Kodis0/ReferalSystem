@@ -1,0 +1,12 @@
+/* Компактный отступ под заголовком lk-simple-page — как блок hero на «Мои программы». */
+.lk-soon-hero-dashboard {
+  margin-top: 8px;
+}
+
+/* Без иллюстрации и «глаза»: текст на всю ширину баннера. */
+.lk-soon-hero-dashboard
+  .lk-dashboard__programs-catalog-hero
+  .lk-dashboard__my-programs-catalog-banner-copy {
+  padding-right: 0;
+  max-width: none;
+}

@@ -2,13 +2,27 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 
 import { deferResizeObserverCallback } from "../../../resizeObserverDefer";
 import { flushSync } from "react-dom";
-import { Code2, Hand, Monitor, Move, Smartphone, Tablet, Type, X } from "lucide-react";
+import {
+  ClipboardCopy,
+  Code2,
+  Eye,
+  Hand,
+  MapPin,
+  Monitor,
+  Move,
+  Plug,
+  Smartphone,
+  Tablet,
+  Type,
+  X,
+} from "lucide-react";
 import { useLocation, useParams } from "react-router-dom";
 import { applyNodeChanges, Background, Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { API_ENDPOINTS } from "../../../config/api";
 import { ownerSitesAuthHeaders } from "./ownerSitesListApi";
 import { withSitePublicIdQuery } from "./siteReachability";
+import "../dashboard/dashboard.css";
 import EditableReferralBlockPreview, { createDefaultBuilderBlockConfig } from "./EditableReferralBlockPreview";
 import {
   buildSiteStyleProfileFromScreenshotBlock,
@@ -1437,162 +1451,80 @@ function ReferralBuilderBlocksDock({ visible, onPickType }) {
   );
 }
 
-const REFERRAL_BUILDER_BLOCK_TYPE_LABELS = {
-  referralHero: "Hero",
-  referralBanner: "Баннер",
-  referralCard: "Карточка",
-  referralSplit: "Две колонки",
-  referralMinimal: "Минималистичный",
-  referralPromo: "Промо",
-};
-
-function ReferralBuilderInspectorSection({ sectionTitleId, title, children }) {
-  return (
-    <section className="owner-programs__referral-builder-inspector__section" aria-labelledby={sectionTitleId}>
-      <div id={sectionTitleId} className="owner-programs__referral-builder-inspector__section-title">
-        {title}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig, onDuplicate, onDelete }) {
-  if (!visible || !selectedBlock) {
-    return null;
-  }
-
-  const cfg = selectedBlock.config ?? createDefaultBuilderBlockConfig();
-
-  const patch = (partial) => {
-    onChangeConfig(selectedBlock.id, { ...cfg, ...partial });
-  };
-
-  const blockTypeKey = typeof selectedBlock.type === "string" ? selectedBlock.type : "";
-  const blockTypeLabel =
-    REFERRAL_BUILDER_BLOCK_TYPE_LABELS[blockTypeKey] || (blockTypeKey ? blockTypeKey : "Блок");
-  const accentHex = cfg.accentColor?.startsWith("#") ? cfg.accentColor : "#6366f1";
+function ReferralBuilderWorkspaceOnboarding() {
+  const cards = [
+    {
+      id: "referral-builder-onboard-card-1",
+      Icon: Plug,
+      title: "Сайт подключён",
+      desc: "Мы подготовили рабочую область на основе вашего сайта.",
+    },
+    {
+      id: "referral-builder-onboard-card-2",
+      Icon: MapPin,
+      title: "Выберите место",
+      desc: "Нажмите «+» там, где хотите разместить реферальный блок.",
+    },
+    {
+      id: "referral-builder-onboard-card-3",
+      Icon: Eye,
+      title: "Проверьте внешний вид",
+      desc: "Добавьте шаблон и посмотрите, как он смотрится на странице.",
+    },
+    {
+      id: "referral-builder-onboard-card-4",
+      Icon: ClipboardCopy,
+      title: "Скопируйте код",
+      desc: "Откройте код блока, скопируйте его и вставьте в Tilda.",
+    },
+  ];
 
   return (
-    <aside className="owner-programs__referral-builder-inspector" data-testid="referral-builder-inspector">
-      <div className="owner-programs__referral-builder-inspector__header">
-        <div className="owner-programs__referral-builder-inspector__title" role="heading" aria-level={2}>
-          {blockTypeLabel}
-        </div>
-        <div className="owner-programs__referral-builder-inspector__subtitle">Реферальный блок</div>
-      </div>
+    <section
+      className="owner-programs__referral-builder-onboarding"
+      aria-label="Как добавить блок на сайт"
+      data-testid="referral-builder-onboarding"
+    >
+      <div className="lk-dashboard__programs-catalog-hero-collapse lk-dashboard__programs-catalog-hero-collapse--open">
+        <div className="lk-dashboard__programs-catalog-hero-collapse-sizer">
+          <div className="lk-dashboard__my-programs-hero-stack">
+            <div className="lk-dashboard__my-programs-catalog-banner lk-dashboard__programs-catalog-hero">
+              <div className="lk-dashboard__my-programs-catalog-banner-inner">
+                <div className="lk-dashboard__my-programs-catalog-banner-copy owner-programs__referral-builder-onboarding-banner-copy">
+                  <p className="lk-dashboard__my-programs-catalog-banner-title">Добавьте блок на сайт</p>
+                  <p className="lk-dashboard__my-programs-catalog-banner-sub">
+                    Сайт уже открыт в рабочей области. Нажмите «+», выберите шаблон и посмотрите, как блок будет
+                    выглядеть на странице.
+                  </p>
+                </div>
+              </div>
+            </div>
 
-      <ReferralBuilderInspectorSection sectionTitleId="builder-inspector-section-text" title="Текст">
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-title">
-            Заголовок
-          </label>
-          <input
-            id="builder-inspector-title"
-            className="owner-programs__referral-builder-inspector__input"
-            data-testid="builder-inspector-title"
-            value={cfg.title}
-            onChange={(e) => patch({ title: e.target.value })}
-          />
-        </div>
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-description">
-            Описание
-          </label>
-          <textarea
-            id="builder-inspector-description"
-            className="owner-programs__referral-builder-inspector__textarea"
-            data-testid="builder-inspector-description"
-            rows={2}
-            value={cfg.description}
-            onChange={(e) => patch({ description: e.target.value })}
-          />
-        </div>
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-button">
-            Текст кнопки
-          </label>
-          <input
-            id="builder-inspector-button"
-            className="owner-programs__referral-builder-inspector__input"
-            data-testid="builder-inspector-button-text"
-            value={cfg.buttonText}
-            onChange={(e) => patch({ buttonText: e.target.value })}
-          />
-        </div>
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-terms">
-            Условия
-          </label>
-          <textarea
-            id="builder-inspector-terms"
-            className="owner-programs__referral-builder-inspector__textarea"
-            data-testid="builder-inspector-terms"
-            rows={2}
-            value={cfg.terms}
-            onChange={(e) => patch({ terms: e.target.value })}
-          />
-        </div>
-      </ReferralBuilderInspectorSection>
-
-      <ReferralBuilderInspectorSection sectionTitleId="builder-inspector-section-appearance" title="Оформление">
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-theme">
-            Тема
-          </label>
-          <select
-            id="builder-inspector-theme"
-            className="owner-programs__referral-builder-inspector__select"
-            data-testid="builder-inspector-theme"
-            value={cfg.theme === "dark" ? "dark" : "light"}
-            onChange={(e) => patch({ theme: e.target.value })}
-          >
-            <option value="light">Светлая</option>
-            <option value="dark">Тёмная</option>
-          </select>
-        </div>
-        <div className="owner-programs__referral-builder-inspector__field">
-          <label className="owner-programs__referral-builder-inspector__label" htmlFor="builder-inspector-accent">
-            Акцент
-          </label>
-          <div className="owner-programs__referral-builder-inspector__accent-row">
-            <input
-              id="builder-inspector-accent"
-              type="color"
-              className="owner-programs__referral-builder-inspector__color-swatch"
-              data-testid="builder-inspector-accent"
-              value={accentHex}
-              onChange={(e) => patch({ accentColor: e.target.value })}
-              aria-label="Выбор цвета акцента"
-            />
-            <span className="owner-programs__referral-builder-inspector__hex" title={accentHex}>
-              {accentHex.replace(/^#/, "").toUpperCase()}
-            </span>
+            <div
+              className="lk-dashboard__my-programs-catalog-cards owner-programs__referral-builder-onboarding-cards"
+              data-testid="referral-builder-onboarding-cards"
+            >
+              {cards.map(({ id, Icon, title, desc }) => (
+                <div
+                  key={id}
+                  className="lk-dashboard__my-programs-catalog-card lk-dashboard__my-programs-catalog-card_has-body"
+                  role="group"
+                  aria-labelledby={`${id}-title`}
+                >
+                  <div className="lk-dashboard__my-programs-catalog-card-icon" aria-hidden="true">
+                    <Icon size={22} strokeWidth={1.75} />
+                  </div>
+                  <p id={`${id}-title`} className="lk-dashboard__my-programs-catalog-card-title">
+                    {title}
+                  </p>
+                  <p className="lk-dashboard__my-programs-catalog-card-desc">{desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </ReferralBuilderInspectorSection>
-
-      <ReferralBuilderInspectorSection sectionTitleId="builder-inspector-section-actions" title="Действия">
-        <div className="owner-programs__referral-builder-inspector__actions">
-          <button
-            type="button"
-            className="owner-programs__referral-builder-inspector__action"
-            data-testid="builder-inspector-duplicate"
-            onClick={() => onDuplicate(selectedBlock.id)}
-          >
-            Дублировать
-          </button>
-          <button
-            type="button"
-            className="owner-programs__referral-builder-inspector__action owner-programs__referral-builder-inspector__action--danger"
-            data-testid="builder-inspector-delete"
-            onClick={() => onDelete(selectedBlock.id)}
-          >
-            Удалить
-          </button>
-        </div>
-      </ReferralBuilderInspectorSection>
-    </aside>
+      </div>
+    </section>
   );
 }
 
@@ -1694,7 +1626,13 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
           setScannedBlocksByPreviewMode(previewBlocks);
           setScanMeta({ ...DEFAULT_SCAN_META, ...normalized.scanMeta });
           setPreviewMode(normalized.previewMode);
-          setBuilderBlocks(normalized.builderBlocks);
+          /** После подключения сайта открываем раздел с state.scan URL и пересканируем страницу — не поднимать сохранённые вставки шаблонов с сервера (они выигрывают гонку со сканом). */
+          const connectFreshImport =
+            typeof initialReferralScanUrlFromConnect === "string" && initialReferralScanUrlFromConnect.trim() !== "";
+          setBuilderBlocks(connectFreshImport ? [] : normalized.builderBlocks);
+          if (connectFreshImport) {
+            setSelectedBuilderBlockId("");
+          }
           const shots = (activePreviewBlocks || []).filter((b) => b.screenshotDataUrl || b.screenshotUrl);
           const validSlots = new Set(collectInsertionSlotIdsInOrder(shots));
           const want = normalized.selectedInsertionSlotId;
@@ -1721,7 +1659,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     return () => {
       cancelled = true;
     };
-  }, [sitePublicId]);
+  }, [sitePublicId, initialReferralScanUrlFromConnect]);
 
   useEffect(() => {
     if (workspaceBootstrap !== "ready") return;
@@ -1881,9 +1819,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     [insertAfterBuilderBlockId, orderedInsertionSlotIds, screenshotBlocks, selectedInsertionSlotId],
   );
 
-  const handleChangeBuilderBlockConfig = useCallback((blockId, nextConfig) => {
-    setBuilderBlocks((prev) => prev.map((b) => (b.id === blockId ? { ...b, config: nextConfig } : b)));
-  }, []);
   const handleInlineEditBuilderBlockField = useCallback((blockId, field, value) => {
     const key = String(field || "").trim();
     if (!key) {
@@ -1901,42 +1836,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     );
   }, []);
 
-  const handleDuplicateBuilderBlock = useCallback((blockId) => {
-    let createdId = "";
-    setBuilderBlocks((prev) => {
-      const idx = prev.findIndex((b) => b.id === blockId);
-      if (idx < 0) {
-        return prev;
-      }
-      createdId = newBuilderBlockId();
-      const source = prev[idx];
-      const baseCfg = { ...(source.config ?? createDefaultBuilderBlockConfig()) };
-      const rawLayers = baseCfg.floatingTextLayers;
-      const nextLayers = Array.isArray(rawLayers)
-        ? rawLayers.map((layer) => ({
-            ...layer,
-            id: newBuilderBlockId(),
-          }))
-        : rawLayers;
-      const clone = {
-        ...source,
-        id: createdId,
-        config: { ...baseCfg, floatingTextLayers: nextLayers },
-      };
-      return [...prev.slice(0, idx + 1), clone, ...prev.slice(idx + 1)];
-    });
-    if (createdId) {
-      window.requestAnimationFrame(() => {
-        setSelectedBuilderBlockId(createdId);
-      });
-    }
-  }, []);
-
-  const handleDeleteBuilderBlock = useCallback((blockId) => {
-    setBuilderBlocks((prev) => prev.filter((b) => b.id !== blockId));
-    setSelectedBuilderBlockId((current) => (current === blockId ? "" : current));
-    setInsertAfterBuilderBlockId((cur) => (cur === blockId ? null : cur));
-  }, []);
   const nodeTypes = useMemo(
     () => ({
       importedPageStack: ImportedPageStackNode,
@@ -2133,11 +2032,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     freshNodes,
     workspaceFlowGeometryKey,
   ]);
-
-  const selectedBuilderBlock = useMemo(
-    () => builderBlocks.find((b) => b.id === selectedBuilderBlockId) ?? null,
-    [builderBlocks, selectedBuilderBlockId],
-  );
 
   const showScreenshotBuilderChrome =
     isScreenshotImport && screenshotBlocks.length > 0 && isExpanded;
@@ -2490,7 +2384,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
         return;
       }
       const normalized = normalizeScanMeta(payload, normalizedPreviewMode);
-      const nextPreviewBlocksByMode = normalized.previewBlocksByMode || {};
       const activeBlocks = pickActiveScannedBlocksForPreviewMode(normalized, normalizedPreviewMode);
       setScannedBlocksByPreviewMode((current) => ({ ...current, [normalizedPreviewMode]: activeBlocks }));
       if (
@@ -2716,6 +2609,7 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
           <WorkspaceChromeAddIcon />
         </button>
       </div>
+      <ReferralBuilderWorkspaceOnboarding />
       <div
         ref={flowCanvasWrapRef}
         className={`owner-programs__referral-builder-canvas${
@@ -2880,13 +2774,6 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
           </div>
         )}
       </div>
-      <ReferralBuilderBlockInspector
-        visible={Boolean(selectedBuilderBlock)}
-        selectedBlock={selectedBuilderBlock}
-        onChangeConfig={handleChangeBuilderBlockConfig}
-        onDuplicate={handleDuplicateBuilderBlock}
-        onDelete={handleDeleteBuilderBlock}
-      />
     </div>
   );
 }
