@@ -31,6 +31,7 @@ from referrals.services import (
     get_site_by_public_id,
     join_site_membership_cta_logged_in,
     link_session_attributions_to_user,
+    member_program_order_scope_q,
     member_referrer_money_totals,
     member_site_referral_link,
     owner_site_list_origin_display,
@@ -145,13 +146,15 @@ def _merge_member_referrer_money(payload, user, membership):
         )
         return
     site_scope = membership.site if membership is not None else None
-    payload.update(member_referrer_money_totals(partner, site=site_scope))
+    payload.update(member_referrer_money_totals(partner, site=site_scope, membership=membership))
     recent_orders_qs = Order.objects.filter(partner=partner).filter(
         Q(status=Order.Status.PAID)
         | Q(status=Order.Status.PENDING, amount__gt=0)
     )
     if site_scope is not None:
-        recent_orders_qs = recent_orders_qs.filter(site_id=site_scope.pk)
+        recent_orders_qs = recent_orders_qs.filter(
+            member_program_order_scope_q(partner, site_scope, membership)
+        )
     recent_orders_qs = recent_orders_qs.order_by("-created_at", "-pk")[:20]
     payload["recent_orders"] = [
         {

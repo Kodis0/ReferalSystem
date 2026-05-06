@@ -1,5 +1,6 @@
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -7,7 +8,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from referrals.models import PartnerProfile, Project, Site, SiteMembership
+from referrals.models import Order, PartnerProfile, Project, Site, SiteMembership
 from referrals.services import ensure_partner_profile, upsert_order_from_tilda_payload
 
 User = get_user_model()
@@ -633,6 +634,40 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(len(prog2["recent_orders"]), 1)
         self.assertEqual(prog2["recent_orders"][0]["amount"], "100.00")
         self.assertEqual(prog2["recent_orders"][0]["status"], "paid")
+
+    def test_program_detail_counts_legacy_paid_order_when_order_site_null(self):
+        """Pre-Order.site paid rows still appear in this program when ref matches membership."""
+        site = self._site(
+            "legacy_site_null",
+            allowed_origins=["https://legacy-null.example"],
+            config_json={"site_display_name": "Legacy Null"},
+        )
+        partner, _ = ensure_partner_profile(self.user_a)
+        SiteMembership.objects.create(
+            site=site,
+            user=self.user_a,
+            partner=partner,
+            ref_code=partner.ref_code,
+        )
+        Order.objects.create(
+            dedupe_key="tilda:legacy-null-order-1",
+            external_id="legacy-null-order-1",
+            payload_fingerprint="a" * 64,
+            partner=partner,
+            ref_code=partner.ref_code,
+            amount=Decimal("200.00"),
+            status=Order.Status.PAID,
+            paid_at=timezone.now(),
+            site_id=None,
+        )
+
+        self.api.force_authenticate(user=self.user_a)
+        r = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(r.status_code, 200)
+        prog = r.data["program"]
+        self.assertEqual(prog["referrer_sales_total"], "200.00")
+        self.assertEqual(len(prog["recent_orders"]), 1)
+        self.assertEqual(prog["recent_orders"][0]["amount"], "200.00")
 
     @override_settings(FRONTEND_URL="https://app.example.com")
     def test_program_catalog_detail_joined_referral_link_falls_back_to_frontend_without_site_origin(self):

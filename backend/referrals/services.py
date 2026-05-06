@@ -1607,18 +1607,49 @@ def upsert_order_from_tilda_payload(
     return order, created
 
 
-def member_referrer_money_totals(partner: PartnerProfile, site: Optional[Site] = None) -> dict[str, str]:
+def member_program_order_scope_q(
+    partner: PartnerProfile,
+    site: Site,
+    membership: Optional[SiteMembership],
+) -> Q:
+    """
+    Orders belonging to a member program: ``Order.site_id`` when set, plus legacy paid rows
+    with ``site_id`` NULL when they can be attributed to this program (same rules as
+    membership ref snapshots; avoids showing zeros after ``Order.site`` rollout).
+    """
+    q_site = Q(site_id=site.pk)
+    if membership is None:
+        return q_site
+    uid = partner.user_id
+    mref = (membership.ref_code or "").strip()
+    if mref:
+        if SiteMembership.objects.filter(user_id=uid, ref_code=mref).count() > 1:
+            return q_site
+        return q_site | Q(site_id__isnull=True, ref_code=mref)
+    if SiteMembership.objects.filter(user_id=uid, ref_code="").count() != 1:
+        return q_site
+    return q_site | Q(site_id__isnull=True, ref_code=partner.ref_code)
+
+
+def member_referrer_money_totals(
+    partner: PartnerProfile,
+    site: Optional[Site] = None,
+    *,
+    membership: Optional[SiteMembership] = None,
+) -> dict[str, str]:
     """
     Sum of paid order amounts and commission rows for this referrer.
 
-    When ``site`` is set (member program detail), totals are scoped to ``Order.site``
-    and commissions on those orders. Omit ``site`` for legacy/global partner aggregates.
+    When ``site`` is set (member program detail), totals prefer ``Order.site_id`` for that
+    site and include legacy paid orders with ``site`` NULL when attributable via membership
+    ``ref_code`` (or the single empty-ref membership case). Omit ``site`` for global totals.
     """
     paid_orders = Order.objects.filter(partner=partner, status=Order.Status.PAID)
     comm_agg_qs = Commission.objects.filter(partner=partner)
     if site is not None:
-        paid_orders = paid_orders.filter(site_id=site.pk)
-        comm_agg_qs = comm_agg_qs.filter(order__site_id=site.pk)
+        scope_q = member_program_order_scope_q(partner, site, membership)
+        paid_orders = paid_orders.filter(scope_q)
+        comm_agg_qs = comm_agg_qs.filter(order_id__in=paid_orders.values_list("pk", flat=True))
 
     sales_agg = paid_orders.aggregate(total=Sum("amount"))
     sales_total = sales_agg["total"] or Decimal("0.00")
