@@ -454,12 +454,26 @@ const PERIODS = [
   { id: "all", label: "Всё время" },
 ];
 
-function SiteDashKpiCard({ label, value, hint }) {
+function SiteDashKpiCard({ label, value, hint, helpText }) {
+  const fullHelpText = [hint, helpText].filter(Boolean).join(". ");
   return (
     <div className="owner-programs__site-dash-kpi">
+      {fullHelpText ? (
+        <div className="owner-programs__site-dash-kpi-help-anchor">
+          <button
+            type="button"
+            className="owner-programs__site-dash-kpi-help"
+            aria-label={`${label}: ${fullHelpText}`}
+          >
+            ?
+          </button>
+          <span className="owner-programs__site-dash-kpi-help-tooltip" role="tooltip">
+            {fullHelpText}
+          </span>
+        </div>
+      ) : null}
       <span className="owner-programs__site-dash-kpi-label">{label}</span>
       <span className="owner-programs__site-dash-kpi-value">{value}</span>
-      <span className="owner-programs__site-dash-kpi-hint">{hint}</span>
     </div>
   );
 }
@@ -690,8 +704,14 @@ export default function SiteDashboardPage() {
                     label="Переходов"
                     value={formatInt(kpis.visits_count)}
                     hint="По ссылкам участников"
+                    helpText="Количество открытий сайта по реферальным ссылкам участников с параметром ref."
                   />
-                  <SiteDashKpiCard label="Заявок" value={formatInt(kpis.leads_count)} hint="Отправки с виджета" />
+                  <SiteDashKpiCard
+                    label="Заявок"
+                    value={formatInt(kpis.leads_count)}
+                    hint="Отправки с виджета"
+                    helpText="Количество отправок форм на сайте, которые удалось связать с реферальной ссылкой участника."
+                  />
                 </div>
               </div>
 
@@ -727,11 +747,13 @@ export default function SiteDashboardPage() {
                     label="Продаж"
                     value={formatInt(kpis.sales_count)}
                     hint="Оплаченные и заказы с суммой до подтверждения оплаты"
+                    helpText="Количество реферальных заказов: оплаченных или ожидающих подтверждения, если в заказе уже есть сумма."
                   />
                   <SiteDashKpiCard
                     label="Сумма продаж"
                     value={formatMoney(kpis.sales_amount)}
                     hint="По этим же заказам (включая ожидающие подтверждение)"
+                    helpText="Общая сумма реферальных заказов за выбранный период."
                   />
                 </div>
               </div>
@@ -768,11 +790,13 @@ export default function SiteDashboardPage() {
                     label="Начислено"
                     value={formatMoney(kpis.commissions_total)}
                     hint="Комиссии участникам"
+                    helpText="Сумма комиссий, начисленных участникам программы с реферальных продаж."
                   />
                   <SiteDashKpiCard
                     label="Рефералов"
                     value={formatInt(kpis.referrals_count)}
                     hint="Новые участники за период"
+                    helpText="Количество пользователей, которые вступили в эту реферальную программу как участники."
                   />
                 </div>
               </div>
@@ -780,54 +804,54 @@ export default function SiteDashboardPage() {
           </section>
 
           <section className="owner-programs__site-dash-card owner-programs__site-dash-card_table owner-programs__history owner-programs__site-dash-orders" aria-labelledby="site-dash-sales-table-title">
-            <h2 id="site-dash-sales-table-title" className="owner-programs__site-dash-card-title">
+            <h2 id="site-dash-sales-table-title" className="owner-programs__history-title">
               Последние заказы
             </h2>
-            {recentSales.length === 0 ? (
-              <div className="owner-programs__site-dash-empty-block">
-                <p className="owner-programs__site-dash-empty-title">Пока нет заказов с суммой</p>
-                <p className="owner-programs__site-dash-empty-text">
-                  После отправки формы или оплаты с суммой по реферальным ссылкам участников записи появятся здесь
-                  (в т.ч. до подтверждения платежа).
-                </p>
-              </div>
-            ) : (
-              <div className="owner-programs__history-tableWrap owner-programs__site-dash-orders-tableWrap">
-                <div className="owner-programs__histTable owner-programs__site-dash-orders-table">
-                  <div className="owner-programs__histRow owner-programs__histRow_head owner-programs__site-dash-orders-row">
-                    {["Дата", "Сумма", "Статус", "Код", "Email"].map((label) => (
-                      <div key={label} className="owner-programs__histCell owner-programs__histCell_headerCell">
-                        <span className="owner-programs__histText owner-programs__histText_s owner-programs__histText_grey owner-programs__histText_alignLeft">
-                          {label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {recentSales.map((row) => (
-                    <div key={row.id} className="owner-programs__histRow owner-programs__histRow_body owner-programs__site-dash-orders-row">
-                      <div className="owner-programs__histCell">
-                        <span className="owner-programs__histText owner-programs__histText_date">{formatOrderDate(row.at)}</span>
-                      </div>
-                      <div className="owner-programs__histCell">
-                        <span className="owner-programs__histText owner-programs__histText_body">
-                          {formatMoney(row.amount)}
-                          {row.currency ? ` ${row.currency}` : ""}
-                        </span>
-                      </div>
-                      <div className="owner-programs__histCell">
-                        <span className="owner-programs__histText owner-programs__histText_body">{formatOrderStatus(row.status)}</span>
-                      </div>
-                      <div className="owner-programs__histCell">
-                        <span className="owner-programs__histText owner-programs__histText_body">{row.ref_code || "—"}</span>
-                      </div>
-                      <div className="owner-programs__histCell">
-                        <span className="owner-programs__histText owner-programs__histText_body">{row.customer_email_masked || "—"}</span>
-                      </div>
+            <div className="owner-programs__history-tableWrap owner-programs__site-dash-orders-tableWrap">
+              <div className="owner-programs__histTable owner-programs__site-dash-orders-table">
+                <div className="owner-programs__histRow owner-programs__histRow_head owner-programs__site-dash-orders-row">
+                  {["Дата", "Сумма", "Статус", "Код", "Email"].map((label) => (
+                    <div key={label} className="owner-programs__histCell owner-programs__histCell_headerCell">
+                      <span className="owner-programs__histText owner-programs__histText_s owner-programs__histText_grey owner-programs__histText_alignLeft">
+                        {label}
+                      </span>
                     </div>
                   ))}
                 </div>
+                {recentSales.length === 0 ? (
+                  <div className="owner-programs__histRow owner-programs__histRow_body owner-programs__site-dash-orders-row owner-programs__site-dash-orders-row_empty">
+                    <div className="owner-programs__histCell owner-programs__histCell_full">
+                      <p className="owner-programs__histText owner-programs__histText_muted">
+                        Пока нет заказов с суммой. После отправки формы или оплаты с суммой по реферальным ссылкам участников записи появятся здесь.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  recentSales.map((row) => (
+                  <div key={row.id} className="owner-programs__histRow owner-programs__histRow_body owner-programs__site-dash-orders-row">
+                    <div className="owner-programs__histCell">
+                      <span className="owner-programs__histText owner-programs__histText_date">{formatOrderDate(row.at)}</span>
+                    </div>
+                    <div className="owner-programs__histCell">
+                      <span className="owner-programs__histText owner-programs__histText_body">
+                        {formatMoney(row.amount)}
+                        {row.currency ? ` ${row.currency}` : ""}
+                      </span>
+                    </div>
+                    <div className="owner-programs__histCell">
+                      <span className="owner-programs__histText owner-programs__histText_body">{formatOrderStatus(row.status)}</span>
+                    </div>
+                    <div className="owner-programs__histCell">
+                      <span className="owner-programs__histText owner-programs__histText_body">{row.ref_code || "—"}</span>
+                    </div>
+                    <div className="owner-programs__histCell">
+                      <span className="owner-programs__histText owner-programs__histText_body">{row.customer_email_masked || "—"}</span>
+                    </div>
+                  </div>
+                  ))
+                )}
               </div>
-            )}
+            </div>
           </section>
             </div>
           ) : null}

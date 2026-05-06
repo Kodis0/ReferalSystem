@@ -236,6 +236,10 @@
   font-size: clamp(15px, 2.35vw, 24px);
 }
 
+.lk-dashboard__program-owner-notice {
+  margin: 24px 0 0;
+}
+
 .lk-dashboard_my-programs-page .lk-dashboard__programs {
   margin-top: 0;
 }
@@ -1335,6 +1339,14 @@
   box-shadow: none;
 }
 
+.lk-dashboard__program-detail_joined .lk-dashboard__program-card {
+  max-width: 100%;
+}
+
+.lk-dashboard__program-stat-toolbar .owner-programs__site-dash-stat-select-value {
+  color: #7177f8;
+}
+
 .lk-dashboard__program-card-head {
   display: flex;
   align-items: center;
@@ -1441,10 +1453,16 @@ a.lk-dashboard__program-card-name:hover {
 
 .lk-dashboard__program-earnings {
   box-sizing: border-box;
-  margin-top: 18px;
-  padding: 16px 18px;
+  margin-top: 0;
+}
+
+.owner-programs__site-dash-row-kpis .owner-programs__site-dash-kpi.lk-dashboard__program-earnings-card,
+.lk-dashboard__program-earnings-card {
+  box-sizing: border-box;
   border-radius: 12px;
+  border: 1px solid transparent;
   background: #242f3d;
+  background-color: #242f3d;
 }
 
 .lk-dashboard__program-earnings-label {
@@ -1455,32 +1473,91 @@ a.lk-dashboard__program-card-name:hover {
   font-weight: 500;
 }
 
-.lk-dashboard__program-earnings-row {
+.lk-dashboard__program-earnings-commission,
+.lk-dashboard__program-earnings-sales-total {
+  display: block;
+  margin: 0;
+  color: #7177f8;
+  font-weight: 700;
+}
+
+.lk-dashboard__program-earnings-sales-total {
+  color: rgba(148, 163, 184, 0.82);
+}
+
+.lk-dashboard__program-earnings-chart {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 406px;
+  border-radius: 12px;
+  background-color: #242f3d;
+  overflow: hidden;
+}
+
+.lk-dashboard__program-earnings-layout {
+  margin-top: 18px;
+}
+
+.owner-programs__site-dash-chart-plate.lk-dashboard__program-earnings-chart {
+  border-radius: 12px;
+  background-color: #242f3d;
+}
+
+.lk-dashboard__program-earnings-chart .owner-programs__site-dash-line-wrap {
+  max-height: 306px;
+}
+
+.lk-dashboard__program-earnings-chart .owner-programs__site-dash-chart-plate-titles {
+  margin-bottom: 18px;
+}
+
+.lk-dashboard__program-earnings-line {
+  min-height: 0;
+}
+
+.lk-dashboard__program-earnings-chart-line_commission {
+  stroke: #7177f8;
+}
+
+.lk-dashboard__program-earnings-chart-line_sales {
+  stroke: rgba(148, 163, 184, 0.82);
+}
+
+.lk-dashboard__program-earnings-line-legend {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 14px;
-  margin-top: 10px;
+  gap: 10px 18px;
+  margin-top: 12px;
 }
 
-.lk-dashboard__program-earnings-commission {
-  margin: 0;
-  color: #ffffff;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.lk-dashboard__program-earnings-sales {
-  font-size: 14px;
+.lk-dashboard__program-earnings-line-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #7f91a4;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1.3;
-  color: rgba(255, 255, 255, 0.42);
+  line-height: 18px;
 }
 
-.lk-dashboard__program-earnings-sales-prefix {
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.35);
+.lk-dashboard__program-earnings-line-legend-mark {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.82);
+}
+
+.lk-dashboard__program-earnings-line-legend-mark_commission {
+  background: #7177f8;
+}
+
+.lk-dashboard__program-orders {
+  margin-top: 18px;
+}
+
+.lk-dashboard__program-orders .owner-programs__histCell_date {
+  flex-basis: 210px;
+  max-width: 210px;
 }
 
 .lk-dashboard__program-join-btn {
@@ -1538,7 +1615,7 @@ a.lk-dashboard__program-card-name:hover {
   padding: 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #17212b;
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -1547,14 +1624,14 @@ a.lk-dashboard__program-card-name:hover {
   padding: 0 14px;
   border: none;
   border-radius: 8px;
-  background: rgba(91, 108, 255, 0.18);
+  background: #7177f8;
   color: #ffffff;
   font-weight: 600;
   cursor: pointer;
 }
 
 .lk-dashboard__program-copy-btn:hover {
-  background: rgba(91, 108, 255, 0.28);
+  background: #6268ea;
 }
 
 [data-theme="light"] .lk-dashboard__program-card {
@@ -1600,8 +1677,14 @@ a.lk-dashboard__program-card-name:hover {
   background: rgba(36, 47, 61, 0.04);
 }
 
-[data-theme="light"] .lk-dashboard__program-earnings {
-  background: rgba(36, 47, 61, 0.04);
+[data-theme="light"] .owner-programs__site-dash-row-kpis .owner-programs__site-dash-kpi.lk-dashboard__program-earnings-card,
+[data-theme="light"] .lk-dashboard__program-earnings-card {
+  background: #242f3d;
+  background-color: #242f3d;
+}
+
+[data-theme="light"] .lk-dashboard__program-earnings-chart {
+  background-color: #242f3d;
 }
 
 [data-theme="light"] .lk-dashboard__program-earnings-label {
@@ -1609,15 +1692,15 @@ a.lk-dashboard__program-card-name:hover {
 }
 
 [data-theme="light"] .lk-dashboard__program-earnings-commission {
-  color: #26325c;
+  color: #7177f8;
 }
 
-[data-theme="light"] .lk-dashboard__program-earnings-sales {
-  color: rgba(38, 50, 92, 0.45);
+[data-theme="light"] .lk-dashboard__program-earnings-sales-total {
+  color: rgba(148, 163, 184, 0.82);
 }
 
-[data-theme="light"] .lk-dashboard__program-earnings-sales-prefix {
-  color: rgba(38, 50, 92, 0.38);
+[data-theme="light"] .lk-dashboard__program-earnings-line-legend-item {
+  color: #83899f;
 }
 
 [data-theme="light"] .lk-dashboard__program-referral-input {

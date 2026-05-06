@@ -53,6 +53,15 @@ describe("Agent program detail page", () => {
               referral_link: "https://app.example.com/?ref=ABC123",
               referrer_commission_total: "42.50",
               referrer_sales_total: "850.00",
+              recent_orders: [
+                {
+                  id: 101,
+                  amount: "850.00",
+                  currency: "RUB",
+                  status: "paid",
+                  created_at: "2026-01-11T10:15:00+00:00",
+                },
+              ],
             },
           }),
         });
@@ -82,9 +91,33 @@ describe("Agent program detail page", () => {
     expect(screen.getByText("Реферальный код: ABC123")).toBeInTheDocument();
     expect(screen.getByDisplayValue("https://demo.example/?ref=ABC123")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Скопировать ссылку" })).toBeInTheDocument();
-    expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("Доход по вашей ссылке");
+    expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("Доход реферала");
+    expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("Доход магазина");
     expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("42,50 ₽");
     expect(screen.getByTestId("agent-program-referrer-money")).toHaveTextContent("850,00 ₽");
+    expect(screen.getByText("Доход и продажи")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-program-earnings-chart")).toHaveTextContent("Доход реферала 42,50 ₽");
+    expect(screen.getByTestId("agent-program-earnings-chart")).toHaveTextContent("Сумма продаж 850,00 ₽");
+    const periodBtn = screen.getByRole("button", { name: /^7 дней$/ });
+    expect(periodBtn).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(periodBtn);
+    expect(periodBtn).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("option", { name: "30 дней" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "30 дней" }));
+    expect(screen.getByRole("button", { name: /^30 дней$/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("tab", { name: "История заказов" })).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(screen.getByRole("tab", { name: "История заказов" }));
+
+    expect(screen.getByRole("tab", { name: "История заказов" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByTestId("agent-program-referrer-money")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-program-joined-state")).not.toBeInTheDocument();
+    expect(screen.queryByText("Вознаграждение")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-program-orders-history")).toHaveTextContent("История заказов");
+    expect(screen.getByTestId("agent-program-orders-history")).toHaveTextContent("Заказ");
+    expect(screen.getByTestId("agent-program-orders-history")).toHaveTextContent("850,00 ₽");
+    expect(screen.getByTestId("agent-program-orders-history")).toHaveTextContent("RUB");
+    expect(screen.getByTestId("agent-program-orders-history")).toHaveTextContent("Оплачен");
   });
 
   it("renders detail avatar from API with stable cache version", async () => {
@@ -184,6 +217,40 @@ describe("Agent program detail page", () => {
       expect.stringContaining("/users/site/join/"),
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("shows owner notice instead of join action for own program", async () => {
+    jest.spyOn(global, "fetch").mockImplementation((url) => {
+      if (String(url).includes(`/users/programs/${SITE_ID}/`)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            program: {
+              site_public_id: SITE_ID,
+              site_display_label: "My Shop",
+              site_origin_label: "mine.example",
+              site_status: "active",
+              program_active: true,
+              commission_percent: "5.00",
+              referral_lock_days: 30,
+              participants_count: 0,
+              joined: false,
+              is_owner: true,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+
+    renderDetail();
+
+    const notice = await screen.findByTestId("agent-program-owner-notice");
+    expect(notice).toHaveTextContent("Это ваша программа");
+    expect(notice).toHaveTextContent("Вы не можете участвовать");
+    expect(notice).toHaveClass("lk-dashboard__my-programs-catalog-banner");
+    expect(notice).toHaveClass("lk-dashboard__programs-catalog-hero");
+    expect(screen.queryByTestId("agent-program-join-btn")).not.toBeInTheDocument();
   });
 
   it("shows inactive detail and disables join", async () => {

@@ -575,6 +575,8 @@ def create_site_membership_from_signup(
     site = get_site_by_public_id(site_public_id)
     if site is None:
         raise ValueError("invalid_site_public_id")
+    if site.owner_id == user.pk:
+        raise ValueError("site_owner_cannot_join")
     if not site_allows_cta_signup_membership(site):
         raise ValueError("site_not_joinable")
 
@@ -615,6 +617,8 @@ def join_site_membership_cta_logged_in(
     site = get_site_by_public_id(site_public_id)
     if site is None:
         raise ValueError("invalid_site_public_id")
+    if site.owner_id == user.pk:
+        raise ValueError("site_owner_cannot_join")
     if not site_allows_cta_signup_membership(site):
         raise ValueError("site_not_joinable")
 

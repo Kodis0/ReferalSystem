@@ -595,24 +595,29 @@ function LK() {
             </div>
 
             <div className="lk-header__right">
-              <button
-                type="button"
-                className="lk-header__wallet-btn"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setSupportOpen(false);
-                  setPersonalizationOpen(false);
-                  setLanguageOpen(false);
-                  navigate("/lk/balance");
-                }}
-                aria-label={`Бюджет программы, баланс ${walletBalanceLabel}`}
-                title="Бюджет программы"
-              >
-                <span className="lk-header__wallet-icon" aria-hidden="true">
-                  <WalletHeaderIcon />
+              <div className="lk-header__wallet">
+                <button
+                  type="button"
+                  className="lk-header__wallet-btn"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setSupportOpen(false);
+                    setPersonalizationOpen(false);
+                    setLanguageOpen(false);
+                    navigate("/lk/balance");
+                  }}
+                  aria-label={`Бюджет программы, баланс ${walletBalanceLabel}`}
+                  aria-describedby="lk-header-wallet-tooltip"
+                >
+                  <span className="lk-header__wallet-icon" aria-hidden="true">
+                    <WalletHeaderIcon />
+                  </span>
+                  <span className="lk-header__wallet-balance">{walletBalanceLabel}</span>
+                </button>
+                <span id="lk-header-wallet-tooltip" className="lk-header__wallet-tooltip" role="tooltip">
+                  Бюджет программы: доступные средства для выплат и начислений участникам.
                 </span>
-                <span className="lk-header__wallet-balance">{walletBalanceLabel}</span>
-              </button>
+              </div>
               <div className="lk-header__support" ref={supportRef}>
                 <button
                   type="button"

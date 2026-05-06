@@ -693,11 +693,16 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
   visibility: visible;
 }
 
+.lk-header__wallet,
 .lk-header__support,
 .lk-header__account {
   position: relative;
   display: flex;
   align-items: center;
+}
+
+.lk-header__wallet {
+  flex: 0 0 auto;
 }
 
 .lk-header__wallet-btn {
@@ -771,6 +776,39 @@ html[data-lk-page][data-theme="light"] *::-webkit-scrollbar-thumb:hover {
 
 [data-theme="light"] .lk-header__wallet-btn::after {
   background: rgba(38, 50, 92, 0.18);
+}
+
+.lk-header__wallet-tooltip {
+  position: absolute;
+  right: 10px;
+  top: calc(100% + 8px);
+  box-sizing: border-box;
+  min-width: 180px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(5, 12, 38, 0.15);
+  background: #ffffff;
+  color: #000000;
+  font-family: "Inter", "Stem-Regular", Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  z-index: 100000;
+}
+
+.lk-header__wallet:hover .lk-header__wallet-tooltip,
+.lk-header__wallet:focus-within .lk-header__wallet-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 @keyframes lk-wallet-bounce {

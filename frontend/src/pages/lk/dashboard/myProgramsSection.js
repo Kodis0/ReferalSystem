@@ -626,6 +626,7 @@ export function MyProgramsSection() {
                 const menuOpen = activeMenuSiteId === p.site_public_id;
                 const status = programLifecycleStatus(p);
                 const leavingThisProgram = leavingSiteId === p.site_public_id;
+                const siteAvatarUrl = typeof p.site_avatar_data_url === "string" ? p.site_avatar_data_url.trim() : "";
                 return (
                   <li key={p.site_public_id} className="lk-dashboard__programs-item">
                     <div
@@ -645,12 +646,12 @@ export function MyProgramsSection() {
                       <div className="lk-dashboard__programs-item-top">
                         <div className="lk-dashboard__programs-avatar" aria-hidden="true">
                           <SiteFaviconAvatar
-                            key={`mine-${p.site_public_id}-${String(p.avatar_data_url || "").slice(0, 48)}-${String(p.avatar_updated_at || "")}`}
-                            manualUrl={typeof p.avatar_data_url === "string" ? p.avatar_data_url.trim() : ""}
+                            key={`mine-${p.site_public_id}-${siteAvatarUrl.slice(0, 48)}-${String(p.avatar_updated_at || "")}-${catalogOriginLabel}`}
+                            manualUrl={siteAvatarUrl}
                             siteLike={p}
                             letter={programAvatarLetter(rowTitle)}
                             imgClassName="lk-dashboard__programs-avatar-img"
-                            useExternalFavicon={false}
+                            useExternalFavicon
                           />
                         </div>
                       </div>

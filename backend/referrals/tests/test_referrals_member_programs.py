@@ -189,6 +189,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         row = next(x for x in r.data["programs"] if x["site_public_id"] == str(site.public_id))
         self.assertEqual(row["avatar_data_url"], avatar)
+        self.assertEqual(row["site_avatar_data_url"], avatar)
 
     def test_programs_catalog_avatar_falls_back_to_site_owner_account_photo(self):
         owner_photo = "data:image/png;base64,OWNERFACE"
@@ -240,6 +241,7 @@ class MyProgramsApiTests(TestCase):
         self.assertEqual(catalog_row["avatar_data_url"], site_avatar)
         self.assertEqual(mine_row["avatar_data_url"], site_avatar)
         self.assertEqual(detail.data["program"]["avatar_data_url"], site_avatar)
+        self.assertEqual(mine_row["site_avatar_data_url"], site_avatar)
         self.assertEqual(catalog_row["avatar_updated_at"], site.updated_at.isoformat())
 
     def test_program_payload_uses_project_avatar_when_site_avatar_missing(self):
@@ -270,6 +272,7 @@ class MyProgramsApiTests(TestCase):
         ]
         for payload in payloads:
             self.assertEqual(payload["avatar_data_url"], project_avatar)
+            self.assertEqual(payload["site_avatar_data_url"], "")
             self.assertEqual(payload["avatar_updated_at"], project.updated_at.isoformat())
 
     def test_program_payload_empty_avatar_when_no_avatar_sources(self):
@@ -471,6 +474,7 @@ class MyProgramsApiTests(TestCase):
         self.assertFalse(prog["program_active"])
         self.assertEqual(prog["commission_percent"], "5.00")
         self.assertFalse(prog["joined"])
+        self.assertFalse(prog["is_owner"])
         self.assertNotIn("joined_at", prog)
         self.assertNotIn("ref_code", prog)
         self.assertNotIn("referrer_sales_total", prog)
@@ -478,6 +482,23 @@ class MyProgramsApiTests(TestCase):
         self.assertFalse(
             SiteMembership.objects.filter(site=site, user=self.user_a).exists()
         )
+
+    def test_program_catalog_detail_marks_owner_and_owner_cannot_join(self):
+        site = self._site(
+            "catalog_detail_owner",
+            config_json={"site_display_name": "Owner Program"},
+        )
+
+        self.api.force_authenticate(user=self.owner)
+        detail = self.api.get(f"/users/programs/{site.public_id}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertTrue(detail.data["program"]["is_owner"])
+        self.assertFalse(detail.data["program"]["joined"])
+
+        join = self.api.post("/users/site/join/", {"site_public_id": str(site.public_id)}, format="json")
+        self.assertEqual(join.status_code, 403)
+        self.assertEqual(join.data["code"], "site_owner_cannot_join")
+        self.assertFalse(SiteMembership.objects.filter(site=site, user=self.owner).exists())
 
     def test_program_catalog_detail_uses_site_commission_percent(self):
         site = self._site(
@@ -600,12 +621,18 @@ class MyProgramsApiTests(TestCase):
         self.assertTrue(prog["joined"])
         self.assertEqual(prog["referrer_sales_total"], "100.00")
         self.assertEqual(prog["referrer_commission_total"], "10.00")
+        self.assertEqual(len(prog["recent_orders"]), 1)
+        self.assertEqual(prog["recent_orders"][0]["amount"], "100.00")
+        self.assertEqual(prog["recent_orders"][0]["status"], "paid")
 
         r2 = self.api.get(f"/users/me/programs/{site.public_id}/")
         self.assertEqual(r2.status_code, 200)
         prog2 = r2.data["program"]
         self.assertEqual(prog2["referrer_sales_total"], "100.00")
         self.assertEqual(prog2["referrer_commission_total"], "10.00")
+        self.assertEqual(len(prog2["recent_orders"]), 1)
+        self.assertEqual(prog2["recent_orders"][0]["amount"], "100.00")
+        self.assertEqual(prog2["recent_orders"][0]["status"], "paid")
 
     @override_settings(FRONTEND_URL="https://app.example.com")
     def test_program_catalog_detail_joined_referral_link_falls_back_to_frontend_without_site_origin(self):

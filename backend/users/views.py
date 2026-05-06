@@ -7,6 +7,7 @@ from django.contrib.auth import login
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
@@ -23,7 +24,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from referrals.models import Site, SiteMembership
+from referrals.models import Order, Site, SiteMembership
 from referrals.services import (
     create_site_membership_from_signup,
     ensure_partner_profile,
@@ -107,6 +108,7 @@ def _member_program_payload(site, *, membership=None):
         "commission_percent": str(site_commission_percent(site)),
         "referral_lock_days": site_referral_lock_days(site),
         "participants_count": participants_count,
+        "site_avatar_data_url": site_shell_avatar_data_url(site),
         "avatar_data_url": _program_avatar_data_url(site),
         "avatar_updated_at": _program_avatar_updated_at(site),
     }
@@ -138,10 +140,29 @@ def _merge_member_referrer_money(payload, user, membership):
             {
                 "referrer_sales_total": "0.00",
                 "referrer_commission_total": "0.00",
+                "recent_orders": [],
             }
         )
         return
     payload.update(member_referrer_money_totals(partner))
+    recent_orders_qs = (
+        Order.objects.filter(partner=partner)
+        .filter(
+            Q(status=Order.Status.PAID)
+            | Q(status=Order.Status.PENDING, amount__gt=0)
+        )
+        .order_by("-created_at", "-pk")[:20]
+    )
+    payload["recent_orders"] = [
+        {
+            "id": o.id,
+            "amount": str(o.amount),
+            "currency": o.currency or "",
+            "status": o.status,
+            "created_at": o.created_at.isoformat(),
+        }
+        for o in recent_orders_qs
+    ]
 
 
 from .telegram_auth import (
@@ -290,6 +311,14 @@ class SiteCtaJoinView(APIView):
                     {
                         "detail": "site_not_joinable",
                         "site_status": site.status if site else None,
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if err == "site_owner_cannot_join":
+                return Response(
+                    {
+                        "detail": "site_owner_cannot_join",
+                        "code": "site_owner_cannot_join",
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
@@ -522,6 +551,7 @@ class ProgramsCatalogView(APIView):
             membership = memberships_by_site_id.get(site.id)
             item = _member_program_payload(site, membership=membership)
             item["joined"] = membership is not None
+            item["is_owner"] = site.owner_id == request.user.pk
             programs.append(item)
         return Response({"programs": programs}, status=status.HTTP_200_OK)
 
@@ -569,6 +599,7 @@ class ProgramCatalogDetailView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         payload = _member_program_payload(site, membership=membership)
         payload["joined"] = membership is not None
+        payload["is_owner"] = site.owner_id == request.user.pk
         if membership is not None:
             _add_personal_referral_fields(payload, request.user, site=site)
             _merge_member_referrer_money(payload, request.user, membership)
