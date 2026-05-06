@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ListFilter, Search, ShoppingBag, Trophy, UserPlus } from "lucide-react";
+import { Crown, ListFilter, Search, ShoppingBag, Trophy, UserPlus } from "lucide-react";
 import { SiteFaviconAvatar } from "../owner-programs/SiteFaviconAvatar";
 import "../bug/bug.css";
 import "../dashboard/dashboard.css";
@@ -74,12 +74,12 @@ function ratingAvatarLetter(displayName) {
   return value.slice(0, 1).toUpperCase() || "?";
 }
 
-/** Классы для 1 / 2 / 3 места: золото, серебро, бронза */
-function rankMedalClass(rankNum) {
+/** Классы короны для 1 / 2 / 3 места: золото, серебро, бронза */
+function rankCrownClass(rankNum) {
   const n = Number(rankNum);
-  if (n === 1) return " mini-game-rating__rank-highlight--medal1";
-  if (n === 2) return " mini-game-rating__rank-highlight--medal2";
-  if (n === 3) return " mini-game-rating__rank-highlight--medal3";
+  if (n === 1) return "mini-game-rating__rank-crown--1";
+  if (n === 2) return "mini-game-rating__rank-crown--2";
+  if (n === 3) return "mini-game-rating__rank-crown--3";
   return "";
 }
 
@@ -110,7 +110,7 @@ function ReferralLeaderboardCatalogRow({ displayName, avatarUrl, salesRub, rankH
   const profit = formatRub(salesRub);
   const rankText = typeof rankHighlight === "string" ? rankHighlight.trim() : "";
   const detailText = typeof detailLine === "string" ? detailLine.trim() : "";
-  const medalCls = rankMedalClass(rankNumber);
+  const crownCls = rankCrownClass(rankNumber);
 
   return (
     <div className="lk-dashboard__programs-catalog-row mini-game-rating__top-catalog-row">
@@ -140,10 +140,16 @@ function ReferralLeaderboardCatalogRow({ displayName, avatarUrl, salesRub, rankH
           </span>
           <div className="mini-game-rating__rating-right">
             {rankText ? (
-              <span
-                className={`mini-game-rating__rank-highlight mini-game-rating__rank-highlight--inline${medalCls}`}
-              >
-                {rankText}
+              <span className="mini-game-rating__rating-rank">
+                {crownCls ? (
+                  <Crown
+                    className={`mini-game-rating__rank-crown ${crownCls}`}
+                    size={18}
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                ) : null}
+                <span className="mini-game-rating__rank-label">{rankText}</span>
               </span>
             ) : null}
           </div>

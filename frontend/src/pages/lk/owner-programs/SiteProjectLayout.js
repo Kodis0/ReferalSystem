@@ -38,6 +38,15 @@ function buildProjectSitePath(projectId, sitePublicId) {
   return `/lk/partner/project/${projectId}/sites/${encodeURIComponent(sitePublicId)}`;
 }
 
+/** Полный URL страницы для конструктора «Блок для сайта» из поля домена/origin при подключении сайта. */
+function normalizeOriginToReferralScanUrl(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("//")) return `https:${s}`;
+  return `https://${s.replace(/^\/+/, "")}`;
+}
+
 function tabClass({ isActive }) {
   return `owner-programs__tab ${isActive ? "owner-programs__tab_active" : ""}`;
 }
@@ -180,6 +189,7 @@ export default function SiteProjectLayout() {
     setSiteShellToolbarSlot(node);
   }, []);
   const createMenuRef = useRef(null);
+  const connectReferralScanUrlRef = useRef("");
   const locationViewMode = location.state?.projectViewMode;
   const { user } = useCurrentUser();
   const partnerAccountAvatarUrl =
@@ -433,11 +443,16 @@ export default function SiteProjectLayout() {
         : "";
     if (onWidgetPath && stateConnectId === createdSitePublicId) {
       setCreatedSitePublicId("");
+      connectReferralScanUrlRef.current = "";
       return;
     }
     navigate(widgetPath, {
       replace: true,
-      state: { projectViewMode: "connect-site", sitePublicIdForConnect: createdSitePublicId },
+      state: {
+        projectViewMode: "connect-site",
+        sitePublicIdForConnect: createdSitePublicId,
+        referralBlockInitialScanUrl: connectReferralScanUrlRef.current || undefined,
+      },
     });
   }, [
     addSiteState,
@@ -796,6 +811,7 @@ export default function SiteProjectLayout() {
           throw new Error(detailMsg || `Не удалось добавить сайт (${res.status})`);
         }
         const nextSiteId = typeof payload?.public_id === "string" ? payload.public_id.trim() : "";
+        const referralScanUrlFromForm = normalizeOriginToReferralScanUrl(addSiteOrigin);
         await loadProjectEntry(projectEntry.id);
         setAddSiteDisplayName("");
         setAddSiteOrigin("");
@@ -803,10 +819,15 @@ export default function SiteProjectLayout() {
         setAddSiteOpen(false);
         setAddSiteState("success");
         if (isUuidString(nextSiteId)) {
+          connectReferralScanUrlRef.current = referralScanUrlFromForm;
           setCreatedSitePublicId(nextSiteId);
           navigate(buildScopedProjectPath("widget"), {
             replace: true,
-            state: { projectViewMode: "connect-site", sitePublicIdForConnect: nextSiteId },
+            state: {
+              projectViewMode: "connect-site",
+              sitePublicIdForConnect: nextSiteId,
+              referralBlockInitialScanUrl: connectReferralScanUrlRef.current || undefined,
+            },
           });
         }
       } catch (err) {
@@ -815,7 +836,15 @@ export default function SiteProjectLayout() {
         setAddSiteError(err instanceof Error && err.message ? err.message : "Не удалось добавить сайт");
       }
     },
-    [addSiteDisplayName, addSiteOrigin, addSitePlatform, buildScopedProjectPath, navigate, loadProjectEntry, projectEntry],
+    [
+      addSiteDisplayName,
+      addSiteOrigin,
+      addSitePlatform,
+      buildScopedProjectPath,
+      navigate,
+      loadProjectEntry,
+      projectEntry,
+    ],
   );
 
   const projectComment =

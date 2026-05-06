@@ -20,6 +20,36 @@ import { emitSiteOwnerActivity } from "../owner-programs/siteOwnerActivityBus";
 
 SyntaxHighlighter.registerLanguage("xml", xml);
 
+/**
+ * React 18 Strict Mode (dev) unmounts/remounts immediately. Draft-site DELETE on unmount would run
+ * before remount and remove the row — next GET integration returns `site_missing`. Defer DELETE one
+ * macrotask so remount can cancel; real navigation away still deletes after the timeout.
+ */
+const pendingDraftSiteDeleteTimers = new Map();
+
+function draftSiteDeleteTimerKey(projectId, sitePublicId) {
+  return `${String(projectId)}|${sitePublicId}`;
+}
+
+function cancelDeferredDraftSiteDelete(projectId, sitePublicId) {
+  const key = draftSiteDeleteTimerKey(projectId, sitePublicId);
+  const tid = pendingDraftSiteDeleteTimers.get(key);
+  if (tid != null) {
+    clearTimeout(tid);
+    pendingDraftSiteDeleteTimers.delete(key);
+  }
+}
+
+function scheduleDeferredDraftSiteDelete(projectId, sitePublicId, fn) {
+  const key = draftSiteDeleteTimerKey(projectId, sitePublicId);
+  cancelDeferredDraftSiteDelete(projectId, sitePublicId);
+  const tid = window.setTimeout(() => {
+    pendingDraftSiteDeleteTimers.delete(key);
+    fn();
+  }, 0);
+  pendingDraftSiteDeleteTimers.set(key, tid);
+}
+
 function WidgetInstallScreenshotExpandable({ src, description, onOpen }) {
   return (
     <button
@@ -693,7 +723,7 @@ function WidgetInstallConnectionCheckCard({
 }
 
 /**
- * @param {{ routeSitePublicId?: string, focused?: boolean, presentation?: "default" | "project-site", cleanupDraftOnExit?: boolean }} [props]
+ * @param {{ routeSitePublicId?: string, focused?: boolean, presentation?: "default" | "project-site", cleanupDraftOnExit?: boolean, referralBlockInitialScanUrl?: string }} [props]
  * When set (UUID), loads integration for that Site — used from `/lk/partner/:sitePublicId/widget`.
  */
 function WidgetInstallScreen({
@@ -701,6 +731,7 @@ function WidgetInstallScreen({
   focused = false,
   presentation = "default",
   cleanupDraftOnExit = false,
+  referralBlockInitialScanUrl = "",
 } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -715,6 +746,8 @@ function WidgetInstallScreen({
   const cleanupDraftOnExitRef = useRef(Boolean(cleanupDraftOnExit));
   cleanupDraftOnExitRef.current = Boolean(cleanupDraftOnExit);
   const skipDraftCleanupRef = useRef(false);
+  const referralBlockInitialScanUrlRef = useRef(referralBlockInitialScanUrl);
+  referralBlockInitialScanUrlRef.current = referralBlockInitialScanUrl;
   const connectSiteIntroRu =
     "Скопируйте код, вставьте его в header сайта и опубликуйте сайт. После этого мы автоматически проверим подключение.";
   const shellTitle = focusedConnectView ? "Подключите сайт" : inProjectShell ? "Виджет" : "Виджет на сайт";
@@ -798,25 +831,29 @@ function WidgetInstallScreen({
     ) {
       return;
     }
-    skipDraftCleanupRef.current = true;
-    window.dispatchEvent(
-      new CustomEvent("lk-project-site-deleted", {
-        detail: { projectId: Number(projectId), sitePublicId },
-      }),
-    );
-    fetch(API_ENDPOINTS.projectSiteDelete(projectId), {
-      method: "DELETE",
-      headers: authHeaders(),
-      credentials: "include",
-      keepalive: true,
-      body: JSON.stringify({ site_public_id: sitePublicId }),
-    })
-      .then((res) => {
-        if (res.ok) {
-          window.dispatchEvent(new Event("lk-owner-projects-updated"));
-        }
+    const performDelete = () => {
+      if (skipDraftCleanupRef.current) return;
+      skipDraftCleanupRef.current = true;
+      window.dispatchEvent(
+        new CustomEvent("lk-project-site-deleted", {
+          detail: { projectId: Number(projectId), sitePublicId },
+        }),
+      );
+      fetch(API_ENDPOINTS.projectSiteDelete(projectId), {
+        method: "DELETE",
+        headers: authHeaders(),
+        credentials: "include",
+        keepalive: true,
+        body: JSON.stringify({ site_public_id: sitePublicId }),
       })
-      .catch(() => {});
+        .then((res) => {
+          if (res.ok) {
+            window.dispatchEvent(new Event("lk-owner-projects-updated"));
+          }
+        })
+        .catch(() => {});
+    };
+    scheduleDeferredDraftSiteDelete(projectId, sitePublicId, performDelete);
   }, [routeSitePublicId]);
 
   const refreshIntegrationSnapshotForPoll = useCallback(
@@ -1021,19 +1058,30 @@ function WidgetInstallScreen({
     [cleanupDraftSiteOnExit],
   );
 
-  const siteManagementPath = useMemo(() => {
-    if (!effectiveProjectBasePath || !selectedSitePublicId) return "";
-    return `${effectiveProjectBasePath}/sites/${encodeURIComponent(selectedSitePublicId)}/widget`;
-  }, [effectiveProjectBasePath, selectedSitePublicId]);
-
   useEffect(() => {
-    if (!focusedConnectView || loading || !data || !siteManagementPath) return;
-    const cc = diag?.connection_check;
-    if (cc?.status === "found") {
+    if (!cleanupDraftOnExit) return;
+    const pid = projectIdFromRouteRef.current;
+    const sid = routeSitePublicId;
+    if (!pid || !isUuidString(sid)) return;
+    cancelDeferredDraftSiteDelete(pid, sid);
+  }, [cleanupDraftOnExit, routeSitePublicId]);
+
+  const navigateFocusedConnectToReferralBlock = useCallback(
+    (integrationPayload) => {
+      if (!focusedConnectViewRef.current) return;
+      const siteId = String(integrationPayload?.public_id || selectedSitePublicIdRef.current || "").trim();
+      const base = effectiveProjectBasePathRef.current;
+      if (!siteId || !base) return;
       skipDraftCleanupRef.current = true;
-      navigate(siteManagementPath, { replace: true });
-    }
-  }, [focusedConnectView, loading, data, diag, siteManagementPath, navigate]);
+      const path = `${base}/sites/${encodeURIComponent(siteId)}/referral-block`;
+      const scanUrl = String(referralBlockInitialScanUrlRef.current || "").trim();
+      navigate(path, {
+        replace: true,
+        state: scanUrl ? { referralBlockInitialScanUrl: scanUrl } : undefined,
+      });
+    },
+    [navigate],
+  );
 
   const onCreateSite = async () => {
     setCreateSiteLoading(true);
@@ -1192,16 +1240,7 @@ function WidgetInstallScreen({
       emitSiteOwnerActivity(String(intPayload?.public_id || selectedSitePublicIdRef.current || "").trim());
       dispatchLumorefSiteStatusChanged(intPayload);
       if (focusedConnectViewRef.current) {
-        const widgetPath = buildProjectSiteWidgetPath(
-          intPayload,
-          selectedSitePublicIdRef.current,
-          effectiveProjectBasePathRef.current,
-          projectIdFromRouteRef.current,
-        );
-        if (widgetPath) {
-          skipDraftCleanupRef.current = true;
-          navigate(widgetPath, { replace: true });
-        }
+        navigateFocusedConnectToReferralBlock(intPayload);
       }
     };
 
@@ -1343,16 +1382,7 @@ function WidgetInstallScreen({
         setDiagError("");
       }
       if (focusedConnectView) {
-        const widgetPath = buildProjectSiteWidgetPath(
-          payload,
-          selectedSitePublicId,
-          effectiveProjectBasePath,
-          projectIdFromRoute,
-        );
-        if (widgetPath) {
-          skipDraftCleanupRef.current = true;
-          navigate(widgetPath, { replace: true });
-        }
+        navigateFocusedConnectToReferralBlock(payload);
       }
     } catch (e) {
       if (verifySessionRef.current !== session) return;

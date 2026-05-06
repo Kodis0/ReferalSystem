@@ -23,6 +23,10 @@ export default function ProjectWidgetInstallScreen() {
       : "";
   const id = isUuidString(connectFromState) ? connectFromState : "";
   const focused = location.state?.projectViewMode === "connect-site";
+  const referralBlockInitialScanUrl =
+    typeof location.state?.referralBlockInitialScanUrl === "string"
+      ? location.state.referralBlockInitialScanUrl.trim()
+      : "";
 
   if (!id) {
     if (projectId) {
@@ -31,5 +35,12 @@ export default function ProjectWidgetInstallScreen() {
     return <Navigate to="/lk/partner" replace />;
   }
 
-  return <WidgetInstallScreen routeSitePublicId={id} focused={focused} cleanupDraftOnExit />;
+  return (
+    <WidgetInstallScreen
+      routeSitePublicId={id}
+      focused={focused}
+      cleanupDraftOnExit
+      referralBlockInitialScanUrl={referralBlockInitialScanUrl}
+    />
+  );
 }

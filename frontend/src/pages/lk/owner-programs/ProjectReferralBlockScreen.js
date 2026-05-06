@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { deferResizeObserverCallback } from "../../../resizeObserverDefer";
 import { flushSync } from "react-dom";
 import { Code2, Hand, Monitor, Move, Smartphone, Tablet, Type, X } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { applyNodeChanges, Background, Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { API_ENDPOINTS } from "../../../config/api";
@@ -1597,6 +1597,14 @@ function ReferralBuilderBlockInspector({ visible, selectedBlock, onChangeConfig,
 }
 
 function ReferralBlockCanvas({ sitePublicId = "" }) {
+  const location = useLocation();
+  const initialReferralScanUrlFromConnect = useMemo(() => {
+    const st = location.state;
+    if (!st || typeof st !== "object") return "";
+    const raw = st.referralBlockInitialScanUrl;
+    return typeof raw === "string" ? raw.trim() : "";
+  }, [location.state]);
+  const connectFlowAutoScanStartedRef = useRef(false);
   const [flowInstance, setFlowInstance] = useState(null);
   const flowInstanceRef = useRef(null);
   const flowCanvasWrapRef = useRef(null);
@@ -1714,6 +1722,12 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
       cancelled = true;
     };
   }, [sitePublicId]);
+
+  useEffect(() => {
+    if (workspaceBootstrap !== "ready") return;
+    if (!initialReferralScanUrlFromConnect) return;
+    setScanUrl((prev) => (prev.trim() ? prev : initialReferralScanUrlFromConnect));
+  }, [workspaceBootstrap, initialReferralScanUrlFromConnect]);
 
   /** Центр панели в координатах flow + zoom — чтобы после смены размера канваса контент оставался на том же месте экрана. */
   const captureFlowViewportAnchor = useCallback(() => {
@@ -2661,6 +2675,15 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
     [loadPreviewModeInBackground],
   );
 
+  useEffect(() => {
+    if (workspaceBootstrap !== "ready") return;
+    const raw = typeof initialReferralScanUrlFromConnect === "string" ? initialReferralScanUrlFromConnect.trim() : "";
+    if (!raw) return;
+    if (connectFlowAutoScanStartedRef.current) return;
+    connectFlowAutoScanStartedRef.current = true;
+    void executeVisualScan(raw, DEFAULT_REFERRAL_BUILDER_PREVIEW_MODE);
+  }, [workspaceBootstrap, initialReferralScanUrlFromConnect, executeVisualScan]);
+
   const handleScanSubmit = useCallback(
     async (event) => {
       event.preventDefault();
@@ -2857,6 +2880,13 @@ function ReferralBlockCanvas({ sitePublicId = "" }) {
           </div>
         )}
       </div>
+      <ReferralBuilderBlockInspector
+        visible={Boolean(selectedBuilderBlock)}
+        selectedBlock={selectedBuilderBlock}
+        onChangeConfig={handleChangeBuilderBlockConfig}
+        onDuplicate={handleDuplicateBuilderBlock}
+        onDelete={handleDeleteBuilderBlock}
+      />
     </div>
   );
 }

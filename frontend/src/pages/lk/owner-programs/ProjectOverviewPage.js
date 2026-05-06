@@ -21,7 +21,6 @@ import {
 import SiteShellWidgetActionsBar from "../widget-install/SiteShellWidgetActionsBar";
 import { DomainCountryFlagSvg, SUPPORTED_DOMAIN_FLAG_SVG_CODES } from "./domainCountryFlagSvg";
 import { useSiteShellIntegrationActions } from "./useSiteShellIntegrationActions";
-import useCurrentUser from "../../../hooks/useCurrentUser";
 import { SiteFaviconAvatar } from "./SiteFaviconAvatar";
 function ServicesGridIcon() {
   return (
@@ -312,9 +311,6 @@ export default function ProjectOverviewPage() {
     toggleAddSiteForm,
     handleAddSite,
   } = useOutletContext();
-  const { user } = useCurrentUser();
-  const partnerAccountAvatarUrl =
-    typeof user?.avatar_data_url === "string" ? user.avatar_data_url.trim() : "";
   // Soft hint for "currently viewed" highlight only — never used for site
   // identity selection on a site-level screen.
   const [searchParams] = useSearchParams();
@@ -859,12 +855,7 @@ export default function ProjectOverviewPage() {
                       <div className="owner-programs__service-card-top-row">
                         <div className="owner-programs__service-card-hero">
                           <div className="owner-programs__service-card-avatar">
-                            <SiteFaviconAvatar
-                              manualUrl={siteCardAvatarUrl}
-                              accountFallbackUrl={partnerAccountAvatarUrl}
-                              siteLike={site}
-                              letter={cardLetter}
-                            />
+                            <SiteFaviconAvatar manualUrl={siteCardAvatarUrl} siteLike={site} letter={cardLetter} />
                           </div>
                         </div>
                         <div className="owner-programs__service-card-top-right" ref={activeMenuSiteId === site.public_id ? menuRef : null}>
@@ -935,7 +926,6 @@ export default function ProjectOverviewPage() {
                         <div className="owner-programs__service-card-avatar owner-programs__services-list-avatar">
                           <SiteFaviconAvatar
                             manualUrl={siteListAvatarUrl}
-                            accountFallbackUrl={partnerAccountAvatarUrl}
                             siteLike={site}
                             letter={listLetter}
                           />

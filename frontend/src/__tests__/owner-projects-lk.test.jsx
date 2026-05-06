@@ -1453,7 +1453,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.queryByTestId("project-create-menu-trigger")).not.toBeInTheDocument();
   });
 
-  it("creates site and opens project-scoped focused connect screen", async () => {
+  it("creates site and opens widget connect flow (referral URL carried for post-verify redirect)", async () => {
     const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     const siteB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
     const widgetSnippet =
@@ -1492,6 +1492,29 @@ describe("SiteProjectLayout child sites", () => {
             config_json: { site_display_name: "Landing beta" },
             widget_enabled: true,
             project: { id: 501, name: "Shared project", description: "", avatar_data_url: "" },
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && u.includes("diagnostics")) {
+        let selectedSite = siteA;
+        try {
+          const parsed = new URL(u, "http://localhost");
+          const q = String(parsed.searchParams.get("site_public_id") || "").trim();
+          if (q === siteB) selectedSite = siteB;
+          else if (q === siteA) selectedSite = siteA;
+        } catch {
+          selectedSite = u.includes(siteB) ? siteB : siteA;
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            integration_status: "healthy",
+            site_status: "draft",
+            site_public_id: selectedSite,
+            connection_check: { status: "not_found", last_seen_at: null },
+            integration_warnings: [],
+            embed_readiness: { origins_configured: true, publishable_key_present: true, public_id_present: true },
+            widget_enabled: true,
           }),
         });
       }
@@ -1569,6 +1592,7 @@ describe("SiteProjectLayout child sites", () => {
     const snippetAfterCreate = screen.getByTestId("widget-install-snippet-block");
     expect(snippetAfterCreate).toHaveTextContent(siteB);
     expect(snippetAfterCreate).toHaveTextContent("pk_site_b");
+    await userEvent.click(await screen.findByRole("button", { name: /Открыть шаг 7/i }));
     expect(screen.getByTestId("project-site-connect-step-verify-title")).toBeInTheDocument();
     expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/501");
     expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();
@@ -1587,7 +1611,7 @@ describe("SiteProjectLayout child sites", () => {
     );
   });
 
-  it("creates first site and opens the same focused connect screen inside project shell", async () => {
+  it("creates first site and opens widget connect inside project shell", async () => {
     const siteA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     const widgetSnippet =
       '<script src="https://app.example/widgets/referral-widget.v1.js"\n' +
@@ -1621,6 +1645,20 @@ describe("SiteProjectLayout child sites", () => {
           json: async () => ({
             public_id: siteA,
             site_display_name: "Landing alpha",
+          }),
+        });
+      }
+      if (u.includes("/referrals/site/integration/") && u.includes("diagnostics")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            integration_status: "healthy",
+            site_status: "draft",
+            site_public_id: siteA,
+            connection_check: { status: "not_found", last_seen_at: null },
+            integration_warnings: [],
+            embed_readiness: { origins_configured: true, publishable_key_present: true, public_id_present: true },
+            widget_enabled: true,
           }),
         });
       }
@@ -1676,6 +1714,7 @@ describe("SiteProjectLayout child sites", () => {
     expect(screen.getByRole("heading", { name: "Подключите сайт" })).toBeInTheDocument();
     expect(screen.getByTestId("widget-install-snippet-block")).toHaveTextContent(siteA);
     expect(screen.getByRole("button", { name: "Скопировать код" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /Открыть шаг 7/i }));
     expect(screen.getByTestId("project-site-connect-step-verify-title")).toBeInTheDocument();
     expect(screen.getByTestId("project-site-connect-back")).toHaveAttribute("href", "/lk/partner/project/502");
     expect(screen.queryByRole("navigation", { name: "Разделы проекта" })).not.toBeInTheDocument();

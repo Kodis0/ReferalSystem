@@ -1,6 +1,7 @@
 /** @jest-environment jsdom */
 import "@testing-library/jest-dom";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import MiniGameRatingPage from "../pages/lk/mini-game/miniGameRating";
 import { fetchGamificationReferralLeaderboard } from "../pages/lk/mini-game/gamificationApi";
 
@@ -49,7 +50,11 @@ describe("MiniGameRatingPage referral leaderboard API", () => {
       },
     });
 
-    render(<MiniGameRatingPage />);
+    render(
+      <MemoryRouter>
+        <MiniGameRatingPage />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
       expect(fetchGamificationReferralLeaderboard).toHaveBeenCalledWith("test-access-token", "month");
@@ -57,12 +62,12 @@ describe("MiniGameRatingPage referral leaderboard API", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Тест Имя")).toBeInTheDocument();
-      expect(screen.getByText("7 мест")).toBeInTheDocument();
+      expect(screen.getAllByText(/7 мест/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/До топ-5 осталось/)).toBeInTheDocument();
     });
   });
 
-  it("shows empty message when leaderboard_empty", async () => {
+  it("shows current user row when leaderboard_empty", async () => {
     fetchGamificationReferralLeaderboard.mockResolvedValue({
       period: "month",
       leaderboard_empty: true,
@@ -78,10 +83,15 @@ describe("MiniGameRatingPage referral leaderboard API", () => {
       },
     });
 
-    render(<MiniGameRatingPage />);
+    render(
+      <MemoryRouter>
+        <MiniGameRatingPage />
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText(/Пока нет подтверждённых продаж/)).toBeInTheDocument();
+      expect(screen.getByText("Ваша позиция")).toBeInTheDocument();
+      expect(screen.getByText(/1 место/)).toBeInTheDocument();
     });
   });
 });
