@@ -659,6 +659,21 @@
     form.appendChild(inp);
   }
 
+  function removeHiddenField(form, name) {
+    if (!form || !name) return;
+    var nodes = [];
+    try {
+      nodes = form.querySelectorAll('input[type="hidden"][name="' + name + '"]');
+    } catch (e) {
+      nodes = [];
+    }
+    for (var i = 0; i < nodes.length; i++) {
+      try {
+        nodes[i].parentNode.removeChild(nodes[i]);
+      } catch (e2) {}
+    }
+  }
+
   function normalizeAmountText(raw) {
     var s = trimStr(raw).replace(/\s+/g, "").replace(/\u00a0/g, "").replace(",", ".");
     if (!s) return "";
@@ -934,18 +949,19 @@
 
   function ensureHiddenOrderFields(form, cfg, adapter) {
     var selCfg = siteLeadSelectors(cfg);
+    var isTilda = adapter && adapter.id === PLATFORMS.TILDA;
     var amount = "";
     var productName = "";
-    if (adapter && adapter.id === PLATFORMS.TILDA) {
+    if (isTilda) {
       amount = readTildaCartAmount(form);
     }
-    if (!amount && selCfg.amountSelector) {
+    if (!amount && selCfg.amountSelector && !isTilda) {
       amount = normalizeAmountText(readDomBySelectorInContext(selCfg.amountSelector, form, adapter, true));
     }
     if (selCfg.productNameSelector) {
       productName = readDomBySelectorInContext(selCfg.productNameSelector, form, adapter, true);
     }
-    if (!amount && lastTildaProductContext) {
+    if (!amount && lastTildaProductContext && !isTilda) {
       amount = lastTildaProductContext.amount || "";
       if (!productName) productName = lastTildaProductContext.productName || "";
     }
@@ -955,7 +971,8 @@
     if (!productName && (!adapter || adapter.id !== PLATFORMS.TILDA)) {
       productName = readDomBySelectorInContext(".js-product-name", form, adapter, false);
     }
-    upsertHiddenField(form, "sum", amount);
+    if (isTilda && !amount) removeHiddenField(form, "sum");
+    else upsertHiddenField(form, "sum", amount);
     upsertHiddenField(form, "product_name", productName);
     upsertHiddenField(form, "site_public_id", siteId);
   }

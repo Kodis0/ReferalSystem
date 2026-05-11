@@ -231,7 +231,7 @@ describe("referral-widget.v1.js", () => {
     );
   });
 
-  it("adds hidden order sum from clicked Tilda product card", async () => {
+  it("does not copy clicked Tilda product card price into detached order form", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {
         return Promise.resolve({
@@ -282,11 +282,10 @@ describe("referral-widget.v1.js", () => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await flushMicrotasks();
 
-    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("79");
-    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Dining Chair");
+    expect(form.querySelector('input[type="hidden"][name="sum"]')).toBeNull();
   });
 
-  it("adds hidden order sum from generic Tilda product blocks such as t922", async () => {
+  it("does not copy generic Tilda product block price into detached order form", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {
         return Promise.resolve({
@@ -342,11 +341,10 @@ describe("referral-widget.v1.js", () => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await flushMicrotasks();
 
-    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("399");
-    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Traffic Hybrid Bike");
+    expect(form.querySelector('input[type="hidden"][name="sum"]')).toBeNull();
   });
 
-  it("uses clicked Tilda store product when multiple store blocks share the order form", async () => {
+  it("does not use clicked Tilda store product when cart amount is unavailable", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {
         return Promise.resolve({
@@ -406,8 +404,7 @@ describe("referral-widget.v1.js", () => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await flushMicrotasks();
 
-    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("1500");
-    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Starter Lesson");
+    expect(form.querySelector('input[type="hidden"][name="sum"]')).toBeNull();
   });
 
   it("does not add stale Tilda product sum to a cart form before product click", async () => {
@@ -550,6 +547,50 @@ describe("referral-widget.v1.js", () => {
     await flushMicrotasks();
 
     expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("1800");
+  });
+
+  it("does not fall back to product price when Tilda cart amount is unavailable", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              amount_selector: ".js-product-price",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const cart = document.createElement("div");
+    cart.className = "t706__cartwin";
+    const staleProductPrice = document.createElement("div");
+    staleProductPrice.className = "js-product-price";
+    staleProductPrice.textContent = "400 000";
+    const form = document.createElement("form");
+    form.className = "t706__orderform";
+    const staleSum = document.createElement("input");
+    staleSum.type = "hidden";
+    staleSum.name = "sum";
+    staleSum.value = "400000";
+    form.appendChild(staleSum);
+    cart.appendChild(staleProductPrice);
+    cart.appendChild(form);
+    document.body.appendChild(cart);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]')).toBeNull();
   });
 
   it("resolves amount from nearest block context, not first global match", async () => {
