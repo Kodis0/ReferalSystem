@@ -448,6 +448,54 @@ describe("referral-widget.v1.js", () => {
     );
   });
 
+  it("overwrites stale Tilda cart form sum with cart total amount", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              amount_selector: ".js-product-price",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const cart = document.createElement("div");
+    cart.className = "t706__cartwin";
+    const staleProductPrice = document.createElement("div");
+    staleProductPrice.className = "js-product-price";
+    staleProductPrice.textContent = "400 000";
+    const total = document.createElement("div");
+    total.className = "t706__cartwin-prodamount-wrap";
+    total.textContent = "Итого: 1 500 руб.";
+    const form = document.createElement("form");
+    form.className = "t706__orderform";
+    const staleSum = document.createElement("input");
+    staleSum.type = "hidden";
+    staleSum.name = "sum";
+    staleSum.value = "400000";
+    form.appendChild(staleSum);
+    cart.appendChild(staleProductPrice);
+    cart.appendChild(total);
+    cart.appendChild(form);
+    document.body.appendChild(cart);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("1500");
+  });
+
   it("resolves amount from nearest block context, not first global match", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {

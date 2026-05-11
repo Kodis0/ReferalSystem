@@ -762,6 +762,9 @@
   var PRODUCT_TITLE_SELECTOR =
     ".js-product-name, .t-store__card__title, [data-product-title], [data-title], [itemprop='name'], " +
     "[class*='__title'], [field='title'], [field*='_title']";
+  var TILDA_CART_TOTAL_SELECTOR =
+    ".t706__cartwin-prodamount, .t706__cartwin-prodamount-wrap, .t706__cartwin-totalamount, " +
+    ".t706__cartwin-totalamount-info, .t706__cartwin-totalamount-wrap";
 
   function elementLooksLikeOldPrice(el) {
     if (!el || el.nodeType !== 1) return false;
@@ -818,6 +821,35 @@
     return null;
   }
 
+  function findTildaCartRoot(form) {
+    if (!form || form.nodeType !== 1) return null;
+    try {
+      return (
+        form.closest(".t706__cartwin") ||
+        form.closest(".t706") ||
+        form.closest(".t-popup") ||
+        form.closest(".t-rec")
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function readTildaCartAmount(form) {
+    var root = findTildaCartRoot(form);
+    var roots = [];
+    if (root) roots.push(root);
+    try {
+      var openCart = doc.querySelector(".t706__cartwin");
+      if (openCart && openCart !== root) roots.push(openCart);
+    } catch (e) {}
+    for (var i = 0; i < roots.length; i++) {
+      var amount = normalizeAmountText(readDomValueFromElement(querySelectorScoped(TILDA_CART_TOTAL_SELECTOR, [roots[i]])));
+      if (amount) return amount;
+    }
+    return "";
+  }
+
   function clickLooksLikeOrderIntent(link) {
     if (!link || link.nodeType !== 1) return false;
     var href = "";
@@ -869,7 +901,10 @@
     var selCfg = siteLeadSelectors(cfg);
     var amount = "";
     var productName = "";
-    if (selCfg.amountSelector) {
+    if (adapter && adapter.id === PLATFORMS.TILDA) {
+      amount = readTildaCartAmount(form);
+    }
+    if (!amount && selCfg.amountSelector) {
       amount = normalizeAmountText(readDomBySelectorInContext(selCfg.amountSelector, form, adapter, true));
     }
     if (selCfg.productNameSelector) {

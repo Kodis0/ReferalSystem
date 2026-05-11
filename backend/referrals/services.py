@@ -957,6 +957,14 @@ def _first_decimal(data: Mapping[str, Any], keys: Tuple[str, ...]) -> Decimal:
         return Decimal("0.00")
 
 
+def _first_present_key(data: Mapping[str, Any], keys: Tuple[str, ...]) -> str:
+    for k in keys:
+        for variant in (k, k.lower(), k.upper()):
+            if variant in data and data[variant] not in (None, ""):
+                return variant
+    return ""
+
+
 def _extract_ref_from_url_like_string(s: str) -> str:
     """
     Parse ``ref`` query parameter from a full URL or from inline ``...?ref=...`` fragments.
@@ -1217,6 +1225,32 @@ def _parse_payment_field_as_possible_amount(raw: str) -> Decimal:
         return Decimal("0.00")
 
 
+_TILDA_CART_TOTAL_AMOUNT_KEYS = (
+    "payment_sum",
+    "Payment_sum",
+    "PaymentSum",
+    "paymentSum",
+    "paymentsum",
+    "PaymentAmount",
+    "payment_amount",
+    "cart_total",
+    "CartTotal",
+    "order_total",
+    "OrderTotal",
+    "OrderSum",
+    "ordersum",
+    "Order_sum",
+    "grandtotal",
+    "GrandTotal",
+    "total",
+    "Total",
+    "TOTAL",
+    "SumTotal",
+    "sumtotal",
+    "Sum_total",
+)
+
+
 def _supplement_order_amount_from_flat(flat: Mapping[str, Any], primary: Decimal) -> Decimal:
     """Prefer cart/payment totals over generic product/form fields that can be stale."""
     try:
@@ -1224,31 +1258,7 @@ def _supplement_order_amount_from_flat(flat: Mapping[str, Any], primary: Decimal
     except Exception:
         cur = Decimal("0.00")
 
-    cart_total_keys = (
-        "payment_sum",
-        "Payment_sum",
-        "PaymentSum",
-        "paymentSum",
-        "paymentsum",
-        "PaymentAmount",
-        "payment_amount",
-        "cart_total",
-        "CartTotal",
-        "order_total",
-        "OrderTotal",
-        "OrderSum",
-        "ordersum",
-        "Order_sum",
-        "grandtotal",
-        "GrandTotal",
-        "total",
-        "Total",
-        "TOTAL",
-        "SumTotal",
-        "sumtotal",
-        "Sum_total",
-    )
-    cart_total = _first_decimal(flat, cart_total_keys)
+    cart_total = _first_decimal(flat, _TILDA_CART_TOTAL_AMOUNT_KEYS)
     if cart_total > 0:
         return cart_total
 
@@ -1300,6 +1310,7 @@ def _log_tilda_webhook_ingestion(
     is_paid = bool(extracted.get("is_paid"))
     paid_raw = str(extracted.get("payment_status_raw") or "")
     payment_flag = str(extracted.get("payment_flag_raw") or "")
+    amount_source = str(extracted.get("amount_source") or "")
     keys_preview = sorted(flat.keys())
     if len(keys_preview) > 48:
         keys_preview = keys_preview[:48] + ["…"]
@@ -1352,6 +1363,13 @@ def _log_tilda_webhook_ingestion(
                 "order_webhook: unrecognized_payment_flag flag_preview=%r dedupe_key_prefix=%r",
                 (payment_flag or "")[:40],
                 dedupe_prefix,
+            )
+        if amount_source:
+            logger.info(
+                "order_webhook: amount_source=%s dedupe_key_prefix=%r payload_keys=%s",
+                amount_source[:80],
+                dedupe_prefix,
+                keys_preview,
             )
 
 
@@ -1449,22 +1467,27 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
             ("ref", "Ref", "REF", "partner_ref", "referral", "ReferralCode"),
         ),
     )
+    amount_keys = (
+        "sum",
+        "Sum",
+        "amount",
+        "Amount",
+        "price",
+        "Price",
+        "subtotal",
+        "Subtotal",
+        "cost",
+        "Cost",
+    )
     amount = _first_decimal(
         data,
-        (
-            "sum",
-            "Sum",
-            "amount",
-            "Amount",
-            "price",
-            "Price",
-            "subtotal",
-            "Subtotal",
-            "cost",
-            "Cost",
-        ),
+        amount_keys,
     )
     amount = _supplement_order_amount_from_flat(data, amount)
+    amount_source = _first_present_key(
+        data,
+        _TILDA_CART_TOTAL_AMOUNT_KEYS + ("payment", "Payment") + amount_keys,
+    )
 
     paid_raw = _first_str(
         data,
@@ -1491,6 +1514,7 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
         "is_paid": is_paid,
         "payment_status_raw": paid_raw,
         "payment_flag_raw": payment_flag,
+        "amount_source": amount_source,
     }
 
 
