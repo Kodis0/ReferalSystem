@@ -839,6 +839,31 @@ def create_commission_for_paid_order(order: Order) -> Optional[Commission]:
 
         existing = Commission.objects.filter(order_id=locked.pk).first()
         if existing:
+            if existing.status == Commission.Status.PENDING:
+                pct = commission_percent_for_order(locked, partner)
+                base = locked.amount
+                amount = (base * pct / Decimal("100")).quantize(Decimal("0.01"))
+                delta = amount - existing.commission_amount
+                if (
+                    existing.base_amount != base
+                    or existing.commission_percent != pct
+                    or existing.commission_amount != amount
+                ):
+                    existing.base_amount = base
+                    existing.commission_percent = pct
+                    existing.commission_amount = amount
+                    existing.save(
+                        update_fields=[
+                            "base_amount",
+                            "commission_percent",
+                            "commission_amount",
+                        ]
+                    )
+                    if delta:
+                        PartnerProfile.objects.filter(pk=locked.partner_id).update(
+                            balance_available=F("balance_available") + delta,
+                            balance_total=F("balance_total") + delta,
+                        )
             return existing
 
         pct = commission_percent_for_order(locked, partner)
@@ -1193,19 +1218,49 @@ def _parse_payment_field_as_possible_amount(raw: str) -> Decimal:
 
 
 def _supplement_order_amount_from_flat(flat: Mapping[str, Any], primary: Decimal) -> Decimal:
-    """Extra Tilda field names and ``payment`` when it carries an amount instead of a paid flag."""
+    """Prefer cart/payment totals over generic product/form fields that can be stale."""
     try:
         cur = primary.quantize(Decimal("0.01"))
     except Exception:
         cur = Decimal("0.00")
-    if cur > 0:
-        return cur
 
-    extra_keys = (
+    cart_total_keys = (
         "payment_sum",
         "Payment_sum",
         "PaymentSum",
         "paymentSum",
+        "paymentsum",
+        "PaymentAmount",
+        "payment_amount",
+        "cart_total",
+        "CartTotal",
+        "order_total",
+        "OrderTotal",
+        "OrderSum",
+        "ordersum",
+        "Order_sum",
+        "grandtotal",
+        "GrandTotal",
+        "total",
+        "Total",
+        "TOTAL",
+        "SumTotal",
+        "sumtotal",
+        "Sum_total",
+    )
+    cart_total = _first_decimal(flat, cart_total_keys)
+    if cart_total > 0:
+        return cart_total
+
+    pay_raw = _first_str(flat, ("payment", "Payment"))
+    pay_amt = _parse_payment_field_as_possible_amount(pay_raw)
+    if pay_amt > 0:
+        return pay_amt
+
+    if cur > 0:
+        return cur
+
+    extra_keys = (
         "formprice",
         "Formprice",
         "FormPrice",
@@ -1213,29 +1268,16 @@ def _supplement_order_amount_from_flat(flat: Mapping[str, Any], primary: Decimal
         "product_price",
         "ProductPrice",
         "Productprice",
-        "OrderSum",
-        "ordersum",
-        "Order_sum",
         "service_sum",
         "ServiceSum",
-        "SumTotal",
-        "sumtotal",
-        "Sum_total",
         "rub",
         "Rub",
         "amount_rub",
         "AmountRub",
-        "cart_total",
-        "CartTotal",
     )
     v = _first_decimal(flat, extra_keys)
     if v > 0:
         return v
-
-    pay_raw = _first_str(flat, ("payment", "Payment"))
-    pay_amt = _parse_payment_field_as_possible_amount(pay_raw)
-    if pay_amt > 0:
-        return pay_amt
 
     return cur
 
@@ -1418,21 +1460,8 @@ def extract_tilda_order_fields(data: Mapping[str, Any]) -> dict:
             "Price",
             "subtotal",
             "Subtotal",
-            "total",
-            "Total",
-            "TOTAL",
-            "order_total",
-            "OrderTotal",
-            "grandtotal",
-            "GrandTotal",
-            "payment_amount",
-            "PaymentAmount",
             "cost",
             "Cost",
-            "paymentsum",
-            "PaymentSum",
-            "payment_sum",
-            "Payment_sum",
         ),
     )
     amount = _supplement_order_amount_from_flat(data, amount)

@@ -405,6 +405,49 @@ describe("referral-widget.v1.js", () => {
     expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Starter Lesson");
   });
 
+  it("does not add stale Tilda product sum to a cart form before product click", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    const storeBlock = document.createElement("div");
+    storeBlock.className = "t-rec";
+    const cartForm = document.createElement("form");
+    cartForm.className = "t706__orderform";
+    const title = document.createElement("div");
+    title.className = "js-product-name";
+    title.textContent = "Enterprise Course";
+    const price = document.createElement("div");
+    price.className = "js-product-price";
+    price.textContent = "400 000";
+    storeBlock.appendChild(title);
+    storeBlock.appendChild(price);
+    storeBlock.appendChild(cartForm);
+    document.body.appendChild(storeBlock);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    expect(cartForm.querySelector('input[type="hidden"][name="sum"]')).toBeNull();
+    expect(cartForm.querySelector('input[type="hidden"][name="product_name"]')).toBeNull();
+    expect(cartForm.querySelector('input[type="hidden"][name="site_public_id"]').value).toBe(
+      "00000000-0000-0000-0000-000000000001",
+    );
+  });
+
   it("resolves amount from nearest block context, not first global match", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {

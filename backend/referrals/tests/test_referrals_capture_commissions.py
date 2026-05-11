@@ -167,6 +167,67 @@ class OrderAttributionAndCommissionTests(TestCase):
         )
         self.assertEqual(order.amount, Decimal("17.25"))
 
+    def test_cart_total_amount_wins_over_stale_product_fields(self):
+        """Tilda cart webhooks may include stale product/form fields from another shop block."""
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-cart-total-over-stale-product",
+                "Email": self.customer.email,
+                "sum": "400000",
+                "price": "400000",
+                "payment_sum": "1500",
+                "total": "1500",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("1500.00"))
+
+    def test_numeric_payment_amount_wins_over_stale_product_sum(self):
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": "t-payment-amount-over-stale-sum",
+                "Email": self.customer.email,
+                "sum": "400000",
+                "payment": "1500",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("1500.00"))
+
+    def test_repeat_webhook_recalculates_pending_commission_when_amount_corrected(self):
+        ext = "t-corrected-cart-commission"
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": ext,
+                "Email": self.customer.email,
+                "sum": "400000",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("400000.00"))
+        commission = Commission.objects.get(order=order)
+        self.assertEqual(commission.commission_amount, Decimal("40000.00"))
+
+        order, _ = upsert_order_from_tilda_payload(
+            {
+                "tranid": ext,
+                "Email": self.customer.email,
+                "sum": "400000",
+                "payment_sum": "1500",
+                "ref": self.partner.ref_code,
+                "paymentstatus": "paid",
+            }
+        )
+        self.assertEqual(order.amount, Decimal("1500.00"))
+        commission.refresh_from_db()
+        self.assertEqual(commission.base_amount, Decimal("1500.00"))
+        self.assertEqual(commission.commission_amount, Decimal("150.00"))
+        self.partner.refresh_from_db()
+        self.assertEqual(self.partner.balance_total, Decimal("150.00"))
+
     def test_amount_reads_formprice_and_payment_sum_aliases(self):
         o1, _ = upsert_order_from_tilda_payload(
             {

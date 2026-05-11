@@ -879,10 +879,10 @@
       amount = lastTildaProductContext.amount || "";
       if (!productName) productName = lastTildaProductContext.productName || "";
     }
-    if (!amount) {
+    if (!amount && (!adapter || adapter.id !== PLATFORMS.TILDA)) {
       amount = normalizeAmountText(readDomBySelectorInContext(".js-product-price", form, adapter, false));
     }
-    if (!productName) {
+    if (!productName && (!adapter || adapter.id !== PLATFORMS.TILDA)) {
       productName = readDomBySelectorInContext(".js-product-name", form, adapter, false);
     }
     upsertHiddenField(form, "sum", amount);
