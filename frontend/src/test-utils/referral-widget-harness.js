@@ -44,6 +44,11 @@ function clearWidgetGlobals() {
     /* ignore */
   }
   try {
+    delete document._rsProductClickContextWired;
+  } catch (e) {
+    /* ignore */
+  }
+  try {
     if (window.__rsLeadFormMo && typeof window.__rsLeadFormMo.disconnect === "function") {
       window.__rsLeadFormMo.disconnect();
     }

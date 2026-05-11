@@ -341,6 +341,70 @@ describe("referral-widget.v1.js", () => {
     expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Traffic Hybrid Bike");
   });
 
+  it("uses clicked Tilda store product when multiple store blocks share the order form", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    function appendStoreCard(titleText, priceText) {
+      const rec = document.createElement("div");
+      rec.className = "t-rec";
+      const card = document.createElement("div");
+      card.className = "t-store__card";
+      const title = document.createElement("div");
+      title.className = "t-store__card__title js-product-name";
+      title.textContent = titleText;
+      const price = document.createElement("div");
+      price.className = "t-store__card__price-value js-product-price";
+      price.textContent = priceText;
+      const buy = document.createElement("a");
+      buy.className = "t-store__card__btn t-btn";
+      buy.href = "#order";
+      buy.textContent = "Добавить в корзину";
+      card.appendChild(title);
+      card.appendChild(price);
+      card.appendChild(buy);
+      rec.appendChild(card);
+      document.body.appendChild(rec);
+      return buy;
+    }
+
+    appendStoreCard("Enterprise Course", "400 000");
+    const cheapBuy = appendStoreCard("Starter Lesson", "1 500");
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    const form = document.createElement("form");
+    form.id = "order";
+    const em = document.createElement("input");
+    em.name = "email";
+    em.value = "a@b.co";
+    form.appendChild(em);
+    document.body.appendChild(form);
+    await flushMicrotasks();
+
+    cheapBuy.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("1500");
+    expect(form.querySelector('input[type="hidden"][name="product_name"]').value).toBe("Starter Lesson");
+  });
+
   it("resolves amount from nearest block context, not first global match", async () => {
     fetchMock.mockImplementation((url) => {
       if (String(url).includes("widget-config")) {

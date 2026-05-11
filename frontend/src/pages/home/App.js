@@ -5,6 +5,7 @@ import Login from '../login/login';
 import LK from '../lk/lk';
 import LegalPage from "../legal/LegalPage";
 import SiteConnectPage from "../site-connect/SiteConnectPage";
+import ToolsDiagramsPage from "../tools-diagrams/ToolsDiagramsPage";
 import ProtectedRoute from "../../components/protectedroute";
 import ReferralCaptureOnMount from "../../components/ReferralCaptureOnMount";
 import OAuthVkTgFragmentHandler from "../../components/OAuthVkTgFragmentHandler";
@@ -21,6 +22,7 @@ function App() {
         <Route path="/registration" element={<Registration />} /> 
         <Route path="/login" element={<Login />} />
         <Route path="/legal/:legalSlug" element={<LegalPage />} />
+        <Route path="/tools-diagrams" element={<ToolsDiagramsPage />} />
 
         <Route path="/site-connect" element={<ProtectedRoute><SiteConnectPage /></ProtectedRoute>} />
         <Route path="/lk/*" element={<ProtectedRoute><LK /></ProtectedRoute>} />

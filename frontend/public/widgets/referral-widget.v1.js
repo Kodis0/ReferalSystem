@@ -694,11 +694,12 @@
     return null;
   }
 
-  function getSelectorSearchRoots(form, adapter) {
+  function getSelectorSearchRoots(form, adapter, includeDocumentRoot) {
     var roots = [];
     var seen = new WeakSet();
     function add(r) {
       if (!r || r.nodeType !== 1) return;
+      if (!includeDocumentRoot && (r === doc.body || r === doc.documentElement)) return;
       try {
         if (seen.has(r)) return;
         seen.add(r);
@@ -719,7 +720,7 @@
       p = p.parentElement;
       depth++;
     }
-    add(doc.body || doc.documentElement);
+    if (includeDocumentRoot) add(doc.body || doc.documentElement);
 
     try {
       if (logical && logical.parentElement) add(logical.parentElement);
@@ -738,11 +739,12 @@
     return t.replace(/\s+/g, " ").trim();
   }
 
-  function readDomBySelectorInContext(selector, form, adapter) {
+  function readDomBySelectorInContext(selector, form, adapter, allowDocumentFallback) {
     if (!selector || typeof selector !== "string") return "";
-    var roots = getSelectorSearchRoots(form, adapter);
+    allowDocumentFallback = allowDocumentFallback !== false;
+    var roots = getSelectorSearchRoots(form, adapter, allowDocumentFallback);
     var el = querySelectorScoped(selector.trim(), roots);
-    if (!el) {
+    if (!el && allowDocumentFallback) {
       try {
         el = doc.querySelector(selector.trim());
       } catch (e) {
@@ -828,7 +830,7 @@
     } catch (e) {}
     if (href.indexOf("#order") === 0 || href.indexOf("#order") > 0) return true;
     if (/buy|order|cart|checkout|purchase|заказ|купить|оплат/.test(cls)) return true;
-    if (/buy\s*now|add to cart|order|checkout|купить|заказать|оплатить/.test(text)) return true;
+    if (/buy\s*now|add to cart|order|checkout|купить|заказать|оплатить|корзин|добавить/.test(text)) return true;
     return false;
   }
 
@@ -868,20 +870,20 @@
     var amount = "";
     var productName = "";
     if (selCfg.amountSelector) {
-      amount = normalizeAmountText(readDomBySelectorInContext(selCfg.amountSelector, form, adapter));
+      amount = normalizeAmountText(readDomBySelectorInContext(selCfg.amountSelector, form, adapter, true));
     }
     if (selCfg.productNameSelector) {
-      productName = readDomBySelectorInContext(selCfg.productNameSelector, form, adapter);
+      productName = readDomBySelectorInContext(selCfg.productNameSelector, form, adapter, true);
     }
     if (!amount && lastTildaProductContext) {
       amount = lastTildaProductContext.amount || "";
       if (!productName) productName = lastTildaProductContext.productName || "";
     }
     if (!amount) {
-      amount = normalizeAmountText(readDomBySelectorInContext(".js-product-price", form, adapter));
+      amount = normalizeAmountText(readDomBySelectorInContext(".js-product-price", form, adapter, false));
     }
     if (!productName) {
-      productName = readDomBySelectorInContext(".js-product-name", form, adapter);
+      productName = readDomBySelectorInContext(".js-product-name", form, adapter, false);
     }
     upsertHiddenField(form, "sum", amount);
     upsertHiddenField(form, "product_name", productName);
