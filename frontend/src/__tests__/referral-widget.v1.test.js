@@ -37,6 +37,11 @@ describe("referral-widget.v1.js", () => {
 
   afterEach(() => {
     clearWidgetGlobals();
+    try {
+      delete window.tcart;
+    } catch (e) {
+      /* ignore */
+    }
   });
 
   it("singleton guard: second load does not fetch widget-config again", async () => {
@@ -494,6 +499,57 @@ describe("referral-widget.v1.js", () => {
     await flushMicrotasks();
 
     expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("1500");
+  });
+
+  it("overwrites stale Tilda cart form sum from Tilda runtime cart products", async () => {
+    fetchMock.mockImplementation((url) => {
+      if (String(url).includes("widget-config")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              storage_key: "sk_test",
+              lead_ingest_url: "https://api.example.com/public/v1/events/leads?site=x",
+              amount_selector: ".js-product-price",
+            }),
+        });
+      }
+      if (String(url).includes("/events/leads")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.reject(new Error("unexpected fetch: " + url));
+    });
+
+    window.tcart = {
+      products: {
+        first: { price: "750", quantity: "2" },
+        second: { amount: "300" },
+      },
+    };
+
+    const cart = document.createElement("div");
+    cart.className = "t706__cartwin";
+    const staleProductPrice = document.createElement("div");
+    staleProductPrice.className = "js-product-price";
+    staleProductPrice.textContent = "400 000";
+    const form = document.createElement("form");
+    form.className = "t706__orderform";
+    const staleSum = document.createElement("input");
+    staleSum.type = "hidden";
+    staleSum.name = "sum";
+    staleSum.value = "400000";
+    form.appendChild(staleSum);
+    cart.appendChild(staleProductPrice);
+    cart.appendChild(form);
+    document.body.appendChild(cart);
+
+    runWidgetWithCurrentScript(createMockScript({ rsPlatform: "tilda" }));
+    await flushWidgetReady();
+
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+
+    expect(form.querySelector('input[type="hidden"][name="sum"]').value).toBe("1800");
   });
 
   it("resolves amount from nearest block context, not first global match", async () => {

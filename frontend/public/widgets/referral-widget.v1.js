@@ -835,7 +835,42 @@
     }
   }
 
+  function normalizeCartNumber(raw) {
+    var s = trimStr(raw).replace(/\s+/g, "").replace(/\u00a0/g, "").replace(",", ".");
+    if (!s) return NaN;
+    var n = Number(s);
+    return isFinite(n) ? n : NaN;
+  }
+
+  function readTildaCartAmountFromRuntime() {
+    var win = typeof window !== "undefined" ? window : null;
+    var cart = win && win.tcart;
+    var products = cart && cart.products;
+    if (!products) return "";
+    var total = 0;
+    var seen = false;
+    for (var key in products) {
+      if (!Object.prototype.hasOwnProperty.call(products, key)) continue;
+      var p = products[key];
+      if (!p || typeof p !== "object") continue;
+      var amount = normalizeCartNumber(p.amount);
+      if (!(amount > 0)) {
+        var price = normalizeCartNumber(p.price);
+        var quantity = normalizeCartNumber(p.quantity);
+        if (price > 0) amount = price * (quantity > 0 ? quantity : 1);
+      }
+      if (amount > 0) {
+        total += amount;
+        seen = true;
+      }
+    }
+    if (!seen || !(total > 0)) return "";
+    return String(Math.round(total * 100) / 100);
+  }
+
   function readTildaCartAmount(form) {
+    var runtimeAmount = readTildaCartAmountFromRuntime();
+    if (runtimeAmount) return runtimeAmount;
     var root = findTildaCartRoot(form);
     var roots = [];
     if (root) roots.push(root);
