@@ -494,6 +494,7 @@
       var el = els[i];
       if (!el || !el.name || shouldSkipControl(el)) continue;
       if (el.type === "hidden" && el.name === "ref") continue;
+      if (el.type === "hidden" && el.name === "site_public_id") continue;
 
       var tag = el.tagName;
       var typ = String(el.type || "").toLowerCase();

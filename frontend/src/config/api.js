@@ -46,6 +46,77 @@ export const API_ENDPOINTS = {
   currentUser: `${API_BASE}/users/me/`,
   /** Дополнительные пользователи аккаунта (учётные записи с привязкой к владельцу). */
   accountUsers: `${API_BASE}/users/me/account-users/`,
+  /** Админ-кабинет: список пользователей (read-only, требует is_staff). */
+  adminUsersList: `${API_BASE}/users/admin/users/`,
+  /** Админ-кабинет: детали пользователя по числовому PK (read-only, требует is_staff). */
+  adminUserDetail: (userId) =>
+    `${API_BASE}/users/admin/users/${encodeURIComponent(userId)}/`,
+  /** Админ-кабинет: блок/разблок пользователя — POST `{is_active: bool}`, требует fresh AdminSession. */
+  adminUserSetActive: (userId) =>
+    `${API_BASE}/users/admin/users/${encodeURIComponent(userId)}/active/`,
+  /** Админ-кабинет: список партнёрских профилей (read-only, требует fresh AdminSession). */
+  adminPartnersList: `${API_BASE}/referrals/admin/partners/`,
+  /** Админ-кабинет: детали партнёра по числовому PK (read-only). */
+  adminPartnerDetail: (partnerId) =>
+    `${API_BASE}/referrals/admin/partners/${encodeURIComponent(partnerId)}/`,
+  /** Админ-кабинет: смена статуса партнёра — PATCH `{status: "pending"|"active"|"blocked"}`. */
+  adminPartnerSetStatus: (partnerId) =>
+    `${API_BASE}/referrals/admin/partners/${encodeURIComponent(partnerId)}/status/`,
+  /** Админ-кабинет: список Project (read-only, требует fresh AdminSession). */
+  adminProjectsList: `${API_BASE}/referrals/admin/projects/`,
+  /** Админ-кабинет: детали Project по числовому PK (read-only). */
+  adminProjectDetail: (projectId) =>
+    `${API_BASE}/referrals/admin/projects/${encodeURIComponent(projectId)}/`,
+  /** Админ-кабинет: список Site (включая archived, через `Site.all_objects`). */
+  adminSitesList: `${API_BASE}/referrals/admin/sites/`,
+  /** Админ-кабинет: детали Site по числовому PK (включая archived). */
+  adminSiteDetail: (siteId) =>
+    `${API_BASE}/referrals/admin/sites/${encodeURIComponent(siteId)}/`,
+  /** Админ-кабинет: список Order (read-only, требует fresh AdminSession). */
+  adminOrdersList: `${API_BASE}/referrals/admin/orders/`,
+  /** Админ-кабинет: детали Order по числовому PK (read-only, включая raw_payload). */
+  adminOrderDetail: (orderId) =>
+    `${API_BASE}/referrals/admin/orders/${encodeURIComponent(orderId)}/`,
+  /** Админ-кабинет: список Commission (read-only, требует fresh AdminSession). */
+  adminCommissionsList: `${API_BASE}/referrals/admin/commissions/`,
+  /** Админ-кабинет: детали Commission по числовому PK (read-only). */
+  adminCommissionDetail: (commissionId) =>
+    `${API_BASE}/referrals/admin/commissions/${encodeURIComponent(commissionId)}/`,
+  /** Админ-кабинет: список ReferralLeadEvent (read-only, требует fresh AdminSession). */
+  adminLeadEventsList: `${API_BASE}/referrals/admin/lead-events/`,
+  /** Админ-кабинет: детали ReferralLeadEvent по числовому PK (read-only, включая raw_payload). */
+  adminLeadEventDetail: (leadEventId) =>
+    `${API_BASE}/referrals/admin/lead-events/${encodeURIComponent(leadEventId)}/`,
+  /** Админ-кабинет: список PublicLeadIngestAudit (read-only, требует fresh AdminSession). */
+  adminIngestAuditsList: `${API_BASE}/referrals/admin/ingest-audits/`,
+  /** Админ-кабинет: детали PublicLeadIngestAudit по числовому PK (read-only). */
+  adminIngestAuditDetail: (auditId) =>
+    `${API_BASE}/referrals/admin/ingest-audits/${encodeURIComponent(auditId)}/`,
+  /** Админ-кабинет: журнал действий админа (read-only, требует fresh AdminSession). */
+  adminActionAuditsList: `${API_BASE}/users/admin/action-audits/`,
+  /** Админ-кабинет: детали записи журнала по числовому PK (read-only). */
+  adminActionAuditDetail: (auditId) =>
+    `${API_BASE}/users/admin/action-audits/${encodeURIComponent(auditId)}/`,
+  /** Админ-кабинет: список обращений в поддержку (read-only, требует fresh AdminSession). */
+  adminSupportTicketsList: `${API_BASE}/users/admin/support-tickets/`,
+  /** Админ-кабинет: детали обращения в поддержку (GET, требует fresh AdminSession). */
+  adminSupportTicketDetail: (ticketId) =>
+    `${API_BASE}/users/admin/support-tickets/${encodeURIComponent(ticketId)}/`,
+  /** Админ-кабинет: закрыть/открыть обращение — PATCH `{is_closed: bool}` (тот же URL, что и detail). */
+  adminSupportTicketUpdate: (ticketId) =>
+    `${API_BASE}/users/admin/support-tickets/${encodeURIComponent(ticketId)}/`,
+  /** Админ step-up сессия: текущее состояние elevation (GET). */
+  adminSession: `${API_BASE}/users/admin/session/`,
+  /** Админ step-up сессия: dev-confirm (POST), доступен только при DEBUG=True. */
+  adminSessionDevConfirm: `${API_BASE}/users/admin/session/dev-confirm/`,
+  /** Админ step-up сессия: revoke активных elevated сессий (POST). */
+  adminSessionRevoke: `${API_BASE}/users/admin/session/revoke/`,
+  /** Telegram MFA: запрос 6-значного кода в Telegram (POST). */
+  adminTelegramMfaChallenge: `${API_BASE}/users/admin/mfa/telegram/challenge/`,
+  /** Telegram MFA: проверка введённого кода и elevation (POST). */
+  adminTelegramMfaVerify: `${API_BASE}/users/admin/mfa/telegram/verify/`,
+  /** Telegram MFA bind: запросить t.me/<bot>?start=<token>-ссылку для привязки/перепривязки (POST). */
+  adminTelegramBindStart: `${API_BASE}/users/admin/mfa/telegram/bind/start/`,
   changePassword: `${API_BASE}/users/me/password/`,
   oauthUnlink: `${API_BASE}/users/me/oauth/unlink/`,
   supportTickets: `${API_BASE}/users/me/support-tickets/`,

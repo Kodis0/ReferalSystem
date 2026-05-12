@@ -1,5 +1,22 @@
 from django.urls import path
 
+from .admin_views import (
+    AdminCommissionDetailView,
+    AdminCommissionsListView,
+    AdminIngestAuditDetailView,
+    AdminIngestAuditsListView,
+    AdminLeadEventDetailView,
+    AdminLeadEventsListView,
+    AdminOrderDetailView,
+    AdminOrdersListView,
+    AdminPartnerDetailView,
+    AdminPartnersListView,
+    AdminPartnerSetStatusView,
+    AdminProjectDetailView,
+    AdminProjectsListView,
+    AdminSiteDetailView,
+    AdminSitesListView,
+)
 from .gamification_views import (
     DailyChallengeFinishView,
     DailyChallengeLeaderboardView,
@@ -179,5 +196,80 @@ urlpatterns = [
         "site/integration/activate/",
         SiteOwnerIntegrationActivateView.as_view(),
         name="site-owner-integration-activate",
+    ),
+    path(
+        "admin/partners/",
+        AdminPartnersListView.as_view(),
+        name="admin-partners-list",
+    ),
+    path(
+        "admin/partners/<int:partner_id>/",
+        AdminPartnerDetailView.as_view(),
+        name="admin-partner-detail",
+    ),
+    path(
+        "admin/partners/<int:partner_id>/status/",
+        AdminPartnerSetStatusView.as_view(),
+        name="admin-partner-set-status",
+    ),
+    path(
+        "admin/projects/",
+        AdminProjectsListView.as_view(),
+        name="admin-projects-list",
+    ),
+    path(
+        "admin/projects/<int:project_id>/",
+        AdminProjectDetailView.as_view(),
+        name="admin-project-detail",
+    ),
+    path(
+        "admin/sites/",
+        AdminSitesListView.as_view(),
+        name="admin-sites-list",
+    ),
+    path(
+        "admin/sites/<int:site_id>/",
+        AdminSiteDetailView.as_view(),
+        name="admin-site-detail",
+    ),
+    path(
+        "admin/orders/",
+        AdminOrdersListView.as_view(),
+        name="admin-orders-list",
+    ),
+    path(
+        "admin/orders/<int:order_id>/",
+        AdminOrderDetailView.as_view(),
+        name="admin-order-detail",
+    ),
+    path(
+        "admin/commissions/",
+        AdminCommissionsListView.as_view(),
+        name="admin-commissions-list",
+    ),
+    path(
+        "admin/commissions/<int:commission_id>/",
+        AdminCommissionDetailView.as_view(),
+        name="admin-commission-detail",
+    ),
+    path(
+        "admin/lead-events/",
+        AdminLeadEventsListView.as_view(),
+        name="admin-lead-events-list",
+    ),
+    path(
+        "admin/lead-events/<int:lead_event_id>/",
+        AdminLeadEventDetailView.as_view(),
+        name="admin-lead-event-detail",
+    ),
+    path(
+        "admin/ingest-audits/",
+        AdminIngestAuditsListView.as_view(),
+        name="admin-ingest-audits-list",
+    ),
+    path(
+        "admin/ingest-audits/<int:audit_id>/",
+        AdminIngestAuditDetailView.as_view(),
+        name="admin-ingest-audit-detail",
     ),
 ]

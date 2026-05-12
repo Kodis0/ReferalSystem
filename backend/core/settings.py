@@ -375,3 +375,10 @@ VK_OAUTH_SCHEME = os.getenv("VK_OAUTH_SCHEME", "dark").strip() or "dark"
 # В BotFather для бота задайте домен сайта (/setdomain), совпадающий с FRONTEND_URL.
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_LOGIN_REDIRECT_URI = os.getenv("TELEGRAM_LOGIN_REDIRECT_URI", "").strip()
+
+# Admin cabinet Telegram MFA (см. docs/DEPLOY_PRODUCTION.md → «Admin cabinet / Telegram MFA»).
+# TELEGRAM_BOT_TOKEN — переиспользуется (тот же бот, что для Telegram Login, либо отдельный).
+# TELEGRAM_BOT_USERNAME — username бота без «@»; нужен для построения ссылки t.me/<bot>?start=<token>.
+# TELEGRAM_WEBHOOK_SECRET — общий секрет для X-Telegram-Bot-Api-Secret-Token; без него webhook отвечает 404.
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()

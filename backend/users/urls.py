@@ -40,6 +40,22 @@ from .support_views import (
 from .password_reset_views import PasswordResetCaptchaView, PasswordResetRequestView
 from .password_reset_code_views import PasswordResetCodeConfirmView, PasswordResetCodeRequestView, PasswordResetCodeVerifyView
 from .achievement_views import UserAchievementsListView
+from .admin_views import (
+    AdminActionAuditDetailView,
+    AdminActionAuditsListView,
+    AdminSessionDevConfirmView,
+    AdminSessionRevokeView,
+    AdminSessionView,
+    AdminSupportTicketDetailView,
+    AdminSupportTicketsListView,
+    AdminTelegramBindStartView,
+    AdminTelegramMfaChallengeView,
+    AdminTelegramMfaVerifyView,
+    AdminTelegramWebhookView,
+    AdminUserDetailView,
+    AdminUsersListView,
+    AdminUserSetActiveView,
+)
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -88,4 +104,38 @@ urlpatterns = [
         name='support_ticket_detail',
     ),
     path('api/orders/', OrderReceiveView.as_view(), name='receive_order'),
+    path('admin/users/', AdminUsersListView.as_view(), name='admin_users_list'),
+    path('admin/users/<int:user_id>/', AdminUserDetailView.as_view(), name='admin_user_detail'),
+    path(
+        'admin/users/<int:user_id>/active/',
+        AdminUserSetActiveView.as_view(),
+        name='admin_user_set_active',
+    ),
+    path(
+        'admin/support-tickets/',
+        AdminSupportTicketsListView.as_view(),
+        name='admin_support_tickets_list',
+    ),
+    path(
+        'admin/support-tickets/<uuid:ticket_id>/',
+        AdminSupportTicketDetailView.as_view(),
+        name='admin_support_ticket_detail',
+    ),
+    path(
+        'admin/action-audits/',
+        AdminActionAuditsListView.as_view(),
+        name='admin_action_audits_list',
+    ),
+    path(
+        'admin/action-audits/<int:audit_id>/',
+        AdminActionAuditDetailView.as_view(),
+        name='admin_action_audit_detail',
+    ),
+    path('admin/session/', AdminSessionView.as_view(), name='admin_session'),
+    path('admin/session/dev-confirm/', AdminSessionDevConfirmView.as_view(), name='admin_session_dev_confirm'),
+    path('admin/session/revoke/', AdminSessionRevokeView.as_view(), name='admin_session_revoke'),
+    path('admin/mfa/telegram/challenge/', AdminTelegramMfaChallengeView.as_view(), name='admin_mfa_telegram_challenge'),
+    path('admin/mfa/telegram/verify/', AdminTelegramMfaVerifyView.as_view(), name='admin_mfa_telegram_verify'),
+    path('admin/mfa/telegram/bind/start/', AdminTelegramBindStartView.as_view(), name='admin_mfa_telegram_bind_start'),
+    path('admin/mfa/telegram/webhook/', AdminTelegramWebhookView.as_view(), name='admin_mfa_telegram_webhook'),
 ]

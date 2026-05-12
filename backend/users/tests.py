@@ -15,10 +15,20 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from referrals.models import Project
+from referrals.models import PartnerProfile, Project
 from referrals.services import DEFAULT_OWNER_PROJECT_NAME
 
-from .models import PasswordResetCode, SupportTicket, WebAuthnCredential
+from .models import (
+    AdminActionAudit,
+    AdminMfaChallenge,
+    AdminMfaDevice,
+    AdminSession,
+    AdminTelegramBindToken,
+    PasswordResetCode,
+    SupportTicket,
+    WebAuthnCredential,
+)
+from .telegram_mfa import TelegramMfaError, verify_bind_token
 from .password_reset_views import CAPTCHA_CACHE_PREFIX
 from .support_attachments import attachment_disk_path
 
@@ -147,6 +157,1657 @@ class CurrentUserApiTests(TestCase):
         )
         r = self.api.patch("/users/me/", {"email": "taken@example.com"}, format="json")
         self.assertEqual(r.status_code, 400)
+
+
+class CurrentUserAdminFlagsTests(TestCase):
+    """Фронту нужны `is_staff`/`is_superuser` в `/users/me/`, чтобы условно показывать админ-разделы."""
+
+    def _me(self, user):
+        api = APIClient()
+        api.force_authenticate(user)
+        return api.get("/users/me/")
+
+    def test_regular_user_has_both_flags_false(self):
+        user = User.objects.create_user(
+            email="regular-flags@example.com",
+            username="regularflags",
+            password="secret123",
+        )
+        r = self._me(user)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("is_staff", r.data)
+        self.assertIn("is_superuser", r.data)
+        self.assertEqual(r.data["is_staff"], False)
+        self.assertEqual(r.data["is_superuser"], False)
+
+    def test_staff_user_has_is_staff_true_only(self):
+        user = User.objects.create_user(
+            email="staff-flags@example.com",
+            username="staffflags",
+            password="secret123",
+            is_staff=True,
+        )
+        r = self._me(user)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["is_staff"], True)
+        self.assertEqual(r.data["is_superuser"], False)
+
+    def test_superuser_has_both_flags_true(self):
+        user = User.objects.create_superuser(
+            email="super-flags@example.com",
+            username="superflags",
+            password="secret123",
+        )
+        r = self._me(user)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["is_staff"], True)
+        self.assertEqual(r.data["is_superuser"], True)
+
+    def test_flags_are_read_only_via_patch(self):
+        user = User.objects.create_user(
+            email="ro-flags@example.com",
+            username="roflags",
+            password="secret123",
+        )
+        api = APIClient()
+        api.force_authenticate(user)
+        r = api.patch("/users/me/", {"is_staff": True, "is_superuser": True}, format="json")
+        self.assertEqual(r.status_code, 200)
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+
+
+def _elevate_admin(user):
+    """Создаёт активную step-up admin-сессию (Шаг 4 MFA gate); возвращает её."""
+    return AdminSession.objects.create(
+        user=user,
+        elevated_until=timezone.now() + timedelta(minutes=30),
+        confirmed_with="development",
+    )
+
+
+class AdminUsersListApiTests(TestCase):
+    """Read-only список пользователей для админ-кабинета ЛК (`GET /users/admin/users/`)."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="admin-list-staff@example.com",
+            username="adminliststaff",
+            password="secret123",
+            is_staff=True,
+        )
+        # Шаг 4: для доступа к admin endpoints staff нужна активная step-up admin-сессия.
+        _elevate_admin(self.staff)
+        self.alice = User.objects.create_user(
+            email="alice@example.com",
+            username="alicelist",
+            password="secret123",
+            fio="Алиса Тестовая",
+            phone="+79990001122",
+        )
+        self.bob = User.objects.create_user(
+            email="bob@example.com",
+            username="boblist",
+            password="secret123",
+        )
+        # Заблокированный пользователь — для проверки is_active=false.
+        self.blocked = User.objects.create_user(
+            email="blocked@example.com",
+            username="blockedlist",
+            password="secret123",
+        )
+        User.objects.filter(pk=self.blocked.pk).update(is_active=False)
+
+    def test_anonymous_is_unauthorized(self):
+        api = APIClient()
+        r = api.get("/users/admin/users/")
+        # IsAuthenticated по умолчанию отдаёт 401 без креденшлов.
+        self.assertEqual(r.status_code, 401)
+
+    def test_authenticated_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.alice)
+        r = api.get("/users/admin/users/")
+        self.assertEqual(r.status_code, 403)
+
+    def test_staff_gets_paginated_list(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("results", r.data)
+        self.assertIn("count", r.data)
+        self.assertEqual(r.data["page"], 1)
+        self.assertEqual(r.data["page_size"], 20)
+        self.assertGreaterEqual(r.data["count"], 4)
+        emails = {row["email"] for row in r.data["results"]}
+        self.assertIn("alice@example.com", emails)
+        first = r.data["results"][0]
+        for key in (
+            "id",
+            "public_id",
+            "email",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "date_joined",
+            "last_login",
+        ):
+            self.assertIn(key, first)
+
+    def test_q_filters_by_email_substring(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/?q=alice@")
+        self.assertEqual(r.status_code, 200)
+        emails = [row["email"] for row in r.data["results"]]
+        self.assertEqual(emails, ["alice@example.com"])
+
+    def test_q_does_not_duplicate_rows_on_or_match(self):
+        # Подстрока подходит и под email, и под fio — пользователь не должен задвоиться.
+        User.objects.filter(pk=self.alice.pk).update(fio="alice@example.com inside fio")
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/?q=alice@")
+        self.assertEqual(r.status_code, 200)
+        ids = [row["id"] for row in r.data["results"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertIn(self.alice.id, ids)
+
+    def test_is_staff_filter_returns_only_staff(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/?is_staff=true")
+        self.assertEqual(r.status_code, 200)
+        for row in r.data["results"]:
+            self.assertTrue(row["is_staff"], row)
+        self.assertGreaterEqual(r.data["count"], 1)
+
+    def test_is_active_false_returns_only_blocked(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/?is_active=false")
+        self.assertEqual(r.status_code, 200)
+        for row in r.data["results"]:
+            self.assertFalse(row["is_active"], row)
+        emails = {row["email"] for row in r.data["results"]}
+        self.assertIn("blocked@example.com", emails)
+
+    def test_page_size_is_capped_at_100(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/?page_size=500")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["page_size"], 100)
+
+
+class AdminUserDetailApiTests(TestCase):
+    """Read-only детали пользователя для админ-кабинета ЛК (`GET /users/admin/users/<id>/`)."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="admin-detail-staff@example.com",
+            username="admindetailstaff",
+            password="secret123",
+            is_staff=True,
+        )
+        # Шаг 4: для доступа к admin endpoints staff нужна активная step-up admin-сессия.
+        _elevate_admin(self.staff)
+        self.root = User.objects.create_user(
+            email="root-detail@example.com",
+            username="rootdetail",
+            password="secret123",
+            fio="Иван Иванов",
+            phone="+79990001122",
+        )
+
+    def test_anonymous_is_unauthorized(self):
+        api = APIClient()
+        r = api.get(f"/users/admin/users/{self.root.pk}/")
+        # IsAuthenticated по умолчанию отдаёт 401 без креденшлов.
+        self.assertEqual(r.status_code, 401)
+
+    def test_authenticated_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.root)
+        r = api.get(f"/users/admin/users/{self.root.pk}/")
+        self.assertEqual(r.status_code, 403)
+
+    def test_staff_gets_existing_user_detail(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get(f"/users/admin/users/{self.root.pk}/")
+        self.assertEqual(r.status_code, 200)
+        for key in (
+            "id",
+            "email",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "additional_users_count",
+            "owned_projects_count",
+            "owned_sites_count",
+            "partner_profile",
+        ):
+            self.assertIn(key, r.data)
+        self.assertEqual(r.data["id"], self.root.pk)
+        self.assertEqual(r.data["email"], "root-detail@example.com")
+        self.assertEqual(r.data["is_staff"], False)
+        self.assertEqual(r.data["is_superuser"], False)
+        self.assertEqual(r.data["is_active"], True)
+        self.assertEqual(r.data["additional_users_count"], 0)
+        self.assertEqual(r.data["partner_profile"], None)
+
+    def test_staff_unknown_id_returns_404(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get("/users/admin/users/999999/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_additional_users_count_reflects_account_children(self):
+        child1 = User.objects.create_user(
+            email="child1-detail@example.com",
+            username="child1detail",
+            password="secret123",
+        )
+        child2 = User.objects.create_user(
+            email="child2-detail@example.com",
+            username="child2detail",
+            password="secret123",
+        )
+        child1.account_owner = self.root
+        child1.save(update_fields=["account_owner"])
+        child2.account_owner = self.root
+        child2.save(update_fields=["account_owner"])
+
+        api = APIClient()
+        api.force_authenticate(self.staff)
+
+        r_root = api.get(f"/users/admin/users/{self.root.pk}/")
+        self.assertEqual(r_root.status_code, 200)
+        self.assertEqual(r_root.data["additional_users_count"], 2)
+
+        r_child = api.get(f"/users/admin/users/{child1.pk}/")
+        self.assertEqual(r_child.status_code, 200)
+        self.assertEqual(r_child.data["additional_users_count"], 0)
+        self.assertEqual(r_child.data["account_owner_id"], self.root.pk)
+
+    def test_partner_profile_serialized_when_present(self):
+        PartnerProfile.objects.create(user=self.root, ref_code="DET01")
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get(f"/users/admin/users/{self.root.pk}/")
+        self.assertEqual(r.status_code, 200)
+        pp = r.data["partner_profile"]
+        self.assertIsNotNone(pp)
+        self.assertIn("status", pp)
+        self.assertIn("balance_available", pp)
+        self.assertIn("balance_total", pp)
+        self.assertIn("commission_percent", pp)
+
+    def test_owned_projects_count_increments_with_owned_project(self):
+        Project.objects.create(owner=self.root, name="t-project")
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        r = api.get(f"/users/admin/users/{self.root.pk}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertGreaterEqual(r.data["owned_projects_count"], 1)
+
+
+class AdminUserSetActiveApiTests(TestCase):
+    """Шаг 7: блокировка/разблокировка пользователя (`POST /users/admin/users/<id>/active/`)."""
+
+    def setUp(self):
+        self.actor = User.objects.create_user(
+            email="set-active-actor@example.com",
+            username="setactiveactor",
+            password="secret123",
+            is_staff=True,
+        )
+        _elevate_admin(self.actor)
+        self.target = User.objects.create_user(
+            email="set-active-target@example.com",
+            username="setactivetarget",
+            password="secret123",
+        )
+        self.superuser_actor = User.objects.create_user(
+            email="set-active-super-actor@example.com",
+            username="setactivesuperactor",
+            password="secret123",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.super_target = User.objects.create_user(
+            email="set-active-super-target@example.com",
+            username="setactivesupertarget",
+            password="secret123",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+    def _url(self, user):
+        return f"/users/admin/users/{user.pk}/active/"
+
+    def _actor_api(self):
+        api = APIClient()
+        api.force_authenticate(self.actor)
+        return api
+
+    # ---- access ------------------------------------------------------------
+
+    def test_anonymous_is_unauthorized(self):
+        api = APIClient()
+        r = api.post(self._url(self.target), {"is_active": False}, format="json")
+        # IsAuthenticated по умолчанию отдаёт 401 без креденшлов.
+        self.assertEqual(r.status_code, 401)
+
+    def test_authenticated_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.target)
+        r = api.post(self._url(self.target), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_staff_without_admin_session_blocked_with_mfa_code(self):
+        bare_staff = User.objects.create_user(
+            email="set-active-bare-staff@example.com",
+            username="setactivebarestaff",
+            password="secret123",
+            is_staff=True,
+        )
+        api = APIClient()
+        api.force_authenticate(bare_staff)
+        r = api.post(self._url(self.target), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+    # ---- happy paths -------------------------------------------------------
+
+    def test_deactivate_then_activate_target_with_audit(self):
+        api = self._actor_api()
+
+        r = api.post(self._url(self.target), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data["id"], self.target.pk)
+        self.assertEqual(r.data["is_active"], False)
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_active)
+        audit = AdminActionAudit.objects.filter(
+            actor=self.actor,
+            action="admin.user.deactivated",
+            target_type="user",
+            target_id=str(self.target.pk),
+        ).first()
+        self.assertIsNotNone(audit)
+        self.assertEqual(audit.metadata.get("target_email"), "set-active-target@example.com")
+        self.assertEqual(audit.metadata.get("previous_is_active"), True)
+        self.assertEqual(audit.metadata.get("new_is_active"), False)
+
+        r2 = api.post(self._url(self.target), {"is_active": True}, format="json")
+        self.assertEqual(r2.status_code, 200, getattr(r2, "data", None))
+        self.assertEqual(r2.data["is_active"], True)
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.is_active)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.actor,
+                action="admin.user.activated",
+                target_type="user",
+                target_id=str(self.target.pk),
+            ).exists()
+        )
+
+    def test_deactivate_does_not_change_other_role_flags(self):
+        target_with_staff = User.objects.create_user(
+            email="set-active-staff-target@example.com",
+            username="setactivestafftarget",
+            password="secret123",
+            is_staff=True,
+        )
+        api = self._actor_api()
+        r = api.post(self._url(target_with_staff), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        target_with_staff.refresh_from_db()
+        self.assertFalse(target_with_staff.is_active)
+        self.assertTrue(target_with_staff.is_staff)
+        self.assertFalse(target_with_staff.is_superuser)
+
+    def test_idempotent_no_change_no_audit(self):
+        api = self._actor_api()
+        before = AdminActionAudit.objects.count()
+        r = api.post(self._url(self.target), {"is_active": True}, format="json")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.is_active)
+        self.assertEqual(AdminActionAudit.objects.count(), before)
+
+    # ---- self / superuser guards ------------------------------------------
+
+    def test_actor_cannot_deactivate_self(self):
+        api = self._actor_api()
+        r = api.post(self._url(self.actor), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_CANNOT_DEACTIVATE_SELF")
+        self.actor.refresh_from_db()
+        self.assertTrue(self.actor.is_active)
+        self.assertFalse(
+            AdminActionAudit.objects.filter(
+                actor=self.actor, action__startswith="admin.user."
+            ).exists()
+        )
+
+    def test_actor_cannot_self_re_activate(self):
+        # Любая попытка self-изменения активности запрещена, даже если значение совпадает.
+        api = self._actor_api()
+        r = api.post(self._url(self.actor), {"is_active": True}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_CANNOT_DEACTIVATE_SELF")
+
+    def test_non_super_staff_cannot_deactivate_superuser(self):
+        api = self._actor_api()
+        r = api.post(self._url(self.super_target), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_SUPERUSER_REQUIRED")
+        self.super_target.refresh_from_db()
+        self.assertTrue(self.super_target.is_active)
+        self.assertFalse(
+            AdminActionAudit.objects.filter(
+                actor=self.actor, action="admin.user.deactivated"
+            ).exists()
+        )
+
+    def test_superuser_can_deactivate_other_superuser(self):
+        _elevate_admin(self.superuser_actor)
+        api = APIClient()
+        api.force_authenticate(self.superuser_actor)
+        r = api.post(self._url(self.super_target), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.super_target.refresh_from_db()
+        self.assertFalse(self.super_target.is_active)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.superuser_actor,
+                action="admin.user.deactivated",
+                target_type="user",
+                target_id=str(self.super_target.pk),
+            ).exists()
+        )
+
+    def test_superuser_cannot_deactivate_self(self):
+        _elevate_admin(self.superuser_actor)
+        api = APIClient()
+        api.force_authenticate(self.superuser_actor)
+        r = api.post(self._url(self.superuser_actor), {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_CANNOT_DEACTIVATE_SELF")
+
+    # ---- payload validation -----------------------------------------------
+
+    def test_missing_body_returns_400(self):
+        api = self._actor_api()
+        r = api.post(self._url(self.target), {}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_USER_ACTIVE_INVALID")
+
+    def test_non_bool_value_returns_400(self):
+        api = self._actor_api()
+        r = api.post(self._url(self.target), {"is_active": "yes"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_USER_ACTIVE_INVALID")
+
+    def test_unknown_user_returns_404(self):
+        api = self._actor_api()
+        r = api.post("/users/admin/users/999999/active/", {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 404)
+
+
+class AdminSupportTicketsApiTests(TestCase):
+    """Шаг 9: список/детали/закрытие обращений в поддержку из админ-кабинета.
+
+    Эндпоинты: ``GET /users/admin/support-tickets/``,
+    ``GET|PATCH /users/admin/support-tickets/<uuid>/``.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="support-admin-staff@example.com",
+            username="supportadminstaff",
+            password="secret123",
+            is_staff=True,
+        )
+        _elevate_admin(self.staff)
+        self.alice = User.objects.create_user(
+            email="alice-support@example.com",
+            username="alicesupport",
+            password="secret123",
+        )
+        self.bob = User.objects.create_user(
+            email="bob-support@example.com",
+            username="bobsupport",
+            password="secret123",
+        )
+        self.open_ticket = SupportTicket.objects.create(
+            user=self.alice,
+            type_slug="help-question",
+            target_key="t-1",
+            target_label="Заголовок Алисы",
+            body="Тело сообщения Алисы",
+            is_closed=False,
+        )
+        self.closed_ticket = SupportTicket.objects.create(
+            user=self.bob,
+            type_slug="help-problem",
+            target_key="t-2",
+            target_label="Заголовок Боба",
+            body="Тело сообщения Боба",
+            is_closed=True,
+            closed_at=timezone.now(),
+        )
+
+    def _url_list(self):
+        return "/users/admin/support-tickets/"
+
+    def _url_detail(self, ticket):
+        return f"/users/admin/support-tickets/{ticket.id}/"
+
+    def _staff_api(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        return api
+
+    # ---- access ------------------------------------------------------------
+
+    def test_anonymous_is_unauthorized_on_list(self):
+        api = APIClient()
+        r = api.get(self._url_list())
+        self.assertEqual(r.status_code, 401)
+
+    def test_anonymous_is_unauthorized_on_detail(self):
+        api = APIClient()
+        r = api.get(self._url_detail(self.open_ticket))
+        self.assertEqual(r.status_code, 401)
+
+    def test_anonymous_is_unauthorized_on_patch(self):
+        api = APIClient()
+        r = api.patch(self._url_detail(self.open_ticket), {"is_closed": True}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+    def test_authenticated_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.alice)
+        self.assertEqual(api.get(self._url_list()).status_code, 403)
+        self.assertEqual(api.get(self._url_detail(self.open_ticket)).status_code, 403)
+        self.assertEqual(
+            api.patch(self._url_detail(self.open_ticket), {"is_closed": True}, format="json").status_code,
+            403,
+        )
+
+    def test_staff_without_admin_session_blocked_with_mfa_code(self):
+        bare_staff = User.objects.create_user(
+            email="support-bare-staff@example.com",
+            username="supportbarestaff",
+            password="secret123",
+            is_staff=True,
+        )
+        api = APIClient()
+        api.force_authenticate(bare_staff)
+
+        r_list = api.get(self._url_list())
+        self.assertEqual(r_list.status_code, 403)
+        self.assertEqual(r_list.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+        r_detail = api.get(self._url_detail(self.open_ticket))
+        self.assertEqual(r_detail.status_code, 403)
+        self.assertEqual(r_detail.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+        r_patch = api.patch(
+            self._url_detail(self.open_ticket), {"is_closed": True}, format="json"
+        )
+        self.assertEqual(r_patch.status_code, 403)
+        self.assertEqual(r_patch.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+    # ---- list happy paths --------------------------------------------------
+
+    def test_staff_gets_paginated_list(self):
+        api = self._staff_api()
+        r = api.get(self._url_list())
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("results", r.data)
+        self.assertIn("count", r.data)
+        self.assertEqual(r.data["page"], 1)
+        self.assertEqual(r.data["page_size"], 20)
+        self.assertGreaterEqual(r.data["count"], 2)
+        first = r.data["results"][0]
+        for key in ("id", "user_id", "user_email", "is_closed", "created_at"):
+            self.assertIn(key, first)
+        ids = {row["id"] for row in r.data["results"]}
+        self.assertIn(str(self.open_ticket.id), ids)
+        self.assertIn(str(self.closed_ticket.id), ids)
+
+    def test_q_filters_by_user_email_substring(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?q=alice-support@")
+        self.assertEqual(r.status_code, 200)
+        emails = [row["user_email"] for row in r.data["results"]]
+        self.assertEqual(emails, ["alice-support@example.com"])
+
+    def test_status_open_returns_only_open_tickets(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?status=open")
+        self.assertEqual(r.status_code, 200)
+        for row in r.data["results"]:
+            self.assertFalse(row["is_closed"], row)
+        ids = {row["id"] for row in r.data["results"]}
+        self.assertIn(str(self.open_ticket.id), ids)
+        self.assertNotIn(str(self.closed_ticket.id), ids)
+
+    def test_status_closed_returns_only_closed_tickets(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?status=closed")
+        self.assertEqual(r.status_code, 200)
+        for row in r.data["results"]:
+            self.assertTrue(row["is_closed"], row)
+        ids = {row["id"] for row in r.data["results"]}
+        self.assertNotIn(str(self.open_ticket.id), ids)
+        self.assertIn(str(self.closed_ticket.id), ids)
+
+    # ---- detail happy paths -----------------------------------------------
+
+    def test_staff_gets_existing_ticket_detail(self):
+        api = self._staff_api()
+        r = api.get(self._url_detail(self.open_ticket))
+        self.assertEqual(r.status_code, 200)
+        for key in ("id", "user_id", "user_email", "body", "is_closed", "created_at", "type_slug"):
+            self.assertIn(key, r.data)
+        self.assertEqual(r.data["id"], str(self.open_ticket.id))
+        self.assertEqual(r.data["body"], "Тело сообщения Алисы")
+        self.assertEqual(r.data["user_email"], "alice-support@example.com")
+
+    def test_staff_unknown_id_returns_404(self):
+        api = self._staff_api()
+        r = api.get("/users/admin/support-tickets/00000000-0000-0000-0000-000000000000/")
+        self.assertEqual(r.status_code, 404)
+
+    # ---- PATCH (close/reopen) ---------------------------------------------
+
+    def test_patch_close_then_reopen_with_audit(self):
+        api = self._staff_api()
+
+        r = api.patch(
+            self._url_detail(self.open_ticket), {"is_closed": True}, format="json"
+        )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data["is_closed"], True)
+        self.open_ticket.refresh_from_db()
+        self.assertTrue(self.open_ticket.is_closed)
+        self.assertIsNotNone(self.open_ticket.closed_at)
+        audit_closed = AdminActionAudit.objects.filter(
+            actor=self.staff,
+            action="admin.support_ticket.closed",
+            target_type="support_ticket",
+            target_id=str(self.open_ticket.id),
+        ).first()
+        self.assertIsNotNone(audit_closed)
+        self.assertEqual(audit_closed.metadata.get("user_email"), "alice-support@example.com")
+        self.assertEqual(audit_closed.metadata.get("previous_is_closed"), False)
+        self.assertEqual(audit_closed.metadata.get("new_is_closed"), True)
+
+        r2 = api.patch(
+            self._url_detail(self.open_ticket), {"is_closed": False}, format="json"
+        )
+        self.assertEqual(r2.status_code, 200, getattr(r2, "data", None))
+        self.assertEqual(r2.data["is_closed"], False)
+        self.open_ticket.refresh_from_db()
+        self.assertFalse(self.open_ticket.is_closed)
+        self.assertIsNone(self.open_ticket.closed_at)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff,
+                action="admin.support_ticket.reopened",
+                target_type="support_ticket",
+                target_id=str(self.open_ticket.id),
+            ).exists()
+        )
+
+    def test_idempotent_patch_no_change_no_audit(self):
+        api = self._staff_api()
+        before = AdminActionAudit.objects.count()
+        r = api.patch(
+            self._url_detail(self.closed_ticket), {"is_closed": True}, format="json"
+        )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.closed_ticket.refresh_from_db()
+        self.assertTrue(self.closed_ticket.is_closed)
+        self.assertEqual(AdminActionAudit.objects.count(), before)
+
+    # ---- payload validation -----------------------------------------------
+
+    def test_missing_body_returns_400(self):
+        api = self._staff_api()
+        r = api.patch(self._url_detail(self.open_ticket), {}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_TICKET_UPDATE_INVALID")
+
+    def test_non_bool_value_returns_400(self):
+        api = self._staff_api()
+        r = api.patch(
+            self._url_detail(self.open_ticket), {"is_closed": "yes"}, format="json"
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_TICKET_UPDATE_INVALID")
+
+
+class AdminActionAuditsApiTests(TestCase):
+    """Шаг 12: read-only viewer журнала действий админа.
+
+    Эндпоинты: ``GET /users/admin/action-audits/``,
+    ``GET /users/admin/action-audits/<id>/``.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="audit-admin-staff@example.com",
+            username="auditadminstaff",
+            password="secret123",
+            is_staff=True,
+        )
+        _elevate_admin(self.staff)
+        self.other_actor = User.objects.create_user(
+            email="audit-other-actor@example.com",
+            username="auditotheractor",
+            password="secret123",
+            is_staff=True,
+        )
+        self.regular = User.objects.create_user(
+            email="audit-regular@example.com",
+            username="auditregular",
+            password="secret123",
+        )
+
+        self.audit_user_created = AdminActionAudit.objects.create(
+            actor=self.staff,
+            action="admin.test.created",
+            target_type="user",
+            target_id="1",
+            metadata={"foo": "bar"},
+            user_agent="A" * 200,
+            ip_address="10.0.0.1",
+        )
+        self.audit_other = AdminActionAudit.objects.create(
+            actor=self.other_actor,
+            action="admin.other.something",
+            target_type="support_ticket",
+            target_id="abc",
+            metadata={},
+        )
+        self.audit_rich_metadata = AdminActionAudit.objects.create(
+            actor=self.staff,
+            action="admin.test.rich",
+            target_type="user",
+            target_id="2",
+            metadata={"a": "b", "c": "d", "e": "f", "g": "h", "i": "j", "k": "l"},
+        )
+
+    def _url_list(self):
+        return "/users/admin/action-audits/"
+
+    def _url_detail(self, audit):
+        return f"/users/admin/action-audits/{audit.pk}/"
+
+    def _staff_api(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        return api
+
+    # ---- access ------------------------------------------------------------
+
+    def test_anonymous_is_unauthorized_on_list(self):
+        api = APIClient()
+        r = api.get(self._url_list())
+        self.assertEqual(r.status_code, 401)
+
+    def test_anonymous_is_unauthorized_on_detail(self):
+        api = APIClient()
+        r = api.get(self._url_detail(self.audit_user_created))
+        self.assertEqual(r.status_code, 401)
+
+    def test_authenticated_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.regular)
+        self.assertEqual(api.get(self._url_list()).status_code, 403)
+        self.assertEqual(
+            api.get(self._url_detail(self.audit_user_created)).status_code, 403
+        )
+
+    def test_staff_without_admin_session_blocked_with_mfa_code(self):
+        bare_staff = User.objects.create_user(
+            email="audit-bare-staff@example.com",
+            username="auditbarestaff",
+            password="secret123",
+            is_staff=True,
+        )
+        api = APIClient()
+        api.force_authenticate(bare_staff)
+
+        r_list = api.get(self._url_list())
+        self.assertEqual(r_list.status_code, 403)
+        self.assertEqual(r_list.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+        r_detail = api.get(self._url_detail(self.audit_user_created))
+        self.assertEqual(r_detail.status_code, 403)
+        self.assertEqual(r_detail.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+    # ---- list happy paths --------------------------------------------------
+
+    def test_staff_gets_paginated_list(self):
+        api = self._staff_api()
+        r = api.get(self._url_list())
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("results", r.data)
+        self.assertIn("count", r.data)
+        self.assertEqual(r.data["page"], 1)
+        self.assertEqual(r.data["page_size"], 20)
+        self.assertGreaterEqual(r.data["count"], 3)
+        first = r.data["results"][0]
+        for key in (
+            "id",
+            "actor_email",
+            "action",
+            "target_type",
+            "target_id",
+            "metadata_summary",
+            "created_at",
+        ):
+            self.assertIn(key, first)
+        ids = {row["id"] for row in r.data["results"]}
+        self.assertIn(self.audit_user_created.pk, ids)
+
+    def test_q_filters_by_action_substring(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?q=admin.test")
+        self.assertEqual(r.status_code, 200)
+        actions = {row["action"] for row in r.data["results"]}
+        self.assertIn("admin.test.created", actions)
+        self.assertIn("admin.test.rich", actions)
+        self.assertNotIn("admin.other.something", actions)
+
+    def test_action_exact_filter(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?action=admin.test.created")
+        self.assertEqual(r.status_code, 200)
+        actions = [row["action"] for row in r.data["results"]]
+        self.assertEqual(actions, ["admin.test.created"])
+
+    def test_target_type_filter(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?target_type=user")
+        self.assertEqual(r.status_code, 200)
+        target_types = {row["target_type"] for row in r.data["results"]}
+        self.assertEqual(target_types, {"user"})
+        ids = {row["id"] for row in r.data["results"]}
+        self.assertIn(self.audit_user_created.pk, ids)
+        self.assertIn(self.audit_rich_metadata.pk, ids)
+        self.assertNotIn(self.audit_other.pk, ids)
+
+    def test_actor_id_filter(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + f"?actor_id={self.other_actor.pk}")
+        self.assertEqual(r.status_code, 200)
+        ids = {row["id"] for row in r.data["results"]}
+        self.assertEqual(ids, {self.audit_other.pk})
+
+    def test_list_truncates_long_user_agent(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?action=admin.test.created")
+        self.assertEqual(r.status_code, 200)
+        row = r.data["results"][0]
+        self.assertLessEqual(len(row["user_agent"]), 80)
+        self.assertTrue(row["user_agent"].endswith("..."))
+
+    def test_list_metadata_summary_caps_at_5_keys(self):
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?action=admin.test.rich")
+        self.assertEqual(r.status_code, 200)
+        row = r.data["results"][0]
+        self.assertLessEqual(len(row["metadata_summary"]), 5)
+
+    def test_page_size_is_capped_at_100(self):
+        for i in range(25):
+            AdminActionAudit.objects.create(
+                actor=self.staff,
+                action="admin.bulk.test",
+                target_type="user",
+                target_id=str(i),
+                metadata={},
+            )
+        api = self._staff_api()
+        r = api.get(self._url_list() + "?page_size=500")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["page_size"], 100)
+
+    # ---- detail happy paths -----------------------------------------------
+
+    def test_detail_returns_full_metadata_and_full_user_agent(self):
+        api = self._staff_api()
+        r = api.get(self._url_detail(self.audit_user_created))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["id"], self.audit_user_created.pk)
+        self.assertEqual(r.data["action"], "admin.test.created")
+        self.assertEqual(r.data["metadata"], {"foo": "bar"})
+        self.assertEqual(r.data["user_agent"], "A" * 200)
+
+        r_rich = api.get(self._url_detail(self.audit_rich_metadata))
+        self.assertEqual(r_rich.status_code, 200)
+        self.assertEqual(len(r_rich.data["metadata"]), 6)
+        self.assertEqual(r_rich.data["metadata"].get("k"), "l")
+
+    def test_detail_unknown_id_returns_404(self):
+        api = self._staff_api()
+        r = api.get("/users/admin/action-audits/999999/")
+        self.assertEqual(r.status_code, 404)
+
+
+class AdminMfaGateApiTests(TestCase):
+    """Step-up MFA-gate для admin endpoints + endpoints управления admin-сессией.
+
+    Шаг 4: гейт ``HasFreshAdminSession`` блокирует staff без активной ``AdminSession``
+    с кодом ``ADMIN_MFA_REQUIRED``; dev-confirm создаёт сессию (только при ``DEBUG``).
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="mfa-staff@example.com",
+            username="mfastaff",
+            password="secret123",
+            is_staff=True,
+        )
+        self.regular = User.objects.create_user(
+            email="mfa-regular@example.com",
+            username="mfaregular",
+            password="secret123",
+        )
+
+    def _staff_api(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        return api
+
+    # ---- gate (admin/users/) ------------------------------------------------
+
+    def test_staff_without_admin_session_blocked_with_mfa_code(self):
+        api = self._staff_api()
+        r = api.get("/users/admin/users/")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_MFA_REQUIRED")
+        self.assertIn("detail", r.data)
+
+    def test_staff_with_active_admin_session_allowed(self):
+        AdminSession.objects.create(
+            user=self.staff,
+            elevated_until=timezone.now() + timedelta(minutes=30),
+            confirmed_with="development",
+        )
+        api = self._staff_api()
+        r = api.get("/users/admin/users/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("results", r.data)
+
+    def test_expired_admin_session_blocked(self):
+        AdminSession.objects.create(
+            user=self.staff,
+            elevated_until=timezone.now() - timedelta(minutes=1),
+            confirmed_with="development",
+        )
+        api = self._staff_api()
+        r = api.get("/users/admin/users/")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+    def test_revoked_admin_session_blocked(self):
+        now = timezone.now()
+        AdminSession.objects.create(
+            user=self.staff,
+            elevated_until=now + timedelta(minutes=30),
+            confirmed_with="development",
+            revoked_at=now,
+        )
+        api = self._staff_api()
+        r = api.get("/users/admin/users/")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+    # ---- endpoints (session info / dev-confirm / revoke) -------------------
+
+    def test_session_info_for_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.regular)
+        r = api.get("/users/admin/session/")
+        self.assertEqual(r.status_code, 403)
+
+    def test_dev_confirm_for_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.regular)
+        r = api.post("/users/admin/session/dev-confirm/")
+        self.assertEqual(r.status_code, 403)
+
+    def test_session_info_staff_without_session_returns_not_elevated(self):
+        api = self._staff_api()
+        r = api.get("/users/admin/session/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["is_elevated"], False)
+        self.assertIsNone(r.data["elevated_until"])
+        self.assertIsNone(r.data["confirmed_with"])
+
+    @override_settings(DEBUG=True)
+    def test_dev_confirm_creates_session_and_audit_when_debug(self):
+        api = self._staff_api()
+        r = api.post("/users/admin/session/dev-confirm/")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data["is_elevated"], True)
+        self.assertEqual(r.data["confirmed_with"], "development")
+        self.assertTrue(
+            AdminSession.objects.filter(
+                user=self.staff,
+                revoked_at__isnull=True,
+                elevated_until__gt=timezone.now(),
+            ).exists()
+        )
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff, action="admin.session.elevated"
+            ).exists()
+        )
+        # Подтверждённая сессия открывает доступ к admin/users/.
+        r2 = api.get("/users/admin/users/")
+        self.assertEqual(r2.status_code, 200)
+
+    @override_settings(DEBUG=False)
+    def test_dev_confirm_disabled_when_not_debug(self):
+        api = self._staff_api()
+        r = api.post("/users/admin/session/dev-confirm/")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_MFA_DEV_DISABLED")
+        self.assertFalse(AdminSession.objects.filter(user=self.staff).exists())
+
+    def test_revoke_marks_active_sessions_revoked_and_audits(self):
+        active = AdminSession.objects.create(
+            user=self.staff,
+            elevated_until=timezone.now() + timedelta(minutes=30),
+            confirmed_with="development",
+        )
+        api = self._staff_api()
+        r = api.post("/users/admin/session/revoke/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["is_elevated"], False)
+        active.refresh_from_db()
+        self.assertIsNotNone(active.revoked_at)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff, action="admin.session.revoked"
+            ).exists()
+        )
+        # После revoke admin/users/ снова под защитой gate.
+        r2 = api.get("/users/admin/users/")
+        self.assertEqual(r2.status_code, 403)
+        self.assertEqual(r2.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+
+class AdminTelegramMfaTests(TestCase):
+    """Шаг 5: Telegram MFA для step-up admin elevation.
+
+    Покрытие: missing/active device, non-staff, hash-only хранение, wrong/correct verify,
+    повторное consumption, expiry, rate-limit (challenge), auto-lock на 5 неверных попыток,
+    production без ``TELEGRAM_BOT_TOKEN``.
+    """
+
+    CHALLENGE_URL = "/users/admin/mfa/telegram/challenge/"
+    VERIFY_URL = "/users/admin/mfa/telegram/verify/"
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="tg-mfa-staff@example.com",
+            username="tgmfastaff",
+            password="secret123",
+            is_staff=True,
+        )
+        self.regular = User.objects.create_user(
+            email="tg-mfa-regular@example.com",
+            username="tgmfaregular",
+            password="secret123",
+        )
+
+    def _staff_api(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        return api
+
+    def _make_device(self, chat_id="1001", is_active=True):
+        return AdminMfaDevice.objects.create(
+            user=self.staff,
+            type=AdminMfaDevice.TYPE_TELEGRAM,
+            telegram_chat_id=chat_id,
+            telegram_username="staffadmin",
+            is_active=is_active,
+            confirmed_at=timezone.now(),
+        )
+
+    # ---- challenge endpoint -------------------------------------------------
+
+    def test_non_staff_forbidden_on_challenge(self):
+        api = APIClient()
+        api.force_authenticate(self.regular)
+        r = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r.status_code, 403)
+
+    def test_non_staff_forbidden_on_verify(self):
+        api = APIClient()
+        api.force_authenticate(self.regular)
+        r = api.post(self.VERIFY_URL, {"code": "123456"}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_challenge_without_device_returns_not_configured(self):
+        api = self._staff_api()
+        with patch("users.admin_views.send_admin_mfa_code") as send_mock:
+            r = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "TELEGRAM_MFA_DEVICE_NOT_CONFIGURED")
+        send_mock.assert_not_called()
+        self.assertFalse(AdminMfaChallenge.objects.filter(user=self.staff).exists())
+
+    def test_challenge_creates_hashed_challenge_and_sends_code(self):
+        device = self._make_device(chat_id="555111")
+        api = self._staff_api()
+        with patch("users.admin_views.send_admin_mfa_code") as send_mock:
+            r = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("expires_in"), 300)
+        send_mock.assert_called_once()
+        chat_id_arg, raw_code = send_mock.call_args.args
+        self.assertEqual(chat_id_arg, device.telegram_chat_id)
+        self.assertEqual(len(raw_code), 6)
+        self.assertTrue(raw_code.isdigit())
+
+        ch = AdminMfaChallenge.objects.get(user=self.staff)
+        self.assertEqual(ch.channel, AdminMfaChallenge.CHANNEL_TELEGRAM)
+        self.assertEqual(ch.device_id, device.pk)
+        self.assertIsNone(ch.consumed_at)
+        # Raw 6-digit код в БД не хранится — только хэш.
+        self.assertNotEqual(ch.code_hash, raw_code)
+        self.assertGreater(len(ch.code_hash), 6)
+
+    def test_challenge_rate_limited_within_window(self):
+        self._make_device()
+        api = self._staff_api()
+        with patch("users.admin_views.send_admin_mfa_code"):
+            r1 = api.post(self.CHALLENGE_URL)
+            r2 = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 429)
+        self.assertEqual(r2.data.get("code"), "TELEGRAM_MFA_RATE_LIMITED")
+
+    def test_challenge_returns_503_when_telegram_not_configured(self):
+        self._make_device()
+        api = self._staff_api()
+        with override_settings(DEBUG=False), patch(
+            "users.admin_views.send_admin_mfa_code",
+            side_effect=TelegramMfaError(
+                "TELEGRAM_MFA_NOT_CONFIGURED",
+                "Telegram MFA не настроен на сервере",
+            ),
+        ):
+            r = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.data.get("code"), "TELEGRAM_MFA_NOT_CONFIGURED")
+        ch = AdminMfaChallenge.objects.get(user=self.staff)
+        # При ошибке доставки challenge сразу гасится, чтобы не тратить лимит.
+        self.assertIsNotNone(ch.consumed_at)
+
+    # ---- verify endpoint ----------------------------------------------------
+
+    def _issue_challenge(self):
+        device = self._make_device()
+        captured = {}
+
+        def fake_send(chat_id, code):
+            captured["code"] = code
+
+        with patch("users.admin_views.send_admin_mfa_code", side_effect=fake_send):
+            r = self._staff_api().post(self.CHALLENGE_URL)
+            self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        return device, captured["code"]
+
+    def test_verify_no_active_challenge_returns_not_found(self):
+        api = self._staff_api()
+        r = api.post(self.VERIFY_URL, {"code": "123456"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "MFA_CHALLENGE_NOT_FOUND")
+
+    def test_verify_wrong_code_increments_attempts(self):
+        _device, _good = self._issue_challenge()
+        api = self._staff_api()
+        r = api.post(self.VERIFY_URL, {"code": "000000"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "MFA_CODE_INVALID")
+        ch = AdminMfaChallenge.objects.get(user=self.staff)
+        self.assertEqual(ch.attempts_count, 1)
+        self.assertIsNone(ch.consumed_at)
+
+    def test_verify_correct_code_creates_admin_session_and_audit(self):
+        device, good = self._issue_challenge()
+        api = self._staff_api()
+        r = api.post(self.VERIFY_URL, {"code": good}, format="json")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("is_elevated"), True)
+        self.assertEqual(r.data.get("confirmed_with"), "telegram")
+        ch = AdminMfaChallenge.objects.get(user=self.staff)
+        self.assertIsNotNone(ch.consumed_at)
+        self.assertTrue(
+            AdminSession.objects.filter(
+                user=self.staff,
+                confirmed_with="telegram",
+                revoked_at__isnull=True,
+                elevated_until__gt=timezone.now(),
+            ).exists()
+        )
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff,
+                action="admin.session.elevated.telegram",
+            ).exists()
+        )
+        # Step-up open admin/users/ access.
+        r2 = api.get("/users/admin/users/")
+        self.assertEqual(r2.status_code, 200)
+
+    def test_verify_consumed_challenge_cannot_be_reused(self):
+        _device, good = self._issue_challenge()
+        api = self._staff_api()
+        r1 = api.post(self.VERIFY_URL, {"code": good}, format="json")
+        self.assertEqual(r1.status_code, 200)
+        r2 = api.post(self.VERIFY_URL, {"code": good}, format="json")
+        self.assertEqual(r2.status_code, 400)
+        self.assertEqual(r2.data.get("code"), "MFA_CHALLENGE_NOT_FOUND")
+
+    def test_verify_expired_challenge_returns_not_found(self):
+        device = self._make_device()
+        AdminMfaChallenge.objects.create(
+            user=self.staff,
+            device=device,
+            channel=AdminMfaChallenge.CHANNEL_TELEGRAM,
+            code_hash=make_password("123456"),
+            expires_at=timezone.now() - timedelta(minutes=1),
+        )
+        api = self._staff_api()
+        r = api.post(self.VERIFY_URL, {"code": "123456"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "MFA_CHALLENGE_NOT_FOUND")
+
+    def test_verify_locks_after_five_wrong_attempts(self):
+        _device, good = self._issue_challenge()
+        api = self._staff_api()
+        for _ in range(5):
+            r = api.post(self.VERIFY_URL, {"code": "000000"}, format="json")
+            self.assertEqual(r.status_code, 400)
+            self.assertEqual(r.data.get("code"), "MFA_CODE_INVALID")
+        # Шестая попытка — даже корректным кодом — challenge уже locked/consumed.
+        r6 = api.post(self.VERIFY_URL, {"code": good}, format="json")
+        self.assertEqual(r6.status_code, 400)
+        self.assertEqual(r6.data.get("code"), "MFA_CHALLENGE_NOT_FOUND")
+        ch = AdminMfaChallenge.objects.get(user=self.staff)
+        self.assertIsNotNone(ch.consumed_at)
+
+    def test_verify_empty_code_invalid(self):
+        self._issue_challenge()
+        api = self._staff_api()
+        r = api.post(self.VERIFY_URL, {"code": ""}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "MFA_CODE_INVALID")
+
+
+class AdminTelegramBindFlowTests(TestCase):
+    """Шаг 6: привязка Telegram MFA через one-shot bind-токен и webhook от бота."""
+
+    BIND_URL = "/users/admin/mfa/telegram/bind/start/"
+    WEBHOOK_URL = "/users/admin/mfa/telegram/webhook/"
+    WEBHOOK_SECRET = "test-webhook-secret"
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="bind-staff@example.com",
+            username="bindstaff",
+            password="secret123",
+            is_staff=True,
+        )
+        self.regular = User.objects.create_user(
+            email="bind-regular@example.com",
+            username="bindregular",
+            password="secret123",
+        )
+
+    def _staff_api(self):
+        api = APIClient()
+        api.force_authenticate(self.staff)
+        return api
+
+    # ---- bind/start ---------------------------------------------------------
+
+    def test_bind_start_non_staff_forbidden(self):
+        api = APIClient()
+        api.force_authenticate(self.regular)
+        r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 403)
+
+    @override_settings(DEBUG=False, TELEGRAM_BOT_USERNAME="testbot")
+    def test_bind_start_staff_without_device_in_prod_requires_bootstrap(self):
+        api = self._staff_api()
+        r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "TELEGRAM_MFA_BOOTSTRAP_REQUIRED")
+        self.assertFalse(AdminTelegramBindToken.objects.filter(user=self.staff).exists())
+
+    @override_settings(DEBUG=True, TELEGRAM_BOT_USERNAME="testbot")
+    def test_bind_start_in_debug_creates_initial_bind_token(self):
+        api = self._staff_api()
+        r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("purpose"), AdminTelegramBindToken.PURPOSE_INITIAL_BIND)
+        self.assertEqual(r.data.get("expires_in"), 600)
+        self.assertIn("bot_link", r.data)
+        self.assertTrue(r.data["bot_link"].startswith("https://t.me/testbot?start="))
+        self.assertTrue(AdminTelegramBindToken.objects.filter(user=self.staff).exists())
+
+    @override_settings(DEBUG=False, TELEGRAM_BOT_USERNAME="testbot")
+    def test_bind_start_superuser_can_bootstrap_outside_debug(self):
+        super_user = User.objects.create_superuser(
+            email="bind-super@example.com",
+            username="bindsuper",
+            password="secret123",
+        )
+        api = APIClient()
+        api.force_authenticate(super_user)
+        r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("purpose"), AdminTelegramBindToken.PURPOSE_INITIAL_BIND)
+
+    @override_settings(DEBUG=True, TELEGRAM_BOT_USERNAME="testbot")
+    def test_bind_start_with_active_device_no_session_returns_admin_mfa_required(self):
+        AdminMfaDevice.objects.create(
+            user=self.staff,
+            type=AdminMfaDevice.TYPE_TELEGRAM,
+            telegram_chat_id="222333",
+            is_active=True,
+            confirmed_at=timezone.now(),
+        )
+        api = self._staff_api()
+        r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_MFA_REQUIRED")
+
+    @override_settings(DEBUG=True, TELEGRAM_BOT_USERNAME="testbot")
+    def test_bind_start_with_active_device_and_fresh_session_marks_old_tokens_consumed(self):
+        AdminMfaDevice.objects.create(
+            user=self.staff,
+            type=AdminMfaDevice.TYPE_TELEGRAM,
+            telegram_chat_id="555666",
+            is_active=True,
+            confirmed_at=timezone.now(),
+        )
+        _elevate_admin(self.staff)
+        old_token = AdminTelegramBindToken.objects.create(
+            user=self.staff,
+            token_hash="OLD_HASH_PLACEHOLDER",
+            purpose=AdminTelegramBindToken.PURPOSE_REBIND,
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        api = self._staff_api()
+        r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("purpose"), AdminTelegramBindToken.PURPOSE_REBIND)
+        old_token.refresh_from_db()
+        self.assertIsNotNone(old_token.consumed_at)
+        # И новый токен (отличный от old) активен.
+        active = AdminTelegramBindToken.objects.filter(
+            user=self.staff, consumed_at__isnull=True,
+        ).first()
+        self.assertIsNotNone(active)
+        self.assertNotEqual(active.pk, old_token.pk)
+
+    @override_settings(DEBUG=True, TELEGRAM_BOT_USERNAME="testbot")
+    def test_bind_start_does_not_store_raw_token(self):
+        api = self._staff_api()
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="TEST_RAW_TOKEN_VALUE",
+        ):
+            r = api.post(self.BIND_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertIn("TEST_RAW_TOKEN_VALUE", r.data["bot_link"])
+        # raw в БД не сохранён, только хэш.
+        self.assertFalse(
+            AdminTelegramBindToken.objects.filter(token_hash="TEST_RAW_TOKEN_VALUE").exists(),
+        )
+        obj = AdminTelegramBindToken.objects.get(user=self.staff)
+        self.assertGreater(len(obj.token_hash), 40)
+        self.assertNotEqual(obj.token_hash, "TEST_RAW_TOKEN_VALUE")
+        self.assertTrue(verify_bind_token("TEST_RAW_TOKEN_VALUE", obj.token_hash))
+
+    # ---- webhook ------------------------------------------------------------
+
+    def test_webhook_without_secret_setting_returns_404(self):
+        api = APIClient()
+        r = api.post(self.WEBHOOK_URL, {}, format="json")
+        # TELEGRAM_WEBHOOK_SECRET не задан в settings — endpoint скрыт.
+        self.assertEqual(r.status_code, 404)
+
+    @override_settings(TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET)
+    def test_webhook_without_header_returns_401(self):
+        api = APIClient()
+        r = api.post(self.WEBHOOK_URL, {}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+    @override_settings(
+        DEBUG=True,
+        TELEGRAM_BOT_USERNAME="testbot",
+        TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET,
+    )
+    def test_webhook_valid_start_creates_active_device_and_audit(self):
+        # Сначала генерируем bind-токен через bind/start (мокаем raw, чтобы знать его).
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="WEBHOOK_RAW_TOKEN",
+        ):
+            r = self._staff_api().post(self.BIND_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+
+        api = APIClient()
+        update = {
+            "message": {
+                "text": "/start WEBHOOK_RAW_TOKEN",
+                "chat": {"id": 9001, "username": "tg_user_9001"},
+                "from": {"id": 9001, "username": "tg_user_9001"},
+            }
+        }
+        with patch("users.admin_views.send_telegram_text") as send_mock:
+            r = api.post(
+                self.WEBHOOK_URL, update, format="json",
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+            )
+        self.assertEqual(r.status_code, 200)
+        send_mock.assert_called_once()
+
+        device = AdminMfaDevice.objects.get(
+            user=self.staff, type=AdminMfaDevice.TYPE_TELEGRAM, is_active=True,
+        )
+        self.assertEqual(device.telegram_chat_id, "9001")
+        self.assertEqual(device.telegram_username, "tg_user_9001")
+        self.assertIsNotNone(device.confirmed_at)
+        token = AdminTelegramBindToken.objects.get(user=self.staff)
+        self.assertIsNotNone(token.consumed_at)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff, action="admin.mfa.telegram.bound",
+            ).exists()
+        )
+
+    @override_settings(
+        DEBUG=True,
+        TELEGRAM_BOT_USERNAME="testbot",
+        TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET,
+    )
+    def test_webhook_already_consumed_token_is_no_op(self):
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="CONSUMED_RAW_TOKEN",
+        ):
+            self._staff_api().post(self.BIND_URL)
+        token = AdminTelegramBindToken.objects.get(user=self.staff)
+        token.consumed_at = timezone.now()
+        token.save(update_fields=["consumed_at"])
+
+        api = APIClient()
+        update = {
+            "message": {
+                "text": "/start CONSUMED_RAW_TOKEN",
+                "chat": {"id": 9002},
+                "from": {"id": 9002},
+            }
+        }
+        with patch("users.admin_views.send_telegram_text") as send_mock:
+            r = api.post(
+                self.WEBHOOK_URL, update, format="json",
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+            )
+        self.assertEqual(r.status_code, 200)
+        send_mock.assert_not_called()
+        self.assertFalse(
+            AdminMfaDevice.objects.filter(user=self.staff, is_active=True).exists()
+        )
+
+    @override_settings(
+        DEBUG=True,
+        TELEGRAM_BOT_USERNAME="testbot",
+        TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET,
+    )
+    def test_webhook_expired_token_is_no_op(self):
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="EXPIRED_RAW_TOKEN",
+        ):
+            self._staff_api().post(self.BIND_URL)
+        AdminTelegramBindToken.objects.filter(user=self.staff).update(
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        api = APIClient()
+        update = {
+            "message": {
+                "text": "/start EXPIRED_RAW_TOKEN",
+                "chat": {"id": 9003},
+                "from": {"id": 9003},
+            }
+        }
+        with patch("users.admin_views.send_telegram_text") as send_mock:
+            r = api.post(
+                self.WEBHOOK_URL, update, format="json",
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+            )
+        self.assertEqual(r.status_code, 200)
+        send_mock.assert_not_called()
+        self.assertFalse(
+            AdminMfaDevice.objects.filter(user=self.staff, is_active=True).exists()
+        )
+
+    @override_settings(
+        DEBUG=True,
+        TELEGRAM_BOT_USERNAME="testbot",
+        TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET,
+    )
+    def test_webhook_wrong_token_value_is_no_op(self):
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="GOOD_RAW_TOKEN",
+        ):
+            self._staff_api().post(self.BIND_URL)
+
+        api = APIClient()
+        update = {
+            "message": {
+                "text": "/start NOT_THE_RIGHT_TOKEN",
+                "chat": {"id": 9004},
+                "from": {"id": 9004},
+            }
+        }
+        with patch("users.admin_views.send_telegram_text") as send_mock:
+            r = api.post(
+                self.WEBHOOK_URL, update, format="json",
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+            )
+        self.assertEqual(r.status_code, 200)
+        send_mock.assert_not_called()
+        token = AdminTelegramBindToken.objects.get(user=self.staff)
+        self.assertIsNone(token.consumed_at)
+
+    @override_settings(
+        DEBUG=True,
+        TELEGRAM_BOT_USERNAME="testbot",
+        TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET,
+    )
+    def test_rebind_replaces_chat_id_and_deactivates_previous_device(self):
+        # Сначала привязка: первый chat_id.
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="REBIND_TOKEN_1",
+        ):
+            self._staff_api().post(self.BIND_URL)
+        api = APIClient()
+        with patch("users.admin_views.send_telegram_text"):
+            api.post(
+                self.WEBHOOK_URL,
+                {
+                    "message": {
+                        "text": "/start REBIND_TOKEN_1",
+                        "chat": {"id": 11111},
+                        "from": {"id": 11111},
+                    }
+                },
+                format="json",
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+            )
+        first_device = AdminMfaDevice.objects.get(
+            user=self.staff, telegram_chat_id="11111", is_active=True,
+        )
+        self.assertIsNotNone(first_device)
+
+        # Rebind: нужна elevated session.
+        _elevate_admin(self.staff)
+        with patch(
+            "users.admin_views.generate_bind_token",
+            return_value="REBIND_TOKEN_2",
+        ):
+            r = self._staff_api().post(self.BIND_URL)
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("purpose"), AdminTelegramBindToken.PURPOSE_REBIND)
+
+        with patch("users.admin_views.send_telegram_text"):
+            r2 = api.post(
+                self.WEBHOOK_URL,
+                {
+                    "message": {
+                        "text": "/start REBIND_TOKEN_2",
+                        "chat": {"id": 22222},
+                        "from": {"id": 22222},
+                    }
+                },
+                format="json",
+                HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+            )
+        self.assertEqual(r2.status_code, 200)
+        first_device.refresh_from_db()
+        self.assertFalse(first_device.is_active)
+        new_device = AdminMfaDevice.objects.get(
+            user=self.staff, telegram_chat_id="22222", is_active=True,
+        )
+        self.assertNotEqual(new_device.pk, first_device.pk)
 
 
 class ChangePasswordApiTests(TestCase):

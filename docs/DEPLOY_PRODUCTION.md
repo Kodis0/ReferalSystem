@@ -255,3 +255,46 @@ sudo systemctl reload nginx
 - Успешный прогон GitHub Actions до конца.
 
 После передачи SSH можно пройти чек-листы из разделов 4, 9 и 12 последовательно и зафиксировать фактические выводы команд.
+
+## 15. Admin cabinet / Telegram MFA
+
+### Required env
+
+- `DJANGO_DEBUG=False` — обязательно в production. Если оставить `True`, `dev-confirm` endpoint остаётся доступным и обходит MFA.
+- `TELEGRAM_BOT_TOKEN` — токен Telegram-бота из BotFather. Без него admin MFA в prod не работает (`TELEGRAM_MFA_NOT_CONFIGURED`).
+- `TELEGRAM_BOT_USERNAME` — username бота без `@`. Без него `bind/start` не может построить ссылку `t.me/<bot>?start=<token>` и возвращает 503.
+- `TELEGRAM_WEBHOOK_SECRET` — общий секрет для проверки заголовка `X-Telegram-Bot-Api-Secret-Token`. Без него webhook отдаёт 404 (для Telegram бота endpoint «не существует»).
+
+### Telegram webhook
+
+Webhook URL для бота:
+
+`https://<domain>/users/admin/mfa/telegram/webhook/`
+
+Регистрация в Telegram (один раз):
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -d "url=https://<domain>/users/admin/mfa/telegram/webhook/" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+
+Telegram при каждом обновлении присылает заголовок `X-Telegram-Bot-Api-Secret-Token: <TELEGRAM_WEBHOOK_SECRET>`. Бэкенд сравнивает его с `settings.TELEGRAM_WEBHOOK_SECRET`; иначе — 401.
+
+### Bootstrap flow (первый admin device)
+
+1. Создать `superuser` (`python manage.py createsuperuser`) или повысить существующего пользователя до `is_staff=True` через Django admin / shell.
+2. Убедиться, что `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET` выставлены и Gunicorn перезапущен.
+3. Открыть `/lk/admin`. `AdminProtectedRoute` пропустит по `is_staff`, дальше отрабатывает `AdminMfaGate`.
+4. Если у пользователя ещё нет `AdminMfaDevice`, появится кнопка «Привязать Telegram». Клик → backend `POST /users/admin/mfa/telegram/bind/start/`:
+   - при `DEBUG=True` (любой staff) или для `is_superuser=True` (даже в prod) → 200 + `bot_link`.
+   - для обычного staff при `DEBUG=False` → 403 `TELEGRAM_MFA_BOOTSTRAP_REQUIRED` (первый bind должен сделать superuser).
+5. Открыть `t.me/<bot>?start=<token>` из ответа, нажать Start. Telegram пришлёт `/start <token>` в webhook → backend создаст `AdminMfaDevice` и пометит `bind_token` как consumed.
+6. Вернуться в `/lk/admin`, нажать «Я привязал Telegram» → автоматически `POST challenge` → ввести 6-значный код → `POST verify` → создан `AdminSession` (`confirmed_with="telegram"`, 30 минут). Все действия пишутся в `AdminActionAudit`.
+
+### Важно
+
+- `dev-confirm` (`POST /users/admin/session/dev-confirm/`) отключён при `DJANGO_DEBUG=False` — отдаёт 403 `ADMIN_MFA_DEV_DISABLED`.
+- Если в prod забыть `DJANGO_DEBUG=False`, `dev-confirm` доступен любому `is_staff`. Перед первым деплоем — проверить через `python manage.py shell -c "from django.conf import settings; print(settings.DEBUG)"`.
+- Если для `is_staff=True` пользователя не создан Telegram device, `DEBUG=False`, и пользователь не `is_superuser` — он будет заблокирован на экране MFA gate. Поэтому первый bootstrap делает superuser; для остальных staff superuser создаёт device через Django admin (модели `AdminMfaDevice` / `AdminTelegramBindToken`) или генерирует им `bind/start` ссылку из своей elevated сессии.
+- Webhook секрет ротируется как любой shared secret: при ротации `setWebhook` нужно вызвать заново.

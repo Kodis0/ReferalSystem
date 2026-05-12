@@ -1,8 +1,10 @@
 import secrets
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 
 class CustomUser(AbstractUser):
@@ -155,3 +157,176 @@ class PasswordResetCode(models.Model):
 
     def __str__(self) -> str:
         return f"PasswordResetCode({self.pk}) user={self.user_id}"
+
+
+class AdminSession(models.Model):
+    """Step-up («elevated») сессия админа: пока активна — admin endpoints доступны."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_sessions",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    elevated_until = models.DateTimeField()
+    confirmed_with = models.CharField(
+        max_length=32,
+        choices=(
+            ("development", "development"),
+            ("telegram", "telegram"),
+            ("webauthn", "webauthn"),
+            ("totp", "totp"),
+        ),
+    )
+    created_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "revoked_at", "elevated_until"])]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"AdminSession({self.pk}) user={self.user_id}"
+
+
+class AdminMfaDevice(models.Model):
+    """Привязанное к админу устройство второго фактора (пока — Telegram chat).
+
+    Активность одного Telegram-устройства на пользователя enforce'ится в коде:
+    при подтверждении нового device ранее активные деактивируются (см. будущий bind flow).
+    """
+
+    TYPE_TELEGRAM = "telegram"
+    TYPE_CHOICES = ((TYPE_TELEGRAM, "telegram"),)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_mfa_devices",
+    )
+    type = models.CharField(max_length=16, choices=TYPE_CHOICES)
+    telegram_chat_id = models.CharField(max_length=64, blank=True, default="")
+    telegram_username = models.CharField(max_length=64, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "type", "is_active"])]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"AdminMfaDevice({self.pk}) user={self.user_id} type={self.type}"
+
+
+class AdminMfaChallenge(models.Model):
+    """Одноразовый MFA-код для step-up admin elevation.
+
+    В БД храним только хэш кода (``make_password``), raw-код уходит в канал доставки
+    (Telegram) и больше нигде не сохраняется.
+    """
+
+    CHANNEL_TELEGRAM = "telegram"
+    CHANNEL_CHOICES = ((CHANNEL_TELEGRAM, "telegram"),)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_mfa_challenges",
+    )
+    device = models.ForeignKey(
+        AdminMfaDevice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="challenges",
+    )
+    channel = models.CharField(max_length=16, choices=CHANNEL_CHOICES)
+    code_hash = models.CharField(max_length=256)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    attempts_count = models.PositiveIntegerField(default=0)
+    created_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "channel", "consumed_at", "-created_at"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"AdminMfaChallenge({self.pk}) user={self.user_id} channel={self.channel}"
+
+
+class AdminTelegramBindToken(models.Model):
+    """Одноразовый токен привязки Telegram-аккаунта к админу.
+
+    raw-токен уходит в `t.me/<bot>?start=<token>`-ссылку и нигде не сохраняется,
+    в БД лежит только хэш (``make_password``). Webhook сравнивает входящий
+    `/start <raw>` через ``check_password``, помечает строку ``consumed_at``
+    и активирует ``AdminMfaDevice`` с пришедшим ``chat_id``.
+    """
+
+    PURPOSE_INITIAL_BIND = "initial_bind"
+    PURPOSE_REBIND = "rebind"
+    PURPOSE_CHOICES = (
+        (PURPOSE_INITIAL_BIND, "initial_bind"),
+        (PURPOSE_REBIND, "rebind"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_telegram_bind_tokens",
+    )
+    token_hash = models.CharField(max_length=256)
+    purpose = models.CharField(max_length=16, choices=PURPOSE_CHOICES)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "consumed_at", "-created_at"]),
+            models.Index(fields=["token_hash"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"AdminTelegramBindToken({self.pk}) user={self.user_id} purpose={self.purpose}"
+
+
+class AdminActionAudit(models.Model):
+    """Журнал чувствительных действий админа (включая elevation/revoke)."""
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="admin_actions",
+    )
+    action = models.CharField(max_length=128)
+    target_type = models.CharField(max_length=64, blank=True, default="")
+    target_id = models.CharField(max_length=64, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["actor", "-created_at"]),
+            models.Index(fields=["action", "-created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"AdminActionAudit({self.pk}) {self.action}"

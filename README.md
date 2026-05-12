@@ -74,6 +74,8 @@ npm run dev
 
 По умолчанию backend может работать на SQLite для быстрого локального старта.
 
+Production deploy и admin Telegram MFA — см. [docs/DEPLOY_PRODUCTION.md](docs/DEPLOY_PRODUCTION.md).
+
 ## PostgreSQL через Docker (опционально)
 
 Если нужен Postgres вместо SQLite:
