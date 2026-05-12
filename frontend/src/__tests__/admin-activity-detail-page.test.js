@@ -60,10 +60,10 @@ describe("AdminActivityDetailPage", () => {
 
   it("renders fetched audit detail with action and metadata payload", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/activity/1"]}>
+      <MemoryRouter initialEntries={["/admin-console/activity/1"]}>
         <Routes>
           <Route
-            path="/lk/admin/activity/:auditId"
+            path="/admin-console/activity/:auditId"
             element={<AdminActivityDetailPage />}
           />
         </Routes>

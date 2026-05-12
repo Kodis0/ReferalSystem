@@ -150,7 +150,7 @@ export default function AdminUserDetailPage() {
   }, [user]);
 
   const backLink = (
-    <Link to="/lk/admin/users" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/users" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку пользователей</span>
     </Link>

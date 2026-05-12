@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ShieldCheck } from "lucide-react";
 import "./LkSidebar.css";
 import { CrownIcon } from "./mini-game/CrownIcon";
 import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
 import { formatSiteCardTitle } from "./owner-programs/siteDisplay";
-import useCurrentUser from "../../hooks/useCurrentUser";
 
 function projectKey(project) {
   if (typeof project?.id === "number") return `project-${project.id}`;
@@ -225,9 +223,6 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
   const { pathname, search, state: locationState } = useLocation();
   const navigate = useNavigate();
   const currentPath = pathname.toLowerCase();
-  const { user: currentUser } = useCurrentUser();
-  const isAdmin = currentUser?.is_staff === true;
-  const adminActive = currentPath === "/lk/admin" || currentPath.startsWith("/lk/admin/");
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [ownerProjects, setOwnerProjects] = useState([]);
   const [ownerProjectsLoading, setOwnerProjectsLoading] = useState(true);
@@ -1020,23 +1015,6 @@ export default function LkSidebar({ ownerSessionKey = "", ideaNavBadgeCount = 0,
             </svg>
             <span className="lk-sidebar__nav-text">Документы</span>
           </Link>
-
-          {isAdmin ? (
-            <Link
-              to="/lk/admin"
-              data-testid="lk-sidebar-admin-link"
-              className={itemClass(adminActive)}
-              aria-current={adminActive ? "page" : undefined}
-            >
-              <ShieldCheck
-                className="lk-sidebar__nav-icon-svg"
-                size={24}
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-              <span className="lk-sidebar__nav-text">Админ</span>
-            </Link>
-          ) : null}
         </nav>
         </div>
       </div>

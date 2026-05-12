@@ -63,9 +63,9 @@ describe("AdminSupportTicketsPage", () => {
 
   it("renders fetched ticket row with user_email and target_label", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/support"]}>
+      <MemoryRouter initialEntries={["/admin-console/support"]}>
         <Routes>
-          <Route path="/lk/admin/support" element={<AdminSupportTicketsPage />} />
+          <Route path="/admin-console/support" element={<AdminSupportTicketsPage />} />
         </Routes>
       </MemoryRouter>,
     );

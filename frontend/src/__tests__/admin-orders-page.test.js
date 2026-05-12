@@ -64,9 +64,9 @@ describe("AdminOrdersPage", () => {
 
   it("renders fetched order row with email and external id", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/orders"]}>
+      <MemoryRouter initialEntries={["/admin-console/orders"]}>
         <Routes>
-          <Route path="/lk/admin/orders" element={<AdminOrdersPage />} />
+          <Route path="/admin-console/orders" element={<AdminOrdersPage />} />
         </Routes>
       </MemoryRouter>,
     );

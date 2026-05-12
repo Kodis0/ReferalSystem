@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { toast } from "../../../components/toast/toastBus";
 
@@ -7,14 +7,13 @@ import { toast } from "../../../components/toast/toastBus";
  *
  * Поток:
  *   1) GET /users/admin/session/ — если уже elevated, отдаём children.
- *   2) Иначе экран «idle»: основная кнопка «Отправить код в Telegram»
- *      (POST /users/admin/mfa/telegram/challenge/) и dev-кнопка «Подтвердить для разработки»
- *      (POST /users/admin/session/dev-confirm/, доступна только при DEBUG=True).
- *   3) После успеха challenge → экран «code»: ввод 6 цифр и POST /users/admin/mfa/telegram/verify/.
- *      На успех verify сразу выдаёт `is_elevated: true` — раскрываем children.
- *   4) Если challenge вернул `TELEGRAM_MFA_DEVICE_NOT_CONFIGURED` — на «idle» появляется кнопка
- *      «Привязать Telegram», которая через POST /users/admin/mfa/telegram/bind/start/ выдаёт
- *      ссылку `t.me/<bot>?start=<token>` (фаза «bind»).
+ *   2) Иначе экран «idle»: primary кнопка «Подтвердить вход в Telegram»
+ *      (POST /users/admin/mfa/telegram/approval/challenge/), secondary «Ввести код» (старый flow),
+ *      dev-кнопка «Подтвердить для разработки».
+ *   3) approval_pending → polling GET /users/admin/mfa/telegram/approval/challenge/<id>/ каждые 2с.
+ *      approved → AdminSession создаётся бэком, отдаём children. denied/expired → ошибочный экран.
+ *   4) Фаза «code» — fallback на старый flow: POST /challenge/ → input → /verify/.
+ *   5) Bind flow без изменений: device-not-configured → POST /bind/start/ → t.me/<bot>?start=... → done.
  */
 const DEVICE_NOT_CONFIGURED_HINT =
   "Telegram MFA не настроен. Привяжите Telegram device через Django admin или следующий шаг настройки.";
@@ -24,6 +23,12 @@ const BIND_REBIND_NEED_MFA_HINT =
   "Для перепривязки Telegram нужно сначала войти в админку с актуальным MFA. Подтвердите код Telegram или используйте dev-fallback.";
 const BIND_NOT_CONFIGURED_HINT = "Telegram бот не настроен на сервере.";
 const BIND_GENERIC_ERROR = "Не удалось начать привязку.";
+const APPROVAL_RATE_LIMIT_HINT = "Слишком часто, попробуйте через минуту.";
+const APPROVAL_NOT_CONFIGURED_HINT = "Telegram MFA не настроен на сервере.";
+const APPROVAL_DENIED_HINT =
+  "Вход отклонён в Telegram. Если это были не вы — смените пароль и переплавите MFA устройство.";
+const APPROVAL_EXPIRED_HINT = "Запрос истёк.";
+const APPROVAL_POLL_INTERVAL_MS = 2000;
 
 export default function AdminMfaGate({ children }) {
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -36,7 +41,11 @@ export default function AdminMfaGate({ children }) {
   const [bindStarting, setBindStarting] = useState(false);
   const [bindOffered, setBindOffered] = useState(false);
   const [bindLink, setBindLink] = useState("");
+  const [approvalStarting, setApprovalStarting] = useState(false);
+  const [approvalChallengeId, setApprovalChallengeId] = useState(null);
   const [error, setError] = useState(null);
+  const pollTimerRef = useRef(null);
+  const mountedRef = useRef(true);
 
   const authHeader = () => {
     const token =
@@ -61,6 +70,127 @@ export default function AdminMfaGate({ children }) {
   useEffect(() => {
     fetchSession();
   }, [fetchSession]);
+
+  const clearPollTimer = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearPollTimer();
+    };
+  }, [clearPollTimer]);
+
+  const pollApprovalStatus = useCallback(
+    async (cid) => {
+      if (!cid || !mountedRef.current) return;
+      try {
+        const res = await fetch(
+          API_ENDPOINTS.adminTelegramApprovalChallengeStatus(cid),
+          { headers: authHeader() },
+        );
+        let body = null;
+        try {
+          body = await res.json();
+        } catch (_) {
+          // ignore parse error
+        }
+        if (!mountedRef.current) return;
+        if (!res.ok) {
+          setError("Не удалось получить статус подтверждения");
+          setPhase("idle");
+          return;
+        }
+        const st = body && body.status;
+        if (st === "approved") {
+          setElevated(true);
+          setApprovalChallengeId(null);
+          return;
+        }
+        if (st === "denied") {
+          setApprovalChallengeId(null);
+          setPhase("denied");
+          return;
+        }
+        if (st === "expired") {
+          setApprovalChallengeId(null);
+          setPhase("expired");
+          return;
+        }
+        pollTimerRef.current = setTimeout(
+          () => pollApprovalStatus(cid),
+          APPROVAL_POLL_INTERVAL_MS,
+        );
+      } catch (_) {
+        if (!mountedRef.current) return;
+        pollTimerRef.current = setTimeout(
+          () => pollApprovalStatus(cid),
+          APPROVAL_POLL_INTERVAL_MS,
+        );
+      }
+    },
+    [],
+  );
+
+  const handleApprovalChallenge = async () => {
+    setApprovalStarting(true);
+    setError(null);
+    try {
+      const res = await fetch(API_ENDPOINTS.adminTelegramApprovalChallenge, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+      });
+      let body = null;
+      try {
+        body = await res.json();
+      } catch (_) {
+        // ignore parse error
+      }
+      if (!res.ok) {
+        const codeStr = body && body.code;
+        if (codeStr === "TELEGRAM_MFA_DEVICE_NOT_CONFIGURED") {
+          setError(DEVICE_NOT_CONFIGURED_HINT);
+          setBindOffered(true);
+        } else if (codeStr === "TELEGRAM_MFA_RATE_LIMITED") {
+          setError(APPROVAL_RATE_LIMIT_HINT);
+        } else if (codeStr === "TELEGRAM_MFA_NOT_CONFIGURED") {
+          setError(APPROVAL_NOT_CONFIGURED_HINT);
+        } else {
+          setError((body && body.detail) || "Не удалось отправить запрос в Telegram");
+        }
+        return;
+      }
+      const cid = body && body.challenge_id;
+      if (cid == null) {
+        setError("Не удалось отправить запрос в Telegram");
+        return;
+      }
+      setBindOffered(false);
+      setApprovalChallengeId(cid);
+      setPhase("approval_pending");
+      clearPollTimer();
+      pollTimerRef.current = setTimeout(
+        () => pollApprovalStatus(cid),
+        APPROVAL_POLL_INTERVAL_MS,
+      );
+    } catch (_) {
+      toast.error("Сеть недоступна. Попробуйте ещё раз.");
+    } finally {
+      setApprovalStarting(false);
+    }
+  };
+
+  const handleApprovalCancel = () => {
+    clearPollTimer();
+    setApprovalChallengeId(null);
+    setPhase("idle");
+    setError(null);
+  };
 
   const handleChallenge = async () => {
     setSending(true);
@@ -93,6 +223,11 @@ export default function AdminMfaGate({ children }) {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSwitchToCode = () => {
+    setError(null);
+    handleChallenge();
   };
 
   const handleVerify = async () => {
@@ -135,6 +270,17 @@ export default function AdminMfaGate({ children }) {
     setPhase("idle");
     setCode("");
     setError(null);
+  };
+
+  const handleRetryFromDenied = () => {
+    setPhase("idle");
+    setError(null);
+  };
+
+  const handleRetryFromExpired = () => {
+    setPhase("idle");
+    setError(null);
+    handleApprovalChallenge();
   };
 
   const handleDevConfirm = async () => {
@@ -210,7 +356,7 @@ export default function AdminMfaGate({ children }) {
     setBindLink("");
     setBindOffered(false);
     setPhase("idle");
-    await handleChallenge();
+    await handleApprovalChallenge();
   };
 
   const handleBindCancel = () => {
@@ -243,10 +389,18 @@ export default function AdminMfaGate({ children }) {
             <button
               type="button"
               className="lk-admin-mfa__btn"
-              onClick={handleChallenge}
+              onClick={handleApprovalChallenge}
+              disabled={approvalStarting}
+            >
+              {approvalStarting ? "Отправляем…" : "Подтвердить вход в Telegram"}
+            </button>
+            <button
+              type="button"
+              className="lk-admin-mfa__btn lk-admin-mfa__btn--secondary"
+              onClick={handleSwitchToCode}
               disabled={sending}
             >
-              {sending ? "Отправляем…" : "Отправить код в Telegram"}
+              {sending ? "Отправляем…" : "Ввести код"}
             </button>
             <button
               type="button"
@@ -269,6 +423,72 @@ export default function AdminMfaGate({ children }) {
               </button>
             </div>
           ) : null}
+        </>
+      ) : phase === "approval_pending" ? (
+        <>
+          <p className="lk-admin-mfa__text">
+            Мы отправили запрос в Telegram. Нажмите «Подтвердить» или «Отклонить».
+          </p>
+          <div
+            className="lk-admin-mfa__pending"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="lk-admin-mfa__spinner" aria-hidden="true" />
+            <span>Ожидаем подтверждения…</span>
+          </div>
+          {error ? (
+            <p className="lk-admin-mfa__error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="lk-admin-mfa__row">
+            <button
+              type="button"
+              className="lk-admin-mfa__btn lk-admin-mfa__btn--secondary"
+              onClick={handleApprovalCancel}
+            >
+              Отмена
+            </button>
+          </div>
+        </>
+      ) : phase === "denied" ? (
+        <>
+          <p className="lk-admin-mfa__error" role="alert">
+            {APPROVAL_DENIED_HINT}
+          </p>
+          <div className="lk-admin-mfa__row">
+            <button
+              type="button"
+              className="lk-admin-mfa__btn lk-admin-mfa__btn--secondary"
+              onClick={handleRetryFromDenied}
+            >
+              Назад
+            </button>
+          </div>
+        </>
+      ) : phase === "expired" ? (
+        <>
+          <p className="lk-admin-mfa__error" role="alert">
+            {APPROVAL_EXPIRED_HINT}
+          </p>
+          <div className="lk-admin-mfa__row">
+            <button
+              type="button"
+              className="lk-admin-mfa__btn"
+              onClick={handleRetryFromExpired}
+              disabled={approvalStarting}
+            >
+              {approvalStarting ? "Отправляем…" : "Повторить"}
+            </button>
+            <button
+              type="button"
+              className="lk-admin-mfa__btn lk-admin-mfa__btn--secondary"
+              onClick={handleRetryFromDenied}
+            >
+              Назад
+            </button>
+          </div>
         </>
       ) : phase === "bind" ? (
         <>
@@ -296,15 +516,15 @@ export default function AdminMfaGate({ children }) {
               type="button"
               className="lk-admin-mfa__btn"
               onClick={handleBindDone}
-              disabled={sending}
+              disabled={approvalStarting}
             >
-              {sending ? "Проверяем…" : "Я привязал Telegram"}
+              {approvalStarting ? "Проверяем…" : "Я привязал Telegram"}
             </button>
             <button
               type="button"
               className="lk-admin-mfa__btn lk-admin-mfa__btn--secondary"
               onClick={handleBindCancel}
-              disabled={sending}
+              disabled={approvalStarting}
             >
               Отмена
             </button>

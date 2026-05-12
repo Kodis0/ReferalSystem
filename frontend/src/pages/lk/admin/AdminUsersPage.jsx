@@ -205,7 +205,7 @@ export default function AdminUsersPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/users/${row.id}`}
+                    to={`/admin-console/users/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     {row.email}

@@ -49,10 +49,10 @@ function makePartnerPayload(overrides = {}) {
 
 function renderPage(initialPartnerId = 1) {
   return render(
-    <MemoryRouter initialEntries={[`/lk/admin/partners/${initialPartnerId}`]}>
+    <MemoryRouter initialEntries={[`/admin-console/partners/${initialPartnerId}`]}>
       <Routes>
         <Route
-          path="/lk/admin/partners/:partnerId"
+          path="/admin-console/partners/:partnerId"
           element={<AdminPartnerDetailPage />}
         />
       </Routes>

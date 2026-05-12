@@ -168,7 +168,7 @@ export default function AdminProjectsPage() {
                   <td>{row.id}</td>
                   <td>
                     <Link
-                      to={`/lk/admin/projects/${row.id}`}
+                      to={`/admin-console/projects/${row.id}`}
                       className="lk-admin-users__email-link"
                     >
                       {label}

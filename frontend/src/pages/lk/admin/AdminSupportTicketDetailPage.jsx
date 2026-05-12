@@ -149,7 +149,7 @@ export default function AdminSupportTicketDetailPage() {
   }, [ticket]);
 
   const backLink = (
-    <Link to="/lk/admin/support" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/support" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку обращений</span>
     </Link>

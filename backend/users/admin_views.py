@@ -29,20 +29,28 @@ from .serializers import (
     AdminUserListItemSerializer,
 )
 from .telegram_mfa import (
+    APPROVAL_RATE_LIMIT_WINDOW_SECONDS,
+    APPROVAL_TTL_SECONDS,
     BIND_TOKEN_TTL_SECONDS,
     CODE_TTL_SECONDS,
     MAX_ATTEMPTS,
     RATE_LIMIT_WINDOW_SECONDS,
     TelegramMfaError,
     _webhook_secret,
+    answer_callback_query,
     build_bot_link,
+    edit_message_text,
     generate_bind_token,
+    generate_callback_nonce,
     generate_code,
     hash_bind_token,
+    hash_callback_nonce,
     hash_code,
+    send_admin_mfa_approval,
     send_admin_mfa_code,
     send_telegram_text,
     verify_bind_token,
+    verify_callback_nonce,
     verify_code,
 )
 
@@ -800,7 +808,7 @@ class AdminTelegramBindStartView(APIView):
 
 
 class AdminTelegramWebhookView(APIView):
-    """``POST /users/admin/mfa/telegram/webhook/`` — приём ``/start <token>`` от бота.
+    """``POST /users/admin/mfa/telegram/webhook/`` — приём ``/start <token>`` и approve/deny callback'ов от бота.
 
     Защита — secret header ``X-Telegram-Bot-Api-Secret-Token`` (Telegram передаёт его, если
     указан в ``setWebhook``). Без ``TELEGRAM_WEBHOOK_SECRET`` endpoint скрыт (404).
@@ -820,6 +828,18 @@ class AdminTelegramWebhookView(APIView):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
         update = request.data or {}
+
+        if "callback_query" in update:
+            try:
+                return self._handle_callback_query(update.get("callback_query") or {})
+            except Exception:  # pragma: no cover — telegram retries; не отвечаем 5xx
+                import logging as _logging
+
+                _logging.getLogger(__name__).exception(
+                    "AdminTelegramWebhookView callback_query crashed"
+                )
+                return Response({"ok": True})
+
         message = update.get("message") or update.get("edited_message") or {}
         text = (message.get("text") or "").strip()
         chat = message.get("chat") or {}
@@ -878,3 +898,297 @@ class AdminTelegramWebhookView(APIView):
         except TelegramMfaError:
             pass
         return Response({"ok": True})
+
+    # ---- callback_query (approve/deny кнопки) -----------------------------
+    def _handle_callback_query(self, cbq: dict):
+        from .models import AdminMfaChallenge, AdminMfaDevice
+
+        cbq_id = str(cbq.get("id") or "")
+        from_id = str((cbq.get("from") or {}).get("id") or "")
+        msg = cbq.get("message") or {}
+        chat_id = str((msg.get("chat") or {}).get("id") or "")
+        message_id = msg.get("message_id")
+        data = cbq.get("data") or ""
+
+        parts = data.split(":") if isinstance(data, str) else []
+        if len(parts) != 4 or parts[0] != "admin_mfa" or parts[1] not in ("approve", "deny"):
+            _safe_answer_callback(cbq_id, "Неизвестное действие")
+            return Response({"ok": True})
+
+        action = parts[1]
+        try:
+            cid = int(parts[2])
+        except (TypeError, ValueError):
+            _safe_answer_callback(cbq_id, "Неизвестное действие")
+            return Response({"ok": True})
+        raw_nonce = parts[3]
+
+        challenge = (
+            AdminMfaChallenge.objects
+            .filter(pk=cid, challenge_type=AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL)
+            .first()
+        )
+        if challenge is None:
+            _safe_answer_callback(cbq_id, "Запрос не найден")
+            return Response({"ok": True})
+
+        if challenge.status != AdminMfaChallenge.STATUS_PENDING:
+            _safe_answer_callback(cbq_id, "Уже обработано")
+            return Response({"ok": True})
+
+        now = timezone.now()
+        if challenge.expires_at <= now:
+            challenge.status = AdminMfaChallenge.STATUS_EXPIRED
+            challenge.save(update_fields=["status"])
+            _safe_answer_callback(cbq_id, "Запрос истёк")
+            _safe_edit_message(chat_id, message_id, "⌛ Запрос истёк")
+            return Response({"ok": True})
+
+        if not verify_callback_nonce(raw_nonce, challenge.callback_nonce_hash):
+            _safe_answer_callback(cbq_id, "Подпись неверна")
+            return Response({"ok": True})
+
+        device = (
+            AdminMfaDevice.objects
+            .filter(
+                user=challenge.user,
+                type=AdminMfaDevice.TYPE_TELEGRAM,
+                is_active=True,
+            )
+            .exclude(telegram_chat_id="")
+            .first()
+        )
+        if device is None or device.telegram_chat_id != from_id:
+            _audit(
+                challenge.user,
+                "admin.session.approval.rejected_wrong_user",
+                target_type="admin_mfa_challenge",
+                target_id=str(challenge.pk),
+                metadata={"telegram_from": from_id},
+            )
+            _safe_answer_callback(cbq_id, "Нет прав")
+            return Response({"ok": True})
+
+        if action == "approve":
+            challenge.status = AdminMfaChallenge.STATUS_APPROVED
+            challenge.approved_at = now
+            challenge.consumed_at = now
+            challenge.save(update_fields=["status", "approved_at", "consumed_at"])
+            _audit(
+                challenge.user,
+                "admin.session.approval.approved",
+                target_type="admin_mfa_challenge",
+                target_id=str(challenge.pk),
+                metadata={"telegram_from": from_id},
+            )
+            _safe_answer_callback(cbq_id, "Вход подтверждён")
+            _safe_edit_message(chat_id, message_id, "✅ Вход подтверждён")
+        else:
+            challenge.status = AdminMfaChallenge.STATUS_DENIED
+            challenge.denied_at = now
+            challenge.consumed_at = now
+            challenge.save(update_fields=["status", "denied_at", "consumed_at"])
+            _audit(
+                challenge.user,
+                "admin.session.approval.denied",
+                target_type="admin_mfa_challenge",
+                target_id=str(challenge.pk),
+                metadata={"telegram_from": from_id},
+            )
+            _safe_answer_callback(cbq_id, "Вход отклонён")
+            _safe_edit_message(chat_id, message_id, "❌ Вход отклонён")
+
+        return Response({"ok": True})
+
+
+def _safe_answer_callback(cbq_id: str, text: str) -> None:
+    try:
+        answer_callback_query(cbq_id, text)
+    except Exception:
+        pass
+
+
+def _safe_edit_message(chat_id: str, message_id, text: str) -> None:
+    try:
+        edit_message_text(chat_id, message_id, text)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Telegram MFA approve/deny endpoints (approval-flow на inline-кнопках бота)
+# ---------------------------------------------------------------------------
+
+class AdminTelegramApprovalChallengeView(APIView):
+    """``POST /users/admin/mfa/telegram/approval/challenge/`` — создаёт pending approval challenge
+    и шлёт inline-кнопки в Telegram.
+
+    Сам по себе НЕ создаёт ``AdminSession`` — это делает polling status endpoint, когда
+    challenge перешёл в ``approved``.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        from .models import AdminMfaChallenge, AdminMfaDevice
+
+        device = (
+            AdminMfaDevice.objects
+            .filter(
+                user=request.user,
+                type=AdminMfaDevice.TYPE_TELEGRAM,
+                is_active=True,
+            )
+            .exclude(telegram_chat_id="")
+            .order_by("-created_at")
+            .first()
+        )
+        if device is None:
+            return _admin_error(
+                "TELEGRAM_MFA_DEVICE_NOT_CONFIGURED",
+                "Telegram не привязан",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = timezone.now()
+        recent_pending = AdminMfaChallenge.objects.filter(
+            user=request.user,
+            channel=AdminMfaChallenge.CHANNEL_TELEGRAM,
+            challenge_type=AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL,
+            status=AdminMfaChallenge.STATUS_PENDING,
+            created_at__gte=now - timedelta(seconds=APPROVAL_RATE_LIMIT_WINDOW_SECONDS),
+        ).exists()
+        if recent_pending:
+            return _admin_error(
+                "TELEGRAM_MFA_RATE_LIMITED",
+                "Слишком часто, повторите через минуту",
+                status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        nonce = generate_callback_nonce()
+        ip = _client_ip(request)
+        ua = _user_agent(request)
+        challenge = AdminMfaChallenge.objects.create(
+            user=request.user,
+            device=device,
+            channel=AdminMfaChallenge.CHANNEL_TELEGRAM,
+            challenge_type=AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL,
+            status=AdminMfaChallenge.STATUS_PENDING,
+            code_hash="",
+            callback_nonce_hash=hash_callback_nonce(nonce),
+            expires_at=now + timedelta(seconds=APPROVAL_TTL_SECONDS),
+            created_ip=ip,
+            user_agent=ua,
+        )
+
+        try:
+            message_id = send_admin_mfa_approval(
+                device.telegram_chat_id,
+                challenge.pk,
+                nonce,
+                account_email=getattr(request.user, "email", "") or "",
+                ip=ip,
+                user_agent_short=(ua or "")[:80],
+                ttl_seconds=APPROVAL_TTL_SECONDS,
+            )
+        except TelegramMfaError as exc:
+            challenge.delete()
+            return _admin_error(exc.code, exc.detail, status.HTTP_502_BAD_GATEWAY)
+
+        if message_id:
+            challenge.telegram_message_id = str(message_id)[:64]
+            challenge.save(update_fields=["telegram_message_id"])
+
+        _audit(
+            request.user,
+            "admin.session.approval.requested",
+            target_type="admin_mfa_challenge",
+            target_id=str(challenge.pk),
+            metadata={"channel": "telegram"},
+            ip=ip,
+            user_agent=ua,
+        )
+        return Response({
+            "challenge_id": challenge.pk,
+            "status": challenge.status,
+            "expires_in": APPROVAL_TTL_SECONDS,
+        })
+
+
+class AdminTelegramApprovalStatusView(APIView):
+    """``GET /users/admin/mfa/telegram/approval/challenge/<int:challenge_id>/`` — статус approval challenge
+    для polling от frontend.
+
+    На переходе в ``approved`` создаёт ``AdminSession`` для ``request.user`` (если ещё нет активной).
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, challenge_id: int):
+        from .models import AdminMfaChallenge, AdminSession
+
+        challenge = get_object_or_404(
+            AdminMfaChallenge,
+            pk=challenge_id,
+            user=request.user,
+            channel=AdminMfaChallenge.CHANNEL_TELEGRAM,
+            challenge_type=AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL,
+        )
+
+        now = timezone.now()
+        if (
+            challenge.status == AdminMfaChallenge.STATUS_PENDING
+            and challenge.expires_at <= now
+        ):
+            challenge.status = AdminMfaChallenge.STATUS_EXPIRED
+            challenge.save(update_fields=["status"])
+            return Response({"status": AdminMfaChallenge.STATUS_EXPIRED})
+
+        if challenge.status == AdminMfaChallenge.STATUS_PENDING:
+            return Response({
+                "status": AdminMfaChallenge.STATUS_PENDING,
+                "expires_in": int((challenge.expires_at - now).total_seconds()),
+            })
+
+        if challenge.status == AdminMfaChallenge.STATUS_DENIED:
+            return Response({"status": AdminMfaChallenge.STATUS_DENIED})
+
+        if challenge.status == AdminMfaChallenge.STATUS_EXPIRED:
+            return Response({"status": AdminMfaChallenge.STATUS_EXPIRED})
+
+        # status == approved → создаём AdminSession, если ещё нет активной.
+        existing = (
+            AdminSession.objects
+            .filter(user=request.user, revoked_at__isnull=True, elevated_until__gt=now)
+            .order_by("-elevated_until")
+            .first()
+        )
+        if existing is None:
+            ip = _client_ip(request)
+            ua = _user_agent(request)
+            elevated_until = now + timedelta(minutes=30)
+            session = AdminSession.objects.create(
+                user=request.user,
+                elevated_until=elevated_until,
+                confirmed_with="telegram_approval",
+                created_ip=ip,
+                user_agent=ua,
+            )
+            _audit(
+                request.user,
+                "admin.session.elevated",
+                target_type="admin_session",
+                target_id=str(session.pk),
+                metadata={"via": "telegram_approval", "challenge_id": challenge.pk},
+                ip=ip,
+                user_agent=ua,
+            )
+            elevated_iso = elevated_until
+        else:
+            elevated_iso = existing.elevated_until
+
+        return Response({
+            "status": AdminMfaChallenge.STATUS_APPROVED,
+            "is_elevated": True,
+            "elevated_until": elevated_iso,
+        })

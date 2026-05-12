@@ -48,6 +48,8 @@ from .admin_views import (
     AdminSessionView,
     AdminSupportTicketDetailView,
     AdminSupportTicketsListView,
+    AdminTelegramApprovalChallengeView,
+    AdminTelegramApprovalStatusView,
     AdminTelegramBindStartView,
     AdminTelegramMfaChallengeView,
     AdminTelegramMfaVerifyView,
@@ -136,6 +138,8 @@ urlpatterns = [
     path('admin/session/revoke/', AdminSessionRevokeView.as_view(), name='admin_session_revoke'),
     path('admin/mfa/telegram/challenge/', AdminTelegramMfaChallengeView.as_view(), name='admin_mfa_telegram_challenge'),
     path('admin/mfa/telegram/verify/', AdminTelegramMfaVerifyView.as_view(), name='admin_mfa_telegram_verify'),
+    path('admin/mfa/telegram/approval/challenge/', AdminTelegramApprovalChallengeView.as_view(), name='admin_mfa_telegram_approval_challenge'),
+    path('admin/mfa/telegram/approval/challenge/<int:challenge_id>/', AdminTelegramApprovalStatusView.as_view(), name='admin_mfa_telegram_approval_status'),
     path('admin/mfa/telegram/bind/start/', AdminTelegramBindStartView.as_view(), name='admin_mfa_telegram_bind_start'),
     path('admin/mfa/telegram/webhook/', AdminTelegramWebhookView.as_view(), name='admin_mfa_telegram_webhook'),
 ]

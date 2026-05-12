@@ -22,10 +22,10 @@ jest.mock("../components/toast/toastBus", () => ({
 
 function renderRoutes() {
   return render(
-    <MemoryRouter initialEntries={["/lk/admin"]}>
+    <MemoryRouter initialEntries={["/admin-console"]}>
       <Routes>
         <Route
-          path="/lk/admin"
+          path="/admin-console"
           element={
             <AdminProtectedRoute>
               <div>ADMIN_CONTENT</div>

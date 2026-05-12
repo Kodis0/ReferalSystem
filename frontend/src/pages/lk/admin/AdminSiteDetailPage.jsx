@@ -114,7 +114,7 @@ export default function AdminSiteDetailPage() {
   }, [load]);
 
   const backLink = (
-    <Link to="/lk/admin/sites" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/sites" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку сайтов</span>
     </Link>

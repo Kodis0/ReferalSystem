@@ -191,7 +191,7 @@ export default function AdminSupportTicketsPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/support/${row.id}`}
+                    to={`/admin-console/support/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     {String(row.id).slice(0, 8)}…

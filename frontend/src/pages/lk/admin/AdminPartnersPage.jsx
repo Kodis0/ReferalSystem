@@ -193,7 +193,7 @@ export default function AdminPartnersPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/partners/${row.id}`}
+                    to={`/admin-console/partners/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     {row.user_email || `#${row.id}`}

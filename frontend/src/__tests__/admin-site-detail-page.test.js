@@ -40,10 +40,10 @@ function makeSitePayload(overrides = {}) {
 
 function renderPage(initialSiteId = 11) {
   return render(
-    <MemoryRouter initialEntries={[`/lk/admin/sites/${initialSiteId}`]}>
+    <MemoryRouter initialEntries={[`/admin-console/sites/${initialSiteId}`]}>
       <Routes>
         <Route
-          path="/lk/admin/sites/:siteId"
+          path="/admin-console/sites/:siteId"
           element={<AdminSiteDetailPage />}
         />
       </Routes>

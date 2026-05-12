@@ -88,7 +88,7 @@ export default function AdminProjectDetailPage() {
   }, [load]);
 
   const backLink = (
-    <Link to="/lk/admin/projects" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/projects" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку проектов</span>
     </Link>

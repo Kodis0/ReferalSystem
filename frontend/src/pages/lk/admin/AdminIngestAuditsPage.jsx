@@ -167,7 +167,7 @@ export default function AdminIngestAuditsPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/ingest-audits/${row.id}`}
+                    to={`/admin-console/ingest-audits/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     #{row.id}

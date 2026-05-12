@@ -1,3 +1,156 @@
+.admin-portal {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--lk-sb-surface-deep, #17212b);
+  color: var(--lk-sb-text, rgb(127, 145, 164));
+}
+
+[data-theme="light"] .admin-portal {
+  background: #f4f6f9;
+}
+
+.admin-portal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 56px;
+  padding: 0 20px;
+  background: var(--lk-sb-surface, #242f3d);
+  border-bottom: 1px solid var(--lk-sb-border, rgba(255, 255, 255, 0.09));
+}
+
+[data-theme="light"] .admin-portal__header {
+  background: #ffffff;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.admin-portal__brand {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--lk-text-primary, #f5f7fb);
+  text-decoration: none;
+  letter-spacing: 0.2px;
+}
+
+[data-theme="light"] .admin-portal__brand {
+  color: #17212b;
+}
+
+.admin-portal__brand:hover,
+.admin-portal__brand:focus-visible {
+  color: var(--lk-sb-accent, #7177f8);
+  outline: none;
+}
+
+.admin-portal__user {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.admin-portal__user-email {
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-portal__logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--lk-sb-border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-portal__logout:hover,
+.admin-portal__logout:focus-visible {
+  background: var(--lk-sb-hover, rgba(255, 255, 255, 0.07));
+  color: var(--lk-text-primary, #f5f7fb);
+  outline: none;
+}
+
+.admin-portal__body {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.admin-portal__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 240px;
+  flex: 0 0 240px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--lk-sb-border, rgba(255, 255, 255, 0.09));
+  background: var(--lk-sb-surface, #242f3d);
+}
+
+[data-theme="light"] .admin-portal__nav {
+  background: #ffffff;
+  border-right-color: rgba(0, 0, 0, 0.08);
+}
+
+.admin-portal__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--lk-sb-text, rgb(127, 145, 164));
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.admin-portal__nav-item:hover,
+.admin-portal__nav-item:focus-visible {
+  background: var(--lk-sb-hover, rgba(255, 255, 255, 0.07));
+  color: var(--lk-text-primary, #f5f7fb);
+  outline: none;
+}
+
+.admin-portal__nav-item--active {
+  background: var(--lk-sb-accent-soft, rgba(113, 119, 248, 0.22));
+  color: var(--lk-sb-accent, #7177f8);
+}
+
+.admin-portal__nav-item--active:hover,
+.admin-portal__nav-item--active:focus-visible {
+  background: var(--lk-sb-accent-soft, rgba(113, 119, 248, 0.32));
+  color: var(--lk-sb-accent, #7177f8);
+}
+
+.admin-portal__nav-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: inherit;
+}
+
+.admin-portal__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 24px;
+  overflow-y: auto;
+}
+
 .lk-admin-cabinet {
   display: flex;
   flex-direction: column;
@@ -631,4 +784,27 @@
   background: var(--lk-sb-hover, rgba(113, 119, 248, 0.32));
   text-decoration: underline;
   outline: none;
+}
+
+.lk-admin-mfa__pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+.lk-admin-mfa__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--lk-sb-border, rgba(255, 255, 255, 0.18));
+  border-top-color: var(--lk-sb-accent, #7177f8);
+  animation: lk-admin-mfa-spin 0.9s linear infinite;
+}
+
+@keyframes lk-admin-mfa-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

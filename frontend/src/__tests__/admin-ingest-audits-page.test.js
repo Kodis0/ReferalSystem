@@ -64,10 +64,10 @@ describe("AdminIngestAuditsPage", () => {
 
   it("renders fetched ingest audit row with public code", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/ingest-audits"]}>
+      <MemoryRouter initialEntries={["/admin-console/ingest-audits"]}>
         <Routes>
           <Route
-            path="/lk/admin/ingest-audits"
+            path="/admin-console/ingest-audits"
             element={<AdminIngestAuditsPage />}
           />
         </Routes>

@@ -48,8 +48,6 @@ import SiteDashboardPage from "./owner-programs/SiteDashboardPage";
 import SiteHistoryPage from "./owner-programs/SiteHistoryPage";
 import ProjectReferralBlockScreen from "./owner-programs/ProjectReferralBlockScreen";
 import DocumentsPage from "./documents/DocumentsPage";
-import AdminCabinet from "./admin/AdminCabinet";
-import AdminProtectedRoute from "../../components/AdminProtectedRoute";
 import { fetchOwnerSitesList } from "./owner-programs/ownerSitesListApi";
 import useCurrentUser from "../../hooks/useCurrentUser";
 import useAuth from "../../hooks/auth";
@@ -1003,14 +1001,6 @@ function LK() {
             <Route path="referral-program/:sitePublicId" element={<AgentProgramDetailPage />} />
             <Route path="referral-program" element={<PartnerDashboard />} />
             <Route path="widget-install" element={<WidgetInstallScreen />} />
-            <Route
-              path="admin/*"
-              element={
-                <AdminProtectedRoute>
-                  <AdminCabinet />
-                </AdminProtectedRoute>
-              }
-            />
           </Routes>
         </div>
       </div>

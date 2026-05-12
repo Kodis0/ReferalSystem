@@ -62,9 +62,9 @@ describe("AdminLeadEventsPage", () => {
 
   it("renders fetched lead event row", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/lead-events"]}>
+      <MemoryRouter initialEntries={["/admin-console/lead-events"]}>
         <Routes>
-          <Route path="/lk/admin/lead-events" element={<AdminLeadEventsPage />} />
+          <Route path="/admin-console/lead-events" element={<AdminLeadEventsPage />} />
         </Routes>
       </MemoryRouter>,
     );

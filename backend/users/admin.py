@@ -37,11 +37,16 @@ class AdminMfaDeviceAdmin(admin.ModelAdmin):
 
 @admin.register(AdminMfaChallenge)
 class AdminMfaChallengeAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "channel", "expires_at", "consumed_at", "attempts_count", "created_at")
-    list_filter = ("channel",)
+    list_display = (
+        "id", "user", "channel", "challenge_type", "status",
+        "expires_at", "consumed_at", "attempts_count", "created_at",
+    )
+    list_filter = ("channel", "challenge_type", "status")
     search_fields = ("user__email",)
     readonly_fields = (
-        "user", "device", "channel", "code_hash", "expires_at", "consumed_at",
+        "user", "device", "channel", "challenge_type", "status",
+        "code_hash", "callback_nonce_hash", "telegram_message_id",
+        "expires_at", "consumed_at", "approved_at", "denied_at",
         "attempts_count", "created_ip", "user_agent", "created_at",
     )
 

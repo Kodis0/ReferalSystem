@@ -35,10 +35,10 @@ function makeProjectPayload(overrides = {}) {
 
 function renderPage(initialProjectId = 7) {
   return render(
-    <MemoryRouter initialEntries={[`/lk/admin/projects/${initialProjectId}`]}>
+    <MemoryRouter initialEntries={[`/admin-console/projects/${initialProjectId}`]}>
       <Routes>
         <Route
-          path="/lk/admin/projects/:projectId"
+          path="/admin-console/projects/:projectId"
           element={<AdminProjectDetailPage />}
         />
       </Routes>

@@ -190,7 +190,7 @@ export default function AdminSitesPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/sites/${row.id}`}
+                    to={`/admin-console/sites/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     {row.public_id || `#${row.id}`}

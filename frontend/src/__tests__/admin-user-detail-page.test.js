@@ -50,9 +50,9 @@ function makeUserPayload(overrides = {}) {
 
 function renderPage(initialUserId = 1) {
   return render(
-    <MemoryRouter initialEntries={[`/lk/admin/users/${initialUserId}`]}>
+    <MemoryRouter initialEntries={[`/admin-console/users/${initialUserId}`]}>
       <Routes>
-        <Route path="/lk/admin/users/:userId" element={<AdminUserDetailPage />} />
+        <Route path="/admin-console/users/:userId" element={<AdminUserDetailPage />} />
       </Routes>
     </MemoryRouter>,
   );

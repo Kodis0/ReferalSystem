@@ -161,7 +161,7 @@ export default function AdminPartnerDetailPage() {
   );
 
   const backLink = (
-    <Link to="/lk/admin/partners" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/partners" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку партнёров</span>
     </Link>

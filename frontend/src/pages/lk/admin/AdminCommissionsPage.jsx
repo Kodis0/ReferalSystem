@@ -168,7 +168,7 @@ export default function AdminCommissionsPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/commissions/${row.id}`}
+                    to={`/admin-console/commissions/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     #{row.id}
@@ -178,7 +178,7 @@ export default function AdminCommissionsPage() {
                 <td>
                   {row.order_id != null ? (
                     <Link
-                      to={`/lk/admin/orders/${row.order_id}`}
+                      to={`/admin-console/orders/${row.order_id}`}
                       className="lk-admin-users__email-link"
                     >
                       #{row.order_id}

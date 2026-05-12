@@ -88,7 +88,7 @@ export default function AdminCommissionDetailPage() {
   }, [load]);
 
   const backLink = (
-    <Link to="/lk/admin/commissions" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/commissions" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку комиссий</span>
     </Link>
@@ -190,7 +190,7 @@ export default function AdminCommissionDetailPage() {
           <DetailRow label="Order ID">
             {commission.order_id != null ? (
               <Link
-                to={`/lk/admin/orders/${commission.order_id}`}
+                to={`/admin-console/orders/${commission.order_id}`}
                 className="lk-admin-users__email-link"
               >
                 #{commission.order_id}

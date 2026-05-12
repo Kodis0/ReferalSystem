@@ -217,7 +217,7 @@ export default function AdminActivityPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/activity/${row.id}`}
+                    to={`/admin-console/activity/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     {formatDateTime(row.created_at)}

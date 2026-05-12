@@ -115,6 +115,11 @@ export const API_ENDPOINTS = {
   adminTelegramMfaChallenge: `${API_BASE}/users/admin/mfa/telegram/challenge/`,
   /** Telegram MFA: проверка введённого кода и elevation (POST). */
   adminTelegramMfaVerify: `${API_BASE}/users/admin/mfa/telegram/verify/`,
+  /** Telegram MFA approval: создать pending challenge с approve/deny inline-кнопками (POST). */
+  adminTelegramApprovalChallenge: `${API_BASE}/users/admin/mfa/telegram/approval/challenge/`,
+  /** Telegram MFA approval: статус challenge для polling (GET). */
+  adminTelegramApprovalChallengeStatus: (id) =>
+    `${API_BASE}/users/admin/mfa/telegram/approval/challenge/${encodeURIComponent(id)}/`,
   /** Telegram MFA bind: запросить t.me/<bot>?start=<token>-ссылку для привязки/перепривязки (POST). */
   adminTelegramBindStart: `${API_BASE}/users/admin/mfa/telegram/bind/start/`,
   changePassword: `${API_BASE}/users/me/password/`,

@@ -61,9 +61,9 @@ describe("AdminProjectsPage", () => {
 
   it("renders fetched project row with name and owner email", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/projects"]}>
+      <MemoryRouter initialEntries={["/admin-console/projects"]}>
         <Routes>
-          <Route path="/lk/admin/projects" element={<AdminProjectsPage />} />
+          <Route path="/admin-console/projects" element={<AdminProjectsPage />} />
         </Routes>
       </MemoryRouter>,
     );

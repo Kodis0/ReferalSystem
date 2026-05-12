@@ -46,10 +46,10 @@ function makeTicketPayload(overrides = {}) {
 
 function renderPage(initialTicketId = TICKET_ID) {
   return render(
-    <MemoryRouter initialEntries={[`/lk/admin/support/${initialTicketId}`]}>
+    <MemoryRouter initialEntries={[`/admin-console/support/${initialTicketId}`]}>
       <Routes>
         <Route
-          path="/lk/admin/support/:ticketId"
+          path="/admin-console/support/:ticketId"
           element={<AdminSupportTicketDetailPage />}
         />
       </Routes>

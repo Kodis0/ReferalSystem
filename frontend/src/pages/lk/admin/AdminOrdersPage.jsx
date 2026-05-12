@@ -184,7 +184,7 @@ export default function AdminOrdersPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/orders/${row.id}`}
+                    to={`/admin-console/orders/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     #{row.id}

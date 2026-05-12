@@ -1810,6 +1810,345 @@ class AdminTelegramBindFlowTests(TestCase):
         self.assertNotEqual(new_device.pk, first_device.pk)
 
 
+class AdminTelegramApprovalMfaTests(TestCase):
+    """Telegram approve/deny MFA (надстройка над code-MFA): POST/GET endpoints + webhook callback_query."""
+
+    CHALLENGE_URL = "/users/admin/mfa/telegram/approval/challenge/"
+    STATUS_URL_TPL = "/users/admin/mfa/telegram/approval/challenge/{cid}/"
+    WEBHOOK_URL = "/users/admin/mfa/telegram/webhook/"
+    WEBHOOK_SECRET = "approval-webhook-secret"
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            email="approval-staff@example.com",
+            username="approvalstaff",
+            password="secret123",
+            is_staff=True,
+        )
+        self.other_staff = User.objects.create_user(
+            email="approval-other@example.com",
+            username="approvalother",
+            password="secret123",
+            is_staff=True,
+        )
+
+    def _staff_api(self, user=None):
+        api = APIClient()
+        api.force_authenticate(user or self.staff)
+        return api
+
+    def _make_device(self, user=None, chat_id="777"):
+        return AdminMfaDevice.objects.create(
+            user=user or self.staff,
+            type=AdminMfaDevice.TYPE_TELEGRAM,
+            telegram_chat_id=chat_id,
+            telegram_username="approvaltgu",
+            is_active=True,
+            confirmed_at=timezone.now(),
+        )
+
+    # ---- challenge endpoint -------------------------------------------------
+
+    def test_challenge_without_device_returns_not_configured(self):
+        api = self._staff_api()
+        with patch("users.admin_views.send_admin_mfa_approval") as send_mock:
+            r = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r.status_code, 400, getattr(r, "data", None))
+        self.assertEqual(r.data.get("code"), "TELEGRAM_MFA_DEVICE_NOT_CONFIGURED")
+        send_mock.assert_not_called()
+        self.assertFalse(AdminMfaChallenge.objects.filter(user=self.staff).exists())
+
+    def test_challenge_creates_pending_and_sends_approval(self):
+        device = self._make_device(chat_id="555000")
+        api = self._staff_api()
+        with patch(
+            "users.admin_views.send_admin_mfa_approval",
+            return_value="42",
+        ) as send_mock:
+            r = api.post(
+                self.CHALLENGE_URL,
+                HTTP_USER_AGENT="MyBrowser/1.0",
+                HTTP_X_FORWARDED_FOR="203.0.113.7",
+            )
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("status"), "pending")
+        self.assertEqual(r.data.get("expires_in"), 300)
+        self.assertIn("challenge_id", r.data)
+
+        send_mock.assert_called_once()
+        args, kwargs = send_mock.call_args
+        self.assertEqual(args[0], device.telegram_chat_id)
+        self.assertEqual(args[1], r.data["challenge_id"])
+        raw_nonce = args[2]
+        self.assertTrue(isinstance(raw_nonce, str) and len(raw_nonce) >= 16)
+        self.assertEqual(kwargs.get("account_email"), self.staff.email)
+        self.assertEqual(kwargs.get("ip"), "203.0.113.7")
+        self.assertEqual(kwargs.get("ttl_seconds"), 300)
+        self.assertEqual(kwargs.get("user_agent_short"), "MyBrowser/1.0")
+
+        ch = AdminMfaChallenge.objects.get(pk=r.data["challenge_id"])
+        self.assertEqual(ch.challenge_type, AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL)
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_PENDING)
+        self.assertEqual(ch.channel, AdminMfaChallenge.CHANNEL_TELEGRAM)
+        self.assertEqual(ch.device_id, device.pk)
+        self.assertNotEqual(ch.callback_nonce_hash, "")
+        self.assertNotEqual(ch.callback_nonce_hash, raw_nonce)
+        self.assertEqual(ch.code_hash, "")
+        self.assertEqual(ch.telegram_message_id, "42")
+        # raw nonce не утекает в response.
+        self.assertNotIn(raw_nonce, str(r.data))
+
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff,
+                action="admin.session.approval.requested",
+            ).exists()
+        )
+
+    def test_challenge_rate_limited_when_pending_exists(self):
+        self._make_device()
+        api = self._staff_api()
+        with patch("users.admin_views.send_admin_mfa_approval", return_value=None):
+            r1 = api.post(self.CHALLENGE_URL)
+            r2 = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 429)
+        self.assertEqual(r2.data.get("code"), "TELEGRAM_MFA_RATE_LIMITED")
+
+    def test_challenge_delivery_failure_removes_challenge(self):
+        self._make_device()
+        api = self._staff_api()
+        with patch(
+            "users.admin_views.send_admin_mfa_approval",
+            side_effect=TelegramMfaError("TELEGRAM_MFA_NOT_CONFIGURED", "no bot"),
+        ):
+            r = api.post(self.CHALLENGE_URL)
+        self.assertEqual(r.status_code, 502)
+        self.assertEqual(r.data.get("code"), "TELEGRAM_MFA_NOT_CONFIGURED")
+        self.assertFalse(
+            AdminMfaChallenge.objects.filter(
+                user=self.staff,
+                challenge_type=AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL,
+            ).exists()
+        )
+
+    # ---- webhook callback_query --------------------------------------------
+
+    def _create_pending(self, *, nonce="NONCE-RAW-VALUE-1", chat_id="777"):
+        device = self._make_device(chat_id=chat_id)
+        from users.telegram_mfa import hash_callback_nonce
+        ch = AdminMfaChallenge.objects.create(
+            user=self.staff,
+            device=device,
+            channel=AdminMfaChallenge.CHANNEL_TELEGRAM,
+            challenge_type=AdminMfaChallenge.TYPE_TELEGRAM_APPROVAL,
+            status=AdminMfaChallenge.STATUS_PENDING,
+            code_hash="",
+            callback_nonce_hash=hash_callback_nonce(nonce),
+            expires_at=timezone.now() + timedelta(seconds=300),
+        )
+        return device, ch, nonce
+
+    def _post_callback(self, *, data, from_id, message_id=1, chat_id=None):
+        api = APIClient()
+        update = {
+            "callback_query": {
+                "id": "cbq-1",
+                "from": {"id": from_id},
+                "data": data,
+                "message": {
+                    "message_id": message_id,
+                    "chat": {"id": chat_id if chat_id is not None else from_id},
+                },
+            }
+        }
+        return api.post(
+            self.WEBHOOK_URL, update, format="json",
+            HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN=self.WEBHOOK_SECRET,
+        )
+
+    @override_settings(DEBUG=True, TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET)
+    def test_webhook_callback_approve(self):
+        device, ch, nonce = self._create_pending()
+        with patch("users.admin_views.answer_callback_query") as ack, patch(
+            "users.admin_views.edit_message_text"
+        ) as edit:
+            r = self._post_callback(
+                data=f"admin_mfa:approve:{ch.pk}:{nonce}",
+                from_id=int(device.telegram_chat_id),
+            )
+        self.assertEqual(r.status_code, 200)
+        ch.refresh_from_db()
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_APPROVED)
+        self.assertIsNotNone(ch.approved_at)
+        self.assertIsNotNone(ch.consumed_at)
+        ack.assert_called()
+        edit.assert_called()
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff, action="admin.session.approval.approved",
+            ).exists()
+        )
+        # webhook сам по себе НЕ выдаёт AdminSession.
+        self.assertFalse(
+            AdminSession.objects.filter(user=self.staff, revoked_at__isnull=True).exists()
+        )
+
+    @override_settings(DEBUG=True, TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET)
+    def test_webhook_callback_deny(self):
+        device, ch, nonce = self._create_pending()
+        with patch("users.admin_views.answer_callback_query"), patch(
+            "users.admin_views.edit_message_text"
+        ):
+            r = self._post_callback(
+                data=f"admin_mfa:deny:{ch.pk}:{nonce}",
+                from_id=int(device.telegram_chat_id),
+            )
+        self.assertEqual(r.status_code, 200)
+        ch.refresh_from_db()
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_DENIED)
+        self.assertIsNotNone(ch.denied_at)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff, action="admin.session.approval.denied",
+            ).exists()
+        )
+
+    @override_settings(DEBUG=True, TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET)
+    def test_webhook_callback_wrong_user_rejected(self):
+        device, ch, nonce = self._create_pending()
+        with patch("users.admin_views.answer_callback_query"), patch(
+            "users.admin_views.edit_message_text"
+        ):
+            r = self._post_callback(
+                data=f"admin_mfa:approve:{ch.pk}:{nonce}",
+                from_id=999000,  # не совпадает с device.telegram_chat_id
+            )
+        self.assertEqual(r.status_code, 200)
+        ch.refresh_from_db()
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_PENDING)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff,
+                action="admin.session.approval.rejected_wrong_user",
+            ).exists()
+        )
+
+    @override_settings(DEBUG=True, TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET)
+    def test_webhook_callback_invalid_nonce(self):
+        device, ch, _ = self._create_pending()
+        with patch("users.admin_views.answer_callback_query"), patch(
+            "users.admin_views.edit_message_text"
+        ):
+            r = self._post_callback(
+                data=f"admin_mfa:approve:{ch.pk}:NOT_THE_NONCE",
+                from_id=int(device.telegram_chat_id),
+            )
+        self.assertEqual(r.status_code, 200)
+        ch.refresh_from_db()
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_PENDING)
+        self.assertFalse(
+            AdminActionAudit.objects.filter(
+                actor=self.staff, action="admin.session.approval.approved",
+            ).exists()
+        )
+
+    @override_settings(DEBUG=True, TELEGRAM_WEBHOOK_SECRET=WEBHOOK_SECRET)
+    def test_webhook_callback_on_expired_marks_expired(self):
+        device, ch, nonce = self._create_pending()
+        AdminMfaChallenge.objects.filter(pk=ch.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+        with patch("users.admin_views.answer_callback_query"), patch(
+            "users.admin_views.edit_message_text"
+        ):
+            r = self._post_callback(
+                data=f"admin_mfa:approve:{ch.pk}:{nonce}",
+                from_id=int(device.telegram_chat_id),
+            )
+        self.assertEqual(r.status_code, 200)
+        ch.refresh_from_db()
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_EXPIRED)
+
+    # ---- polling status ----------------------------------------------------
+
+    def test_status_pending_returns_pending(self):
+        _device, ch, _ = self._create_pending()
+        api = self._staff_api()
+        r = api.get(self.STATUS_URL_TPL.format(cid=ch.pk))
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("status"), "pending")
+        self.assertIn("expires_in", r.data)
+
+    def test_status_approved_creates_admin_session_once(self):
+        _device, ch, _ = self._create_pending()
+        ch.status = AdminMfaChallenge.STATUS_APPROVED
+        ch.approved_at = timezone.now()
+        ch.consumed_at = timezone.now()
+        ch.save(update_fields=["status", "approved_at", "consumed_at"])
+
+        api = self._staff_api()
+        r = api.get(self.STATUS_URL_TPL.format(cid=ch.pk))
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r.data.get("status"), "approved")
+        self.assertEqual(r.data.get("is_elevated"), True)
+        self.assertIn("elevated_until", r.data)
+
+        sessions = AdminSession.objects.filter(
+            user=self.staff,
+            confirmed_with="telegram_approval",
+            revoked_at__isnull=True,
+            elevated_until__gt=timezone.now(),
+        )
+        self.assertEqual(sessions.count(), 1)
+        self.assertTrue(
+            AdminActionAudit.objects.filter(
+                actor=self.staff,
+                action="admin.session.elevated",
+                metadata__via="telegram_approval",
+            ).exists()
+        )
+
+        r2 = api.get(self.STATUS_URL_TPL.format(cid=ch.pk))
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(
+            AdminSession.objects.filter(
+                user=self.staff, confirmed_with="telegram_approval",
+                revoked_at__isnull=True,
+            ).count(),
+            1,
+        )
+
+    def test_status_denied_does_not_create_session(self):
+        _device, ch, _ = self._create_pending()
+        ch.status = AdminMfaChallenge.STATUS_DENIED
+        ch.denied_at = timezone.now()
+        ch.save(update_fields=["status", "denied_at"])
+        api = self._staff_api()
+        r = api.get(self.STATUS_URL_TPL.format(cid=ch.pk))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("status"), "denied")
+        self.assertFalse(AdminSession.objects.filter(user=self.staff).exists())
+
+    def test_status_expired_when_past_expiry(self):
+        _device, ch, _ = self._create_pending()
+        AdminMfaChallenge.objects.filter(pk=ch.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+        api = self._staff_api()
+        r = api.get(self.STATUS_URL_TPL.format(cid=ch.pk))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data.get("status"), "expired")
+        ch.refresh_from_db()
+        self.assertEqual(ch.status, AdminMfaChallenge.STATUS_EXPIRED)
+
+    def test_status_other_user_returns_404(self):
+        _device, ch, _ = self._create_pending()
+        api = self._staff_api(user=self.other_staff)
+        r = api.get(self.STATUS_URL_TPL.format(cid=ch.pk))
+        self.assertEqual(r.status_code, 404)
+
+
 class ChangePasswordApiTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(

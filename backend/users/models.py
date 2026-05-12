@@ -174,6 +174,7 @@ class AdminSession(models.Model):
         choices=(
             ("development", "development"),
             ("telegram", "telegram"),
+            ("telegram_approval", "telegram_approval"),
             ("webauthn", "webauthn"),
             ("totp", "totp"),
         ),
@@ -231,6 +232,24 @@ class AdminMfaChallenge(models.Model):
     CHANNEL_TELEGRAM = "telegram"
     CHANNEL_CHOICES = ((CHANNEL_TELEGRAM, "telegram"),)
 
+    TYPE_TELEGRAM_CODE = "telegram_code"
+    TYPE_TELEGRAM_APPROVAL = "telegram_approval"
+    TYPE_CHOICES = (
+        (TYPE_TELEGRAM_CODE, "telegram_code"),
+        (TYPE_TELEGRAM_APPROVAL, "telegram_approval"),
+    )
+
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_DENIED = "denied"
+    STATUS_EXPIRED = "expired"
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "pending"),
+        (STATUS_APPROVED, "approved"),
+        (STATUS_DENIED, "denied"),
+        (STATUS_EXPIRED, "expired"),
+    )
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -244,9 +263,25 @@ class AdminMfaChallenge(models.Model):
         related_name="challenges",
     )
     channel = models.CharField(max_length=16, choices=CHANNEL_CHOICES)
-    code_hash = models.CharField(max_length=256)
+    challenge_type = models.CharField(
+        max_length=32,
+        choices=TYPE_CHOICES,
+        default=TYPE_TELEGRAM_CODE,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    code_hash = models.CharField(max_length=256, blank=True, default="")
+    callback_nonce_hash = models.CharField(max_length=256, blank=True, default="")
+    telegram_message_id = models.CharField(max_length=64, blank=True, default="")
     expires_at = models.DateTimeField()
     consumed_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    denied_at = models.DateTimeField(null=True, blank=True)
     attempts_count = models.PositiveIntegerField(default=0)
     created_ip = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True, default="")

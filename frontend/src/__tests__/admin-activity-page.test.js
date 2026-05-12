@@ -63,9 +63,9 @@ describe("AdminActivityPage", () => {
 
   it("renders fetched audit row with action and actor email", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/activity"]}>
+      <MemoryRouter initialEntries={["/admin-console/activity"]}>
         <Routes>
-          <Route path="/lk/admin/activity" element={<AdminActivityPage />} />
+          <Route path="/admin-console/activity" element={<AdminActivityPage />} />
         </Routes>
       </MemoryRouter>,
     );

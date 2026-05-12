@@ -37,9 +37,9 @@ function targetLink(type, id) {
   const raw = id == null ? "" : String(id).trim();
   if (!raw) return null;
   const isInt = /^\d+$/.test(raw);
-  if (type === "user" && isInt) return `/lk/admin/users/${raw}`;
-  if (type === "support_ticket") return `/lk/admin/support/${raw}`;
-  if (type === "partner_profile" && isInt) return `/lk/admin/partners/${raw}`;
+  if (type === "user" && isInt) return `/admin-console/users/${raw}`;
+  if (type === "support_ticket") return `/admin-console/support/${raw}`;
+  if (type === "partner_profile" && isInt) return `/admin-console/partners/${raw}`;
   return null;
 }
 
@@ -111,7 +111,7 @@ export default function AdminActivityDetailPage() {
   }, [load]);
 
   const backLink = (
-    <Link to="/lk/admin/activity" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/activity" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку активности</span>
     </Link>

@@ -64,10 +64,10 @@ describe("AdminOrderDetailPage", () => {
 
   it("renders fetched order detail with partner email", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/orders/1"]}>
+      <MemoryRouter initialEntries={["/admin-console/orders/1"]}>
         <Routes>
           <Route
-            path="/lk/admin/orders/:orderId"
+            path="/admin-console/orders/:orderId"
             element={<AdminOrderDetailPage />}
           />
         </Routes>

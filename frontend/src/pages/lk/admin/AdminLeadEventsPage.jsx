@@ -165,7 +165,7 @@ export default function AdminLeadEventsPage() {
               <tr key={row.id}>
                 <td>
                   <Link
-                    to={`/lk/admin/lead-events/${row.id}`}
+                    to={`/admin-console/lead-events/${row.id}`}
                     className="lk-admin-users__email-link"
                   >
                     #{row.id}

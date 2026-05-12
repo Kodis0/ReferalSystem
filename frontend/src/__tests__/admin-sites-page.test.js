@@ -74,9 +74,9 @@ describe("AdminSitesPage", () => {
 
   it("renders both active and archived rows; archived row shows 'Архив' badge", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/sites"]}>
+      <MemoryRouter initialEntries={["/admin-console/sites"]}>
         <Routes>
-          <Route path="/lk/admin/sites" element={<AdminSitesPage />} />
+          <Route path="/admin-console/sites" element={<AdminSitesPage />} />
         </Routes>
       </MemoryRouter>,
     );

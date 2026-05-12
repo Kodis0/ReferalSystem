@@ -63,9 +63,9 @@ describe("AdminPartnersPage", () => {
 
   it("renders fetched partner row with email and status", async () => {
     render(
-      <MemoryRouter initialEntries={["/lk/admin/partners"]}>
+      <MemoryRouter initialEntries={["/admin-console/partners"]}>
         <Routes>
-          <Route path="/lk/admin/partners" element={<AdminPartnersPage />} />
+          <Route path="/admin-console/partners" element={<AdminPartnersPage />} />
         </Routes>
       </MemoryRouter>,
     );

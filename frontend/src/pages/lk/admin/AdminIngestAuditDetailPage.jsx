@@ -88,7 +88,7 @@ export default function AdminIngestAuditDetailPage() {
   }, [load]);
 
   const backLink = (
-    <Link to="/lk/admin/ingest-audits" className="lk-admin-user-detail__back">
+    <Link to="/admin-console/ingest-audits" className="lk-admin-user-detail__back">
       <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
       <span>К списку ingest audits</span>
     </Link>
@@ -176,7 +176,7 @@ export default function AdminIngestAuditDetailPage() {
           <DetailRow label="Lead event">
             {audit.lead_event_id != null ? (
               <Link
-                to={`/lk/admin/lead-events/${audit.lead_event_id}`}
+                to={`/admin-console/lead-events/${audit.lead_event_id}`}
                 className="lk-admin-users__email-link"
               >
                 #{audit.lead_event_id}
