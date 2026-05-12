@@ -3,6 +3,7 @@ from django.urls import path
 from .admin_views import (
     AdminCommissionDetailView,
     AdminCommissionsListView,
+    AdminDashboardStatsView,
     AdminIngestAuditDetailView,
     AdminIngestAuditsListView,
     AdminLeadEventDetailView,
@@ -271,5 +272,10 @@ urlpatterns = [
         "admin/ingest-audits/<int:audit_id>/",
         AdminIngestAuditDetailView.as_view(),
         name="admin-ingest-audit-detail",
+    ),
+    path(
+        "admin/dashboard/stats/",
+        AdminDashboardStatsView.as_view(),
+        name="admin-dashboard-stats",
     ),
 ]

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalDropdown from "./AdminPortalDropdown";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -118,9 +121,6 @@ export default function AdminUsersPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-users-title">
       <header className="lk-admin-users__header">
@@ -129,39 +129,53 @@ export default function AdminUsersPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: email, public_id, ФИО, телефон"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск пользователей"
-        />
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Staff</span>
-          <select
-            value={staffFilter}
-            onChange={(e) => setStaffFilter(e.target.value)}
-            aria-label="Фильтр по is_staff"
-          >
-            <option value="">Все</option>
-            <option value="true">Staff</option>
-            <option value="false">Не staff</option>
-          </select>
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: email, public_id, ФИО, телефон"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск пользователей"
+            />
+          </span>
         </label>
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Активность</span>
-          <select
-            value={activeFilter}
-            onChange={(e) => setActiveFilter(e.target.value)}
-            aria-label="Фильтр по is_active"
-          >
-            <option value="true">Активные</option>
-            <option value="false">Заблокированные</option>
-            <option value="">Все</option>
-          </select>
-        </label>
+        <div className="admin-portal__toolbar-filters">
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Staff</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по is_staff"
+              value={staffFilter}
+              onChange={setStaffFilter}
+              options={[
+                { value: "", label: "Все" },
+                { value: "true", label: "Staff" },
+                { value: "false", label: "Не staff" },
+              ]}
+            />
+          </div>
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Активность</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по is_active"
+              value={activeFilter}
+              onChange={setActiveFilter}
+              options={[
+                { value: "true", label: "Активные" },
+                { value: "false", label: "Заблокированные" },
+                { value: "", label: "Все" },
+              ]}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -170,83 +184,79 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">Email</th>
-              <th scope="col">public_id</th>
-              <th scope="col">ФИО</th>
-              <th scope="col">Телефон</th>
-              <th scope="col">Staff</th>
-              <th scope="col">Активен</th>
-              <th scope="col">Регистрация</th>
-              <th scope="col">Последний вход</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={8} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={8} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <Link
-                    to={`/admin-console/users/${row.id}`}
-                    className="lk-admin-users__email-link"
-                  >
-                    {row.email}
-                  </Link>
-                </td>
-                <td>{row.public_id || "—"}</td>
-                <td>{row.fio || "—"}</td>
-                <td>{row.phone || "—"}</td>
-                <td>
-                  <YesNoBadge value={Boolean(row.is_staff)} />
-                </td>
-                <td>
-                  <YesNoBadge value={Boolean(row.is_active)} />
-                </td>
-                <td>{formatDateTime(row.date_joined)}</td>
-                <td>{formatDateTime(row.last_login)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(200px, 1.6fr) minmax(110px, 0.9fr) minmax(140px, 1.1fr) minmax(140px, 1fr) minmax(70px, 0.5fr) minmax(70px, 0.5fr) minmax(140px, 1fr) minmax(140px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Email</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">public_id</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">ФИО</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Телефон</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Staff</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Активен</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Регистрация</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Последний вход</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <Link
+                  to={`/admin-console/users/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  {row.email}
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {row.public_id || "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.fio || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {row.phone || "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <YesNoBadge value={Boolean(row.is_staff)} />
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <YesNoBadge value={Boolean(row.is_active)} />
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.date_joined)}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.last_login)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

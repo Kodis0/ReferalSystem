@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Route, Routes, Link } from "react-router-dom";
+import { NavLink, Route, Routes } from "react-router-dom";
 import {
   Activity,
   Building2,
@@ -15,7 +15,6 @@ import {
 import { API_ENDPOINTS } from "../../../config/api";
 import {
   adminFetch,
-  clearAdminTokens,
   getAdminAccessToken,
   onAdminAuthExpired,
   setAdminAccessToken,
@@ -23,6 +22,7 @@ import {
 } from "../../../components/adminAuth";
 import AdminMfaGate from "./AdminMfaGate";
 import AdminLoginForm from "./AdminLoginForm";
+import AdminDashboardPage from "./AdminDashboardPage";
 import AdminUsersPage from "./AdminUsersPage";
 import AdminUserDetailPage from "./AdminUserDetailPage";
 import AdminPartnersPage from "./AdminPartnersPage";
@@ -61,37 +61,6 @@ function navLinkClassName({ isActive }) {
   return `admin-portal__nav-item${isActive ? " admin-portal__nav-item--active" : ""}`;
 }
 
-function AdminCabinetOverview() {
-  return (
-    <section className="lk-admin-cabinet" aria-labelledby="lk-admin-cabinet-title">
-      <header className="lk-admin-cabinet__header">
-        <h1 id="lk-admin-cabinet-title" className="lk-admin-cabinet__title">
-          Админ кабинет
-        </h1>
-        <p className="lk-admin-cabinet__subtitle">
-          Управление пользователями, партнёрами, сайтами и заказами.
-        </p>
-      </header>
-      <div className="lk-admin-cabinet__grid" role="list">
-        {ADMIN_SECTIONS.map(({ to, title, Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            className="lk-admin-cabinet__card"
-            role="listitem"
-            data-testid={`lk-admin-card-${to.split("/").pop()}`}
-          >
-            <span className="lk-admin-cabinet__card-icon" aria-hidden="true">
-              <Icon size={20} strokeWidth={1.75} />
-            </span>
-            <span className="lk-admin-cabinet__card-title">{title}</span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function AdminCabinetContent() {
   return (
     <div className="admin-portal__body">
@@ -113,7 +82,7 @@ function AdminCabinetContent() {
       </nav>
       <main className="admin-portal__content lk-admin">
         <Routes>
-          <Route index element={<AdminCabinetOverview />} />
+          <Route index element={<AdminDashboardPage />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="users/:userId" element={<AdminUserDetailPage />} />
           <Route path="partners" element={<AdminPartnersPage />} />
@@ -158,10 +127,15 @@ function AdminCabinetContent() {
  *   - "mfa"           — есть admin token, session не elevated: AdminMfaGate с autoStart="approval".
  *   - "elevated"      — есть admin token + elevated session: рендерим разделы.
  */
+const IS_ADMIN_DEV_BYPASS =
+  process.env.REACT_APP_ADMIN_DEV_BYPASS === "true" &&
+  process.env.NODE_ENV !== "production";
+
 export default function AdminAccessGate() {
-  const [phase, setPhase] = useState(() =>
-    getAdminAccessToken() ? "loading" : "login",
-  );
+  const [phase, setPhase] = useState(() => {
+    if (IS_ADMIN_DEV_BYPASS) return "elevated";
+    return getAdminAccessToken() ? "loading" : "login";
+  });
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -172,6 +146,7 @@ export default function AdminAccessGate() {
   }, []);
 
   const checkSession = useCallback(async () => {
+    if (IS_ADMIN_DEV_BYPASS) return;
     if (!getAdminAccessToken()) {
       setPhase("login");
       return;
@@ -202,6 +177,7 @@ export default function AdminAccessGate() {
   }, [phase, checkSession]);
 
   useEffect(() => {
+    if (IS_ADMIN_DEV_BYPASS) return undefined;
     return onAdminAuthExpired(() => {
       if (!mountedRef.current) return;
       setPhase("login");

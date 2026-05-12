@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalDropdown from "./AdminPortalDropdown";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -107,9 +110,6 @@ export default function AdminOrdersPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-orders-title">
       <header className="lk-admin-users__header">
@@ -118,30 +118,39 @@ export default function AdminOrdersPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: external_id, dedupe_key, email, ref_code"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск заказов"
-        />
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Статус</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Фильтр по статусу заказа"
-          >
-            <option value="">Все</option>
-            {ORDER_STATUSES.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: external_id, dedupe_key, email, ref_code"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск заказов"
+            />
+          </span>
         </label>
+        <div className="admin-portal__toolbar-filters">
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Статус</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по статусу заказа"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "", label: "Все" },
+                ...ORDER_STATUSES.map((opt) => ({ value: opt, label: opt })),
+              ]}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -150,79 +159,73 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">External ID</th>
-              <th scope="col">Партнёр</th>
-              <th scope="col">Сайт</th>
-              <th scope="col">Сумма</th>
-              <th scope="col">Статус</th>
-              <th scope="col">Создан</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <Link
-                    to={`/admin-console/orders/${row.id}`}
-                    className="lk-admin-users__email-link"
-                  >
-                    #{row.id}
-                  </Link>
-                </td>
-                <td>{row.external_id || "—"}</td>
-                <td>{row.partner_user_email || "—"}</td>
-                <td>{row.site_public_id || "—"}</td>
-                <td>
-                  {row.amount != null ? `${row.amount} ${row.currency || ""}`.trim() : "—"}
-                </td>
-                <td>{row.status || "—"}</td>
-                <td>{formatDateTime(row.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(80px, 0.4fr) minmax(160px, 1fr) minmax(200px, 1.4fr) minmax(160px, 1fr) minmax(120px, 0.7fr) minmax(110px, 0.6fr) minmax(150px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">ID</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">External ID</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Партнёр</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Сайт</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Сумма</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Статус</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Создан</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <Link
+                  to={`/admin-console/orders/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  #{row.id}
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <span className="admin-portal__table-cell--ellipsis">{row.external_id || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.partner_user_email || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <span className="admin-portal__table-cell--ellipsis">{row.site_public_id || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.amount != null ? `${row.amount} ${row.currency || ""}`.trim() : "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">{row.status || "—"}</div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.created_at)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

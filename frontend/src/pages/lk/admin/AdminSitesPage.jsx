@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalDropdown from "./AdminPortalDropdown";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -117,9 +120,6 @@ export default function AdminSitesPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-sites-title">
       <header className="lk-admin-users__header">
@@ -128,27 +128,40 @@ export default function AdminSitesPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: public_id, email владельца"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск сайтов"
-        />
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Архивность</span>
-          <select
-            value={archivedFilter}
-            onChange={(e) => setArchivedFilter(e.target.value)}
-            aria-label="Фильтр по архивности"
-          >
-            <option value="all">Все</option>
-            <option value="false">Активные</option>
-            <option value="true">Архивные</option>
-          </select>
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: public_id, email владельца"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск сайтов"
+            />
+          </span>
         </label>
+        <div className="admin-portal__toolbar-filters">
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Архивность</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по архивности"
+              value={archivedFilter}
+              onChange={setArchivedFilter}
+              options={[
+                { value: "all", label: "Все" },
+                { value: "false", label: "Активные" },
+                { value: "true", label: "Архивные" },
+              ]}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -157,77 +170,69 @@ export default function AdminSitesPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">public_id</th>
-              <th scope="col">Владелец</th>
-              <th scope="col">Проект</th>
-              <th scope="col">Статус</th>
-              <th scope="col">Архив</th>
-              <th scope="col">Создан</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={6} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={6} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <Link
-                    to={`/admin-console/sites/${row.id}`}
-                    className="lk-admin-users__email-link"
-                  >
-                    {row.public_id || `#${row.id}`}
-                  </Link>
-                </td>
-                <td>{row.owner_email || "—"}</td>
-                <td>{row.project_id ?? "—"}</td>
-                <td>{row.status || "—"}</td>
-                <td>
-                  <ArchivedBadge archivedAt={row.archived_at} />
-                </td>
-                <td>{formatDateTime(row.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(160px, 1.1fr) minmax(200px, 1.6fr) minmax(90px, 0.5fr) minmax(110px, 0.6fr) minmax(110px, 0.6fr) minmax(150px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">public_id</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Владелец</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Проект</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Статус</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Архив</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Создан</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <Link
+                  to={`/admin-console/sites/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  {row.public_id || `#${row.id}`}
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.owner_email || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.project_id ?? "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">{row.status || "—"}</div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <ArchivedBadge archivedAt={row.archived_at} />
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.created_at)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

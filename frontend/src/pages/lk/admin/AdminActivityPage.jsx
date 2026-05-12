@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -133,9 +135,6 @@ export default function AdminActivityPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-activity-title">
       <header className="lk-admin-users__header">
@@ -144,35 +143,49 @@ export default function AdminActivityPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: email, action, target_type, target_id"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск по журналу"
-        />
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Action</span>
-          <input
-            type="text"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            placeholder="admin.user.deactivated"
-            aria-label="Фильтр по action"
-          />
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: email, action, target_type, target_id"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск по журналу"
+            />
+          </span>
         </label>
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Target type</span>
-          <input
-            type="text"
-            value={targetTypeFilter}
-            onChange={(e) => setTargetTypeFilter(e.target.value)}
-            placeholder="user / support_ticket"
-            aria-label="Фильтр по target_type"
-          />
-        </label>
+        <div className="admin-portal__toolbar-filters">
+          <label className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Action</span>
+            <input
+              type="text"
+              className="admin-portal__toolbar-filter-input"
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              placeholder="admin.user.deactivated"
+              aria-label="Фильтр по action"
+            />
+          </label>
+          <label className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Target type</span>
+            <input
+              type="text"
+              className="admin-portal__toolbar-filter-input"
+              value={targetTypeFilter}
+              onChange={(e) => setTargetTypeFilter(e.target.value)}
+              placeholder="user / support_ticket"
+              aria-label="Фильтр по target_type"
+            />
+          </label>
+        </div>
       </div>
 
       {error && (
@@ -181,77 +194,73 @@ export default function AdminActivityPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">Когда</th>
-              <th scope="col">Actor</th>
-              <th scope="col">Action</th>
-              <th scope="col">Target type</th>
-              <th scope="col">Target id</th>
-              <th scope="col">IP</th>
-              <th scope="col">Контекст</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <Link
-                    to={`/admin-console/activity/${row.id}`}
-                    className="lk-admin-users__email-link"
-                  >
-                    {formatDateTime(row.created_at)}
-                  </Link>
-                </td>
-                <td>{row.actor_email || "—"}</td>
-                <td>{row.action || "—"}</td>
-                <td>{row.target_type || "—"}</td>
-                <td>{row.target_id || "—"}</td>
-                <td>{row.ip_address || "—"}</td>
-                <td>{summaryToText(row.metadata_summary) || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(160px, 1fr) minmax(200px, 1.4fr) minmax(180px, 1.2fr) minmax(140px, 0.8fr) minmax(100px, 0.5fr) minmax(120px, 0.7fr) minmax(200px, 1.4fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Когда</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Actor</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Action</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Target type</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Target id</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">IP</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Контекст</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <Link
+                  to={`/admin-console/activity/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  {formatDateTime(row.created_at)}
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.actor_email || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <span className="admin-portal__table-cell--ellipsis">{row.action || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">{row.target_type || "—"}</div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {row.target_id || "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {row.ip_address || "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{summaryToText(row.metadata_summary) || "—"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

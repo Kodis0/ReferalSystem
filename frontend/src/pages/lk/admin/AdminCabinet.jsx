@@ -3,6 +3,7 @@ import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import "./admin.css";
 import AdminAccessGate from "./AdminAccessGate";
+import AdminPortalScrollbar from "./AdminPortalScrollbar";
 import {
   clearAdminTokens,
   getAdminAccessToken,
@@ -129,6 +130,7 @@ export default function AdminCabinet() {
         <AdminPortalUserBlock />
       </header>
       <AdminAccessGate />
+      <AdminPortalScrollbar />
     </div>
   );
 }

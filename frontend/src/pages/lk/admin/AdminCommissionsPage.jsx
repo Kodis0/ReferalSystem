@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalDropdown from "./AdminPortalDropdown";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -99,9 +101,6 @@ export default function AdminCommissionsPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-commissions-title">
       <header className="lk-admin-users__header">
@@ -110,22 +109,21 @@ export default function AdminCommissionsPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Статус</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Фильтр по статусу комиссии"
-          >
-            <option value="">Все</option>
-            {COMMISSION_STATUSES.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <div className="admin-portal__toolbar-filters">
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Статус</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по статусу комиссии"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "", label: "Все" },
+                ...COMMISSION_STATUSES.map((opt) => ({ value: opt, label: opt })),
+              ]}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -134,89 +132,83 @@ export default function AdminCommissionsPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">Партнёр</th>
-              <th scope="col">Заказ</th>
-              <th scope="col">Сумма комиссии</th>
-              <th scope="col">Процент</th>
-              <th scope="col">Статус</th>
-              <th scope="col">Создан</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(80px, 0.4fr) minmax(200px, 1.5fr) minmax(160px, 1fr) minmax(140px, 0.8fr) minmax(110px, 0.6fr) minmax(110px, 0.6fr) minmax(150px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">ID</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Партнёр</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Заказ</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Сумма комиссии</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Процент</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Статус</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Создан</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <Link
+                  to={`/admin-console/commissions/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  #{row.id}
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.partner_user_email || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {row.order_id != null ? (
                   <Link
-                    to={`/admin-console/commissions/${row.id}`}
+                    to={`/admin-console/orders/${row.order_id}`}
                     className="lk-admin-users__email-link"
                   >
-                    #{row.id}
+                    #{row.order_id}
+                    {row.order_external_id ? ` (${row.order_external_id})` : ""}
                   </Link>
-                </td>
-                <td>{row.partner_user_email || "—"}</td>
-                <td>
-                  {row.order_id != null ? (
-                    <Link
-                      to={`/admin-console/orders/${row.order_id}`}
-                      className="lk-admin-users__email-link"
-                    >
-                      #{row.order_id}
-                      {row.order_external_id ? ` (${row.order_external_id})` : ""}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td>{row.commission_amount ?? "—"}</td>
-                <td>{row.commission_percent ?? "—"}</td>
-                <td>{row.status || "—"}</td>
-                <td>{formatDateTime(row.created_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                ) : (
+                  "—"
+                )}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.commission_amount ?? "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.commission_percent ?? "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">{row.status || "—"}</div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.created_at)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

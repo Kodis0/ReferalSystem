@@ -19,6 +19,8 @@
  */
 html[data-admin-portal="true"],
 body[data-admin-portal="true"] {
+  margin: 0 !important;
+  padding: 0 !important;
   background: #17212b !important;
   background-image: none !important;
 }
@@ -27,6 +29,72 @@ html[data-admin-portal="true"][data-theme="light"],
 html[data-admin-portal="true"][data-theme="light"] body[data-admin-portal="true"] {
   background: #f4f6f9 !important;
   background-image: none !important;
+}
+
+/* Прячем нативный скроллбар: вместо него — overlay-thumb через AdminPortalScrollbar. */
+html[data-admin-portal="true"],
+body[data-admin-portal="true"] {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html[data-admin-portal="true"]::-webkit-scrollbar,
+body[data-admin-portal="true"]::-webkit-scrollbar,
+body[data-admin-portal="true"] *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Кастомный overlay-скролл (см. AdminPortalScrollbar.jsx) — те же визуальные параметры,
+   что у `.lk-page-scrollbar` в lk.css, только с offset под шапку 56px. */
+.admin-portal-scrollbar {
+  position: fixed;
+  top: 56px;
+  right: 0;
+  z-index: 2147483647;
+  width: 6px;
+  height: calc(100dvh - 56px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.admin-portal-scrollbar[data-visible="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.admin-portal-scrollbar_dark {
+  background: #17212b;
+}
+
+.admin-portal-scrollbar_light {
+  background: #ffffff;
+}
+
+.admin-portal-scrollbar__thumb {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  min-height: 44px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: none;
+  will-change: transform;
+}
+
+.admin-portal-scrollbar_dark .admin-portal-scrollbar__thumb {
+  background: #242f3d;
+}
+
+.admin-portal-scrollbar_light .admin-portal-scrollbar__thumb {
+  background: rgba(36, 47, 61, 0.3);
+}
+
+.admin-portal-scrollbar_light .admin-portal-scrollbar__thumb:hover {
+  background: rgba(36, 47, 61, 0.42);
 }
 
 .admin-portal__header {
@@ -326,16 +394,15 @@ html[data-admin-portal="true"][data-theme="light"] body[data-admin-portal="true"
   padding: 16px 18px;
   border-radius: 12px;
   background: var(--lk-sb-surface, #242f3d);
-  border: 1px solid var(--lk-sb-border, rgba(255, 255, 255, 0.09));
+  border: none;
   color: inherit;
   text-decoration: none;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: background 120ms ease, transform 120ms ease;
 }
 
 .lk-admin-cabinet__card:hover,
 .lk-admin-cabinet__card:focus-visible {
   background: var(--lk-sb-hover, rgba(255, 255, 255, 0.07));
-  border-color: var(--lk-sb-accent-soft, rgba(113, 119, 248, 0.22));
   outline: none;
 }
 
@@ -361,6 +428,130 @@ html[data-admin-portal="true"][data-theme="light"] body[data-admin-portal="true"
   color: #17212b;
 }
 
+/* ---- Admin dashboard (index route) -------------------------------------- */
+
+.lk-admin-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 0 32px;
+  color: var(--lk-sb-text, rgb(127, 145, 164));
+}
+
+.lk-admin-dashboard__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lk-admin-dashboard__title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--lk-text-primary, #f5f7fb);
+}
+
+[data-theme="light"] .lk-admin-dashboard__title {
+  color: #17212b;
+}
+
+.lk-admin-dashboard__subtitle {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+.lk-admin-dashboard__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.lk-admin-dashboard__card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--lk-sb-surface, #242f3d);
+  color: inherit;
+}
+
+.lk-admin-dashboard__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--lk-sb-accent-soft, rgba(113, 119, 248, 0.22));
+  color: var(--lk-sb-accent, #7177f8);
+  flex: 0 0 auto;
+}
+
+.lk-admin-dashboard__card-label {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+.lk-admin-dashboard__card-value {
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 600;
+  color: var(--lk-text-primary, #f5f7fb);
+  word-break: break-word;
+}
+
+[data-theme="light"] .lk-admin-dashboard__card-value {
+  color: #17212b;
+}
+
+.lk-admin-dashboard__card-currency {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  margin-left: 4px;
+}
+
+.lk-admin-dashboard__card-subline {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+.lk-admin-dashboard__loading,
+.lk-admin-dashboard__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--lk-sb-surface, #242f3d);
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  font-size: 14px;
+}
+
+.lk-admin-dashboard__retry {
+  background: var(--lk-sb-accent-soft, rgba(113, 119, 248, 0.22));
+  color: var(--lk-text-primary, #f5f7fb);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lk-admin-dashboard__retry:hover,
+.lk-admin-dashboard__retry:focus-visible {
+  background: var(--lk-sb-accent-soft, rgba(113, 119, 248, 0.32));
+  outline: none;
+}
+
 .lk-admin-users {
   display: flex;
   flex-direction: column;
@@ -380,6 +571,623 @@ html[data-admin-portal="true"][data-theme="light"] body[data-admin-portal="true"
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+
+/* ---- Admin list-page toolbar (search + filters) ------------------------
+ * Унифицированный стиль для всех admin list-страниц: поиск с иконкой Search
+ * (паттерн из lk-support-hub__search*) + pill-style native select-фильтры.
+ */
+
+.admin-portal__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+/* Эталон — `.owner-programs__services-search*` (owner-programs.css). Label получает border + bg + focus-ring;
+   иконка позиционируется absolute, input занимает всю ширину с padding-left под иконку. */
+.admin-portal__toolbar-search {
+  position: relative;
+  display: block;
+  flex: 1 1 280px;
+  min-width: 220px;
+  margin: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #17212b;
+  cursor: text;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.admin-portal__toolbar-search:hover:not(:focus-within),
+.admin-portal__toolbar-search:focus-within {
+  border-color: #7177f8;
+  box-shadow: 0 0 0 3px rgba(113, 119, 248, 0.10);
+}
+
+.admin-portal__toolbar-search-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.admin-portal__toolbar-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lk-sb-text-muted, #7f91a4);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.admin-portal__toolbar-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px 0 42px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lk-text-primary, #ffffff);
+  font: 400 14px/20px inherit;
+  outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: color 0.2s ease;
+}
+
+.admin-portal__toolbar-search-input::placeholder {
+  color: var(--lk-sb-text-muted, #7f91a4);
+  opacity: 1;
+}
+
+.admin-portal__toolbar-search-input:focus,
+.admin-portal__toolbar-search-input:focus-visible {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="light"] .admin-portal__toolbar-search {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.03);
+}
+
+[data-theme="light"] .admin-portal__toolbar-search-input {
+  color: #1f2937;
+}
+
+[data-theme="light"] .admin-portal__toolbar-search-input::placeholder {
+  color: #83899f;
+}
+
+.admin-portal__toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.admin-portal__toolbar-filter {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.admin-portal__toolbar-filter-label {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  padding-left: 2px;
+}
+
+.admin-portal__toolbar-filter-select,
+.admin-portal__toolbar-filter-input {
+  height: 36px;
+  min-width: 140px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: #17212b;
+  color: var(--lk-text-primary, #f5f7fb);
+  font: inherit;
+  outline: none;
+}
+
+.admin-portal__toolbar-filter-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--lk-sb-text-muted, rgb(127, 145, 164)) 50%),
+    linear-gradient(135deg, var(--lk-sb-text-muted, rgb(127, 145, 164)) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 52%,
+    calc(100% - 11px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+.admin-portal__toolbar-filter-input::placeholder {
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+.admin-portal__toolbar-filter-select:focus-visible,
+.admin-portal__toolbar-filter-input:focus-visible {
+  outline: 2px solid var(--lk-sb-accent, #7177f8);
+  outline-offset: 2px;
+}
+
+[data-theme="light"] .admin-portal__toolbar-filter-select,
+[data-theme="light"] .admin-portal__toolbar-filter-input {
+  background: rgba(15, 23, 42, 0.03);
+  color: #17212b;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 600px) {
+  .admin-portal__toolbar-search,
+  .admin-portal__toolbar-filter {
+    flex: 1 1 100%;
+  }
+
+  .admin-portal__toolbar-filter-select,
+  .admin-portal__toolbar-filter-input {
+    width: 100%;
+  }
+}
+
+/* ---- Admin portal dropdown (popover в духе .lk-header__menu) -----------
+ * Кастомный dropdown, заменяющий нативный <select> в admin toolbars.
+ * Триггер ~ .lk-header__account-btn (pill), popover ~ .lk-header__menu.
+ */
+
+.admin-portal-dropdown {
+  position: relative;
+  display: inline-flex;
+  min-width: var(--admin-dropdown-min-width, 140px);
+}
+
+.admin-portal-dropdown__trigger {
+  position: relative;
+  width: 100%;
+  min-width: var(--admin-dropdown-min-width, 140px);
+  min-height: 44px;
+  padding: 0 36px 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #17212b;
+  color: var(--lk-text-primary, #f5f7fb);
+  font: 400 14px/20px inherit;
+  text-align: left;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-portal-dropdown__trigger:hover:not(:focus-visible),
+.admin-portal-dropdown__trigger:focus-visible,
+.admin-portal-dropdown:focus-within > .admin-portal-dropdown__trigger {
+  border-color: #7177f8;
+  box-shadow: 0 0 0 3px rgba(113, 119, 248, 0.10);
+  outline: none;
+}
+
+[data-theme="light"] .admin-portal-dropdown__trigger {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.03);
+  color: #1f2937;
+}
+
+.admin-portal-dropdown__trigger-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-portal-dropdown__chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  transform: translateY(-50%) rotate(0deg);
+  transform-origin: 50% 50%;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.admin-portal-dropdown__chevron--open {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.admin-portal-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  max-width: 280px;
+  max-height: min(320px, calc(100dvh - 120px));
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: #17212b;
+  border: 1px solid #2c3743;
+  box-shadow: 0 14px 32px rgba(5, 12, 38, 0.35);
+  outline: none;
+}
+
+.admin-portal-dropdown__option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font: 500 14px/24px "Inter", "Stem-Regular", "Stem", "Tahoma", "Arial", sans-serif;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.admin-portal-dropdown__option:hover,
+.admin-portal-dropdown__option--active {
+  background: rgba(113, 119, 248, 0.10);
+  color: #fff;
+}
+
+.admin-portal-dropdown__option--selected {
+  font-weight: 600;
+}
+
+.admin-portal-dropdown__option--disabled,
+.admin-portal-dropdown__option--disabled:hover {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: not-allowed;
+}
+
+.admin-portal-dropdown__option:focus-visible {
+  outline: 2px solid rgba(113, 119, 248, 0.65);
+  outline-offset: -2px;
+}
+
+.admin-portal-dropdown__option-check {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lk-sb-accent, #7177f8);
+}
+
+.admin-portal-dropdown__option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-portal-dropdown__divider {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 8px 0;
+  background: #2c3743;
+  border: none;
+}
+
+[data-theme="light"] .admin-portal-dropdown__trigger {
+  background: #fff;
+  color: #17212b;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .admin-portal-dropdown__trigger:hover,
+[data-theme="light"] .admin-portal-dropdown__trigger:focus-visible {
+  background: rgba(113, 119, 248, 0.08);
+}
+
+[data-theme="light"] .admin-portal-dropdown__chevron {
+  color: #5a6779;
+}
+
+[data-theme="light"] .admin-portal-dropdown__menu {
+  background: #fff;
+  border-color: #e3e6ec;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+}
+
+[data-theme="light"] .admin-portal-dropdown__option {
+  color: #17212b;
+}
+
+[data-theme="light"] .admin-portal-dropdown__option:hover,
+[data-theme="light"] .admin-portal-dropdown__option--active {
+  background: rgba(113, 119, 248, 0.08);
+  color: #17212b;
+}
+
+[data-theme="light"] .admin-portal-dropdown__option--disabled,
+[data-theme="light"] .admin-portal-dropdown__option--disabled:hover {
+  color: rgba(23, 33, 43, 0.45);
+}
+
+[data-theme="light"] .admin-portal-dropdown__divider {
+  background: #e3e6ec;
+}
+
+@media (max-width: 600px) {
+  .admin-portal-dropdown {
+    width: 100%;
+  }
+  .admin-portal-dropdown__trigger {
+    width: 100%;
+  }
+}
+
+/* ---- Admin list-page tables (div-grid в духе owner-programs__histTable) -
+ * grid-template-columns подаётся через CSS-переменную --admin-cols inline
+ * со страницы. По умолчанию — одна растягивающаяся колонка.
+ */
+
+.admin-portal__table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.admin-portal__table {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--lk-sb-text, rgb(127, 145, 164));
+}
+
+.admin-portal__table-row {
+  display: grid;
+  grid-template-columns: var(--admin-cols, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.admin-portal__table-row--head {
+  min-height: 48px;
+  border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+.admin-portal__table-row--body {
+  min-height: 48px;
+  transition: background-color 0.15s ease;
+}
+
+.admin-portal__table-row--link:hover {
+  background: rgba(113, 119, 248, 0.06);
+}
+
+.admin-portal__table-row--body:last-child {
+  border-bottom: none;
+}
+
+.admin-portal__table-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 16px;
+  color: inherit;
+}
+
+.admin-portal__table-cell--head {
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-portal__table-cell--body {
+  color: var(--lk-text-primary, #f5f7fb);
+}
+
+.admin-portal__table-cell--ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-portal__table-cell--mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-portal__table-cell--right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.admin-portal__table-cell--full {
+  grid-column: 1 / -1;
+  justify-content: center;
+  text-align: center;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  padding: 32px 16px;
+}
+
+.admin-portal__table-empty,
+.admin-portal__table-loading {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+[data-theme="light"] .admin-portal__table-row {
+  border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .admin-portal__table-row--head {
+  border-bottom-color: rgba(15, 23, 42, 0.18);
+}
+
+[data-theme="light"] .admin-portal__table-row--link:hover {
+  background: rgba(113, 119, 248, 0.08);
+}
+
+[data-theme="light"] .admin-portal__table-cell--body {
+  color: #17212b;
+}
+
+/* ---- Admin list-page pagination (style from owner-programs__history-pagination) */
+
+.admin-portal__pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px 10px;
+  margin-top: 24px;
+}
+
+.admin-portal__pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--lk-text-primary, #f5f7fb);
+  font: 500 13px/20px inherit;
+  cursor: pointer;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.admin-portal__pagination-btn:hover:not(:disabled),
+.admin-portal__pagination-btn:focus-visible:not(:disabled) {
+  color: var(--lk-sb-accent, #7177f8);
+  outline: none;
+}
+
+.admin-portal__pagination-btn:focus-visible {
+  outline: 2px solid var(--lk-sb-accent, #7177f8);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.admin-portal__pagination-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.admin-portal__pagination-nums {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-portal__pagination-num-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-portal__pagination-num {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  font: 500 13px/20px inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.admin-portal__pagination-num:hover:not(:disabled) {
+  color: var(--lk-text-primary, #f5f7fb);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-portal__pagination-num:focus-visible {
+  outline: 2px solid var(--lk-sb-accent, #7177f8);
+  outline-offset: 2px;
+}
+
+.admin-portal__pagination-num--active {
+  border: none;
+  background: rgba(113, 119, 248, 0.15);
+  color: var(--lk-text-primary, #f5f7fb);
+  cursor: default;
+}
+
+.admin-portal__pagination-ellipsis {
+  padding: 0 4px;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  font-size: 14px;
+}
+
+.admin-portal__pagination-info {
+  margin-left: auto;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  font-size: 13px;
+}
+
+[data-theme="light"] .admin-portal__pagination-btn {
+  color: #17212b;
+}
+
+[data-theme="light"] .admin-portal__pagination-num:hover:not(:disabled) {
+  color: #17212b;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .admin-portal__pagination-num--active {
+  background: rgba(113, 119, 248, 0.18);
+  color: #17212b;
 }
 
 .lk-admin-users__search {

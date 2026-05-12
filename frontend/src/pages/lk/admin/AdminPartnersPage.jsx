@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalDropdown from "./AdminPortalDropdown";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -118,9 +121,6 @@ export default function AdminPartnersPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-partners-title">
       <header className="lk-admin-users__header">
@@ -129,28 +129,41 @@ export default function AdminPartnersPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: email, public_id, ФИО, телефон"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск партнёров"
-        />
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Статус</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Фильтр по статусу партнёра"
-          >
-            <option value="">Все</option>
-            <option value="pending">pending</option>
-            <option value="active">active</option>
-            <option value="blocked">blocked</option>
-          </select>
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: email, public_id, ФИО, телефон"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск партнёров"
+            />
+          </span>
         </label>
+        <div className="admin-portal__toolbar-filters">
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Статус</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по статусу партнёра"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "", label: "Все" },
+                { value: "pending", label: "pending" },
+                { value: "active", label: "active" },
+                { value: "blocked", label: "blocked" },
+              ]}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -159,79 +172,75 @@ export default function AdminPartnersPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">Email</th>
-              <th scope="col">Статус</th>
-              <th scope="col">Баланс доступный</th>
-              <th scope="col">Баланс суммарный</th>
-              <th scope="col">Комиссия, %</th>
-              <th scope="col">Создан</th>
-              <th scope="col">Обновлён</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <Link
-                    to={`/admin-console/partners/${row.id}`}
-                    className="lk-admin-users__email-link"
-                  >
-                    {row.user_email || `#${row.id}`}
-                  </Link>
-                </td>
-                <td>
-                  <PartnerStatusBadge value={row.status} />
-                </td>
-                <td>{row.balance_available ?? "—"}</td>
-                <td>{row.balance_total ?? "—"}</td>
-                <td>{row.commission_percent ?? "—"}</td>
-                <td>{formatDateTime(row.created_at)}</td>
-                <td>{formatDateTime(row.updated_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(200px, 1.6fr) minmax(100px, 0.7fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Email</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Статус</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Баланс доступный</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Баланс суммарный</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Комиссия, %</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Создан</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Обновлён</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <Link
+                  to={`/admin-console/partners/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  {row.user_email || `#${row.id}`}
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <PartnerStatusBadge value={row.status} />
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.balance_available ?? "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.balance_total ?? "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                {row.commission_percent ?? "—"}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.created_at)}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.updated_at)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

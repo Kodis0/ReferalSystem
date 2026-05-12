@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -104,9 +106,6 @@ export default function AdminProjectsPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-projects-title">
       <header className="lk-admin-users__header">
@@ -115,15 +114,25 @@ export default function AdminProjectsPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: название, email владельца"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск проектов"
-        />
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: название, email владельца"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск проектов"
+            />
+          </span>
+        </label>
       </div>
 
       {error && (
@@ -132,78 +141,74 @@ export default function AdminProjectsPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">Название</th>
-              <th scope="col">Владелец</th>
-              <th scope="col">Сайтов</th>
-              <th scope="col">Создан</th>
-              <th scope="col">Обновлён</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={6} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={6} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => {
-              const label = row.name || `#${row.id}`;
-              return (
-                <tr key={row.id}>
-                  <td>{row.id}</td>
-                  <td>
-                    <Link
-                      to={`/admin-console/projects/${row.id}`}
-                      className="lk-admin-users__email-link"
-                    >
-                      {label}
-                    </Link>
-                  </td>
-                  <td>{row.owner_email || "—"}</td>
-                  <td>{Number(row.sites_count) || 0}</td>
-                  <td>{formatDateTime(row.created_at)}</td>
-                  <td>{formatDateTime(row.updated_at)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(80px, 0.4fr) minmax(200px, 1.6fr) minmax(200px, 1.4fr) minmax(90px, 0.5fr) minmax(150px, 1fr) minmax(150px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">ID</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Название</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Владелец</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head admin-portal__table-cell--right">Сайтов</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Создан</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Обновлён</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => {
+            const label = row.name || `#${row.id}`;
+            return (
+              <div
+                key={row.id}
+                className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+              >
+                <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                  {row.id}
+                </div>
+                <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                  <Link
+                    to={`/admin-console/projects/${row.id}`}
+                    className="lk-admin-users__email-link"
+                  >
+                    {label}
+                  </Link>
+                </div>
+                <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                  <span className="admin-portal__table-cell--ellipsis">{row.owner_email || "—"}</span>
+                </div>
+                <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono admin-portal__table-cell--right">
+                  {Number(row.sites_count) || 0}
+                </div>
+                <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                  {formatDateTime(row.created_at)}
+                </div>
+                <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                  {formatDateTime(row.updated_at)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

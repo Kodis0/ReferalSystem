@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
 import { adminFetch } from "../../../components/adminAuth";
+import AdminPortalDropdown from "./AdminPortalDropdown";
+import AdminPortalPagination from "./AdminPortalPagination";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -117,9 +120,6 @@ export default function AdminSupportTicketsPage() {
   }, [load]);
 
   const totalPages = Math.max(1, data.total_pages || 1);
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
-
   return (
     <section className="lk-admin-users" aria-labelledby="lk-admin-support-title">
       <header className="lk-admin-users__header">
@@ -128,27 +128,40 @@ export default function AdminSupportTicketsPage() {
         </h1>
       </header>
 
-      <div className="lk-admin-users__filters" role="group" aria-label="Фильтры">
-        <input
-          type="search"
-          className="lk-admin-users__search"
-          placeholder="Поиск: email, тема, текст обращения"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск обращений"
-        />
-        <label className="lk-admin-users__filter">
-          <span className="lk-admin-users__filter-label">Статус</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Фильтр по статусу обращения"
-          >
-            <option value="">Все</option>
-            <option value="open">Открытые</option>
-            <option value="closed">Закрытые</option>
-          </select>
+      <div className="admin-portal__toolbar" role="group" aria-label="Фильтры">
+        <label className="admin-portal__toolbar-search">
+          <span className="admin-portal__toolbar-search-inner">
+            <Search
+              className="admin-portal__toolbar-search-icon"
+              size={18}
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <input
+              type="search"
+              className="admin-portal__toolbar-search-input"
+              placeholder="Поиск: email, тема, текст обращения"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск обращений"
+            />
+          </span>
         </label>
+        <div className="admin-portal__toolbar-filters">
+          <div className="admin-portal__toolbar-filter">
+            <span className="admin-portal__toolbar-filter-label">Статус</span>
+            <AdminPortalDropdown
+              ariaLabel="Фильтр по статусу обращения"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "", label: "Все" },
+                { value: "open", label: "Открытые" },
+                { value: "closed", label: "Закрытые" },
+              ]}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -157,79 +170,73 @@ export default function AdminSupportTicketsPage() {
         </div>
       )}
 
-      <div className="lk-admin-users__table-wrap">
-        <table className="lk-admin-users__table">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">Email пользователя</th>
-              <th scope="col">Тип</th>
-              <th scope="col">Тема</th>
-              <th scope="col">Статус</th>
-              <th scope="col">Создано</th>
-              <th scope="col">Закрыто</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && data.results.length === 0 && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Загрузка…
-                </td>
-              </tr>
-            )}
-            {!loading && data.results.length === 0 && !error && (
-              <tr>
-                <td colSpan={7} className="lk-admin-users__muted">
-                  Ничего не найдено
-                </td>
-              </tr>
-            )}
-            {data.results.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <Link
-                    to={`/admin-console/support/${row.id}`}
-                    className="lk-admin-users__email-link"
-                  >
-                    {String(row.id).slice(0, 8)}…
-                  </Link>
-                </td>
-                <td>{row.user_email || "—"}</td>
-                <td>{row.type_slug || "—"}</td>
-                <td>{row.target_label || "—"}</td>
-                <td>
-                  <TicketStatusBadge isClosed={Boolean(row.is_closed)} />
-                </td>
-                <td>{formatDateTime(row.created_at)}</td>
-                <td>{formatDateTime(row.closed_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="admin-portal__table-wrap">
+        <div
+          className="admin-portal__table"
+          style={{
+            "--admin-cols":
+              "minmax(100px, 0.5fr) minmax(200px, 1.4fr) minmax(120px, 0.7fr) minmax(180px, 1.2fr) minmax(110px, 0.6fr) minmax(150px, 1fr) minmax(150px, 1fr)",
+          }}
+        >
+          <div className="admin-portal__table-row admin-portal__table-row--head">
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">ID</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Email пользователя</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Тип</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Тема</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Статус</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Создано</div>
+            <div className="admin-portal__table-cell admin-portal__table-cell--head">Закрыто</div>
+          </div>
+          {loading && data.results.length === 0 && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Загрузка…</div>
+            </div>
+          )}
+          {!loading && data.results.length === 0 && !error && (
+            <div className="admin-portal__table-row admin-portal__table-row--body">
+              <div className="admin-portal__table-cell admin-portal__table-cell--full">Ничего не найдено</div>
+            </div>
+          )}
+          {data.results.map((row) => (
+            <div
+              key={row.id}
+              className="admin-portal__table-row admin-portal__table-row--body admin-portal__table-row--link"
+            >
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                <Link
+                  to={`/admin-console/support/${row.id}`}
+                  className="lk-admin-users__email-link"
+                >
+                  {String(row.id).slice(0, 8)}…
+                </Link>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.user_email || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">{row.type_slug || "—"}</div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <span className="admin-portal__table-cell--ellipsis">{row.target_label || "—"}</span>
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body">
+                <TicketStatusBadge isClosed={Boolean(row.is_closed)} />
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.created_at)}
+              </div>
+              <div className="admin-portal__table-cell admin-portal__table-cell--body admin-portal__table-cell--mono">
+                {formatDateTime(row.closed_at)}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <nav className="lk-admin-users__pagination" aria-label="Постраничная навигация">
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={!canPrev || loading}
-        >
-          Назад
-        </button>
-        <span className="lk-admin-users__page-info" aria-live="polite">
-          Страница {data.page} из {totalPages} (всего {data.count})
-        </span>
-        <button
-          type="button"
-          className="lk-admin-users__page-btn"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={!canNext || loading}
-        >
-          Вперёд
-        </button>
-      </nav>
+      <AdminPortalPagination
+        page={data.page}
+        numPages={totalPages}
+        count={data.count}
+        onPageChange={(n) => setPage(n)}
+      />
     </section>
   );
 }

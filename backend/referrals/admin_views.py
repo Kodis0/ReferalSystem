@@ -9,8 +9,11 @@
 будут отдельные шаги, если/когда понадобится.
 """
 
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
 from django.core.paginator import EmptyPage, Paginator
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -541,4 +544,65 @@ class AdminIngestAuditDetailView(APIView):
         )
         return Response(
             AdminIngestAuditDetailSerializer(audit, context={"request": request}).data
+        )
+
+
+class AdminDashboardStatsView(APIView):
+    """``GET /referrals/admin/dashboard/stats/`` — агрегаты для admin-dashboard.
+
+    Возвращает:
+      * ``users_count`` — общее число CustomUser.
+      * ``partners_count`` — общее число PartnerProfile.
+      * ``orders_total_amount`` — сумма ``Order.amount`` по paid-ордерам.
+      * ``partners_payout_amount`` — сумма ``Commission.commission_amount`` по approved
+        комиссиям (которые лежат поверх paid-ордеров).
+      * ``platform_revenue_amount`` = ``orders_total_amount`` − ``partners_payout_amount``.
+      * ``platform_revenue_currency`` — фиксированная RUB (см. ниже).
+
+    MVP-стратегия по валютам: считаем только в RUB. Order.currency может быть пустой
+    строкой (исторический default до миграции) либо ``"RUB"``; такие записи и
+    учитываем. Все прочие валюты игнорируем — это намеренное упрощение под текущую
+    кодовую базу, где основной поток в RUB (см. ``gamification.py``: тот же фильтр
+    ``Q(currency="") | Q(currency="RUB")``).
+
+    No audit: чистый read-only, дашборд может опрашиваться UI-ом часто.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminUser, HasFreshAdminSession]
+
+    def get(self, request):
+        User = get_user_model()
+
+        users_count = User.objects.count()
+        partners_count = PartnerProfile.objects.count()
+
+        rub_orders = Order.objects.filter(
+            status=Order.Status.PAID
+        ).filter(Q(currency="") | Q(currency="RUB"))
+        rub_commissions = Commission.objects.filter(
+            status=Commission.Status.APPROVED,
+            order__status=Order.Status.PAID,
+        ).filter(Q(order__currency="") | Q(order__currency="RUB"))
+
+        orders_total = (
+            rub_orders.aggregate(total=Sum("amount")).get("total") or Decimal("0")
+        )
+        payout_total = (
+            rub_commissions.aggregate(total=Sum("commission_amount")).get("total")
+            or Decimal("0")
+        )
+        platform_revenue = orders_total - payout_total
+
+        def _money(value: Decimal) -> str:
+            return f"{value.quantize(Decimal('0.01')):f}"
+
+        return Response(
+            {
+                "users_count": users_count,
+                "partners_count": partners_count,
+                "platform_revenue_amount": _money(platform_revenue),
+                "platform_revenue_currency": "RUB",
+                "orders_total_amount": _money(orders_total),
+                "partners_payout_amount": _money(payout_total),
+            }
         )

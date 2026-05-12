@@ -92,6 +92,8 @@ export const API_ENDPOINTS = {
   /** Админ-кабинет: детали PublicLeadIngestAudit по числовому PK (read-only). */
   adminIngestAuditDetail: (auditId) =>
     `${API_BASE}/referrals/admin/ingest-audits/${encodeURIComponent(auditId)}/`,
+  /** Админ-кабинет: агрегированные метрики дашборда (users/partners/выручка). */
+  adminDashboardStats: `${API_BASE}/referrals/admin/dashboard/stats/`,
   /** Админ-кабинет: журнал действий админа (read-only, требует fresh AdminSession). */
   adminActionAuditsList: `${API_BASE}/users/admin/action-audits/`,
   /** Админ-кабинет: детали записи журнала по числовому PK (read-only). */
