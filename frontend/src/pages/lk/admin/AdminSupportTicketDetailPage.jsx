@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
+import { adminFetch } from "../../../components/adminAuth";
 import { toast } from "../../../components/toast/toastBus";
 import "./admin.css";
 
@@ -60,10 +61,7 @@ export default function AdminSupportTicketDetailPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const token =
-        typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
-      const res = await fetch(API_ENDPOINTS.adminSupportTicketDetail(ticketId), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await adminFetch(API_ENDPOINTS.adminSupportTicketDetail(ticketId), {
         credentials: "include",
         signal: controller.signal,
       });
@@ -111,14 +109,9 @@ export default function AdminSupportTicketDetailPage() {
     setTogglingClosed(true);
     setActionError("");
     try {
-      const token =
-        typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
-      const res = await fetch(API_ENDPOINTS.adminSupportTicketUpdate(ticket.id), {
+      const res = await adminFetch(API_ENDPOINTS.adminSupportTicketUpdate(ticket.id), {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ is_closed: nextValue }),
       });

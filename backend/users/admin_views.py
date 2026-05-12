@@ -16,10 +16,12 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.contrib.auth import authenticate
 from rest_framework import status
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .admin_permissions import HasFreshAdminSession
 from .serializers import (
@@ -472,6 +474,74 @@ class AdminSupportTicketDetailView(APIView):
 # ---------------------------------------------------------------------------
 # Step-up «admin session» endpoints (MFA foundation, dev-confirm)
 # ---------------------------------------------------------------------------
+
+class AdminLoginView(APIView):
+    """``POST /users/admin/login/`` — выдача JWT для админ-консоли.
+
+    Изолированный endpoint: токены, выданные здесь, кладутся фронтом в
+    ``admin_access_token``/``admin_refresh_token`` и не пересекаются с обычным LK.
+    Non-staff пользователь с валидным паролем получает 403 (а не 401), чтобы фронт мог
+    показать корректное сообщение «не админ» вместо «неверный пароль».
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []  # endpoint выдаёт токены — request.user здесь не нужен
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        email_raw = data.get("email")
+        password_raw = data.get("password")
+        if not isinstance(email_raw, str) or not email_raw.strip() \
+                or not isinstance(password_raw, str) or not password_raw:
+            return Response(
+                {"detail": "Неверный email или пароль", "code": "ADMIN_LOGIN_INVALID"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        email = email_raw.strip()
+
+        user = authenticate(request, username=email, password=password_raw)
+        if user is None:
+            return Response(
+                {"detail": "Неверный email или пароль", "code": "ADMIN_LOGIN_INVALID"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        ip = _client_ip(request)
+        ua = _user_agent(request)
+
+        if not user.is_staff:
+            _audit(
+                user,
+                "admin.login.rejected_not_staff",
+                target_type="user",
+                target_id=str(user.id),
+                metadata={"email": user.email or ""},
+                ip=ip,
+                user_agent=ua,
+            )
+            return Response(
+                {
+                    "detail": "Этот аккаунт не является администратором",
+                    "code": "ADMIN_LOGIN_NOT_STAFF",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        _audit(
+            user,
+            "admin.login.success",
+            target_type="user",
+            target_id=str(user.id),
+            metadata={"email": user.email or ""},
+            ip=ip,
+            user_agent=ua,
+        )
+        return Response(
+            {"access": str(refresh.access_token), "refresh": str(refresh)},
+            status=status.HTTP_200_OK,
+        )
+
 
 class AdminSessionView(APIView):
     """``GET /users/admin/session/`` — текущее состояние step-up сессии админа."""

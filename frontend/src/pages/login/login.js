@@ -343,6 +343,7 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [adminConsoleHint, setAdminConsoleHint] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [passkeyErrorScreen, setPasskeyErrorScreen] = useState(false);
@@ -839,6 +840,7 @@ function Login() {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setAdminConsoleHint(false);
 
     try {
       const response = await fetch(API_ENDPOINTS.token, {
@@ -850,6 +852,15 @@ function Login() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data && data.code === "ADMIN_USE_ADMIN_CONSOLE") {
+          setAdminConsoleHint(true);
+          setMessage(
+            data.detail ||
+              "Этот аккаунт администратора. Используйте /admin-console для входа.",
+          );
+          setLoading(false);
+          return;
+        }
         const errorMsg = formatLoginApiErrors(data);
         setMessage(errorMsg || "Не удалось войти. Проверьте данные и попробуйте снова.");
         setLoading(false);
@@ -1300,6 +1311,18 @@ function Login() {
                     role="alert"
                   >
                     {message}
+                    {adminConsoleHint ? (
+                      <>
+                        {" "}
+                        <Link
+                          to="/admin-console"
+                          className="login-page__alert-link"
+                          data-testid="login-admin-console-link"
+                        >
+                          Перейти в админ-консоль
+                        </Link>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
 

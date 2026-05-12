@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_ENDPOINTS } from "../../../config/api";
+import { adminFetch } from "../../../components/adminAuth";
 import { toast } from "../../../components/toast/toastBus";
 
 /**
@@ -30,8 +31,8 @@ const APPROVAL_DENIED_HINT =
 const APPROVAL_EXPIRED_HINT = "Запрос истёк.";
 const APPROVAL_POLL_INTERVAL_MS = 2000;
 
-export default function AdminMfaGate({ children }) {
-  const [sessionLoading, setSessionLoading] = useState(true);
+export default function AdminMfaGate({ children, autoStart, onElevated, skipSessionFetch }) {
+  const [sessionLoading, setSessionLoading] = useState(!skipSessionFetch);
   const [elevated, setElevated] = useState(false);
   const [phase, setPhase] = useState("idle");
   const [code, setCode] = useState("");
@@ -46,16 +47,11 @@ export default function AdminMfaGate({ children }) {
   const [error, setError] = useState(null);
   const pollTimerRef = useRef(null);
   const mountedRef = useRef(true);
-
-  const authHeader = () => {
-    const token =
-      typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+  const autoStartedRef = useRef(false);
 
   const fetchSession = useCallback(async () => {
     try {
-      const res = await fetch(API_ENDPOINTS.adminSession, { headers: authHeader() });
+      const res = await adminFetch(API_ENDPOINTS.adminSession);
       if (!res.ok) throw new Error("session_fetch_failed");
       const data = await res.json();
       setElevated(!!data.is_elevated);
@@ -68,8 +64,18 @@ export default function AdminMfaGate({ children }) {
   }, []);
 
   useEffect(() => {
+    if (skipSessionFetch) {
+      setSessionLoading(false);
+      return;
+    }
     fetchSession();
-  }, [fetchSession]);
+  }, [fetchSession, skipSessionFetch]);
+
+  useEffect(() => {
+    if (elevated && typeof onElevated === "function") {
+      onElevated();
+    }
+  }, [elevated, onElevated]);
 
   const clearPollTimer = useCallback(() => {
     if (pollTimerRef.current) {
@@ -90,9 +96,8 @@ export default function AdminMfaGate({ children }) {
     async (cid) => {
       if (!cid || !mountedRef.current) return;
       try {
-        const res = await fetch(
+        const res = await adminFetch(
           API_ENDPOINTS.adminTelegramApprovalChallengeStatus(cid),
-          { headers: authHeader() },
         );
         let body = null;
         try {
@@ -141,9 +146,9 @@ export default function AdminMfaGate({ children }) {
     setApprovalStarting(true);
     setError(null);
     try {
-      const res = await fetch(API_ENDPOINTS.adminTelegramApprovalChallenge, {
+      const res = await adminFetch(API_ENDPOINTS.adminTelegramApprovalChallenge, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader() },
+        headers: { "Content-Type": "application/json" },
       });
       let body = null;
       try {
@@ -192,13 +197,25 @@ export default function AdminMfaGate({ children }) {
     setError(null);
   };
 
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (sessionLoading) return;
+    if (elevated) return;
+    if (autoStart === "approval" && phase === "idle" && !approvalStarting) {
+      autoStartedRef.current = true;
+      handleApprovalChallenge();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, sessionLoading, elevated, phase]);
+
+
   const handleChallenge = async () => {
     setSending(true);
     setError(null);
     try {
-      const res = await fetch(API_ENDPOINTS.adminTelegramMfaChallenge, {
+      const res = await adminFetch(API_ENDPOINTS.adminTelegramMfaChallenge, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader() },
+        headers: { "Content-Type": "application/json" },
       });
       let body = null;
       try {
@@ -239,9 +256,9 @@ export default function AdminMfaGate({ children }) {
     setVerifying(true);
     setError(null);
     try {
-      const res = await fetch(API_ENDPOINTS.adminTelegramMfaVerify, {
+      const res = await adminFetch(API_ENDPOINTS.adminTelegramMfaVerify, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: trimmed }),
       });
       let body = null;
@@ -287,9 +304,9 @@ export default function AdminMfaGate({ children }) {
     setDevSending(true);
     setError(null);
     try {
-      const res = await fetch(API_ENDPOINTS.adminSessionDevConfirm, {
+      const res = await adminFetch(API_ENDPOINTS.adminSessionDevConfirm, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader() },
+        headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) {
         let body = null;
@@ -313,9 +330,9 @@ export default function AdminMfaGate({ children }) {
     setBindStarting(true);
     setError(null);
     try {
-      const res = await fetch(API_ENDPOINTS.adminTelegramBindStart, {
+      const res = await adminFetch(API_ENDPOINTS.adminTelegramBindStart, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeader() },
+        headers: { "Content-Type": "application/json" },
       });
       let body = null;
       try {

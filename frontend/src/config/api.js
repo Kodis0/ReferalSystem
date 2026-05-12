@@ -105,6 +105,8 @@ export const API_ENDPOINTS = {
   /** Админ-кабинет: закрыть/открыть обращение — PATCH `{is_closed: bool}` (тот же URL, что и detail). */
   adminSupportTicketUpdate: (ticketId) =>
     `${API_BASE}/users/admin/support-tickets/${encodeURIComponent(ticketId)}/`,
+  /** Админ-логин: отдельный JWT-эндпоинт только для админ-консоли. */
+  adminLogin: `${API_BASE}/users/admin/login/`,
   /** Админ step-up сессия: текущее состояние elevation (GET). */
   adminSession: `${API_BASE}/users/admin/session/`,
   /** Админ step-up сессия: dev-confirm (POST), доступен только при DEBUG=True. */

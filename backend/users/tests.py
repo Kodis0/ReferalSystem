@@ -204,6 +204,8 @@ class CurrentUserAdminFlagsTests(TestCase):
         self.assertEqual(r.data["is_superuser"], True)
 
     def test_flags_are_read_only_via_patch(self):
+        # После изоляции admin-консоли LK явно отказывает на is_staff/is_superuser в payload
+        # (см. LkUserManagementAdminFlagsTests): 400 ADMIN_FLAG_NOT_ALLOWED, не молчаливый игнор.
         user = User.objects.create_user(
             email="ro-flags@example.com",
             username="roflags",
@@ -212,7 +214,8 @@ class CurrentUserAdminFlagsTests(TestCase):
         api = APIClient()
         api.force_authenticate(user)
         r = api.patch("/users/me/", {"is_staff": True, "is_superuser": True}, format="json")
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_FLAG_NOT_ALLOWED")
         user.refresh_from_db()
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
@@ -3317,3 +3320,180 @@ class PasswordResetCodeApiTests(TestCase):
         r = self._code_request(c, "hour@example.com")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(PasswordResetCode.objects.count(), 5)
+
+
+class LkLoginAdminBlockedTests(TestCase):
+    URL = "/users/token/"
+
+    def setUp(self):
+        self.regular = User.objects.create_user(
+            email="lk-user@example.com", username="lkuser", password="secret123",
+        )
+        self.staff = User.objects.create_user(
+            email="lk-staff@example.com", username="lkstaff", password="secret123", is_staff=True,
+        )
+        self.superuser = User.objects.create_user(
+            email="lk-su@example.com", username="lksu", password="secret123",
+            is_staff=True, is_superuser=True,
+        )
+
+    def test_regular_user_can_login(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "lk-user@example.com", "password": "secret123"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("access", r.data)
+        self.assertIn("refresh", r.data)
+
+    def test_staff_blocked_with_code(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "lk-staff@example.com", "password": "secret123"}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_USE_ADMIN_CONSOLE")
+        self.assertNotIn("access", r.data)
+
+    def test_superuser_blocked_with_code(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "lk-su@example.com", "password": "secret123"}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_USE_ADMIN_CONSOLE")
+
+    def test_blocked_login_writes_audit(self):
+        before = AdminActionAudit.objects.filter(action="admin.lk_login.blocked").count()
+        c = APIClient()
+        c.post(self.URL, {"email": "lk-staff@example.com", "password": "secret123"}, format="json")
+        after = AdminActionAudit.objects.filter(action="admin.lk_login.blocked").count()
+        self.assertEqual(after, before + 1)
+
+    def test_wrong_password_for_staff_no_audit_no_block_message(self):
+        before = AdminActionAudit.objects.filter(action="admin.lk_login.blocked").count()
+        c = APIClient()
+        r = c.post(self.URL, {"email": "lk-staff@example.com", "password": "WRONG"}, format="json")
+        # SimpleJWT возвращает 400/401 при неверных credentials — главное, что не 403 с нашим кодом.
+        self.assertNotEqual(r.status_code, 403)
+        self.assertNotEqual(r.data.get("code"), "ADMIN_USE_ADMIN_CONSOLE")
+        after = AdminActionAudit.objects.filter(action="admin.lk_login.blocked").count()
+        self.assertEqual(after, before)
+
+
+class LkUserManagementAdminFlagsTests(TestCase):
+    REGISTER_URL = "/users/register/"
+    ME_URL = "/users/me/"
+
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            email="owner-mgmt@example.com", username="ownermgmt", password="secret123",
+        )
+
+    def test_register_with_is_staff_rejected(self):
+        c = APIClient()
+        r = c.post(
+            self.REGISTER_URL,
+            {"username": "ax", "email": "a@example.com", "password": "Secret123!", "is_staff": True},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_FLAG_NOT_ALLOWED")
+        self.assertFalse(User.objects.filter(email="a@example.com").exists())
+
+    def test_register_with_is_superuser_rejected(self):
+        c = APIClient()
+        r = c.post(
+            self.REGISTER_URL,
+            {"username": "bx", "email": "b@example.com", "password": "Secret123!", "is_superuser": True},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_FLAG_NOT_ALLOWED")
+        self.assertFalse(User.objects.filter(email="b@example.com").exists())
+
+    def test_register_normal_user_is_not_staff(self):
+        c = APIClient()
+        r = c.post(
+            self.REGISTER_URL,
+            {"username": "cx", "email": "c@example.com", "password": "Secret123!"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        u = User.objects.get(email="c@example.com")
+        self.assertFalse(u.is_staff)
+        self.assertFalse(u.is_superuser)
+
+    def test_patch_me_with_is_staff_rejected(self):
+        api = APIClient()
+        api.force_authenticate(self.owner)
+        r = api.patch(self.ME_URL, {"is_staff": True}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_FLAG_NOT_ALLOWED")
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.is_staff)
+
+    def test_patch_me_with_is_superuser_rejected(self):
+        api = APIClient()
+        api.force_authenticate(self.owner)
+        r = api.patch(self.ME_URL, {"is_superuser": True}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data.get("code"), "ADMIN_FLAG_NOT_ALLOWED")
+
+
+class AdminLoginApiTests(TestCase):
+    URL = "/users/admin/login/"
+
+    def setUp(self):
+        self.regular = User.objects.create_user(
+            email="adminlogin-user@example.com", username="aluser", password="secret123",
+        )
+        self.staff = User.objects.create_user(
+            email="adminlogin-staff@example.com", username="alstaff", password="secret123", is_staff=True,
+        )
+        self.superuser = User.objects.create_user(
+            email="adminlogin-su@example.com", username="alsu", password="secret123",
+            is_staff=True, is_superuser=True,
+        )
+
+    def test_invalid_credentials_returns_401(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "adminlogin-staff@example.com", "password": "WRONG"}, format="json")
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.data.get("code"), "ADMIN_LOGIN_INVALID")
+
+    def test_unknown_email_returns_401(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "nope@example.com", "password": "whatever"}, format="json")
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.data.get("code"), "ADMIN_LOGIN_INVALID")
+
+    def test_non_staff_returns_403_and_audit(self):
+        before = AdminActionAudit.objects.filter(action="admin.login.rejected_not_staff").count()
+        c = APIClient()
+        r = c.post(self.URL, {"email": "adminlogin-user@example.com", "password": "secret123"}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.data.get("code"), "ADMIN_LOGIN_NOT_STAFF")
+        after = AdminActionAudit.objects.filter(action="admin.login.rejected_not_staff").count()
+        self.assertEqual(after, before + 1)
+
+    def test_staff_login_success_and_audit(self):
+        before = AdminActionAudit.objects.filter(action="admin.login.success").count()
+        c = APIClient()
+        r = c.post(self.URL, {"email": "adminlogin-staff@example.com", "password": "secret123"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("access", r.data)
+        self.assertIn("refresh", r.data)
+        after = AdminActionAudit.objects.filter(action="admin.login.success").count()
+        self.assertEqual(after, before + 1)
+
+    def test_superuser_login_success(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "adminlogin-su@example.com", "password": "secret123"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("access", r.data)
+
+    def test_anonymous_can_call(self):
+        c = APIClient()
+        r = c.post(self.URL, {"email": "x@example.com", "password": "y"}, format="json")
+        self.assertIn(r.status_code, (401, 403))
+
+    def test_missing_fields_returns_401(self):
+        c = APIClient()
+        r = c.post(self.URL, {}, format="json")
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.data.get("code"), "ADMIN_LOGIN_INVALID")

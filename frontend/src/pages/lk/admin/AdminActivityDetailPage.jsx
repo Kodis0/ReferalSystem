@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
+import { adminFetch } from "../../../components/adminAuth";
 import "./admin.css";
 
 function formatDateTime(value) {
@@ -65,12 +66,7 @@ export default function AdminActivityDetailPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const token =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem("access_token")
-          : null;
-      const res = await fetch(API_ENDPOINTS.adminActionAuditDetail(auditId), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await adminFetch(API_ENDPOINTS.adminActionAuditDetail(auditId), {
         credentials: "include",
         signal: controller.signal,
       });

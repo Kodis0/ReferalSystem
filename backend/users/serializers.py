@@ -6,6 +6,15 @@ from .models import AdminActionAudit, CustomUser, SupportTicket
 User = get_user_model()
 
 
+def has_admin_flag_keys(data) -> bool:
+    """True, если в payload явно присутствует ``is_staff``/``is_superuser`` (любого значения).
+    Используется в обычном LK для жёсткого отказа: эти поля недопустимы со стороны пользователя.
+    """
+    if not isinstance(data, dict):
+        return False
+    return "is_staff" in data or "is_superuser" in data
+
+
 def split_fio_string(value: str) -> tuple[str, str, str]:
     """Фамилия, имя, отчество из одной строки «Фамилия Имя Отчество»."""
     s = (value or "").strip()
@@ -68,6 +77,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         if phone_raw:
             user.phone = phone_raw
         user.set_password(password)
+        user.is_staff = False
+        user.is_superuser = False
         user.save()
         return user
 

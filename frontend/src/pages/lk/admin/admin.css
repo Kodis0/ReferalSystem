@@ -1,13 +1,32 @@
 .admin-portal {
+  position: relative;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--lk-sb-surface-deep, #17212b);
   color: var(--lk-sb-text, rgb(127, 145, 164));
+  isolation: isolate;
 }
 
 [data-theme="light"] .admin-portal {
   background: #f4f6f9;
+}
+
+/*
+ * Перекрытие фона html/body, чтобы из-под admin-portal не светились градиенты/изображения
+ * лендинга или login (см. index.css `body { background: var(--page-bg); }`).
+ * `!important` здесь оправдан: это override чужих body/html стилей; только для background.
+ */
+html[data-admin-portal="true"],
+body[data-admin-portal="true"] {
+  background: #17212b !important;
+  background-image: none !important;
+}
+
+html[data-admin-portal="true"][data-theme="light"],
+html[data-admin-portal="true"][data-theme="light"] body[data-admin-portal="true"] {
+  background: #f4f6f9 !important;
+  background-image: none !important;
 }
 
 .admin-portal__header {
@@ -149,6 +168,116 @@
   min-width: 0;
   padding: 24px;
   overflow-y: auto;
+}
+
+.admin-portal__phase {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 20px;
+  overflow-y: auto;
+}
+
+.admin-portal__phase--loading {
+  align-items: center;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+  font-size: 14px;
+}
+
+.admin-portal__login {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid var(--lk-sb-border, rgba(255, 255, 255, 0.09));
+  background: var(--lk-sb-surface, #242f3d);
+  color: var(--lk-text-primary, #f5f7fb);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+[data-theme="light"] .admin-portal__login {
+  background: #ffffff;
+  color: #17212b;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.admin-portal__login-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.admin-portal__login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-portal__login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-portal__login-label {
+  font-size: 12px;
+  color: var(--lk-sb-text-muted, rgb(127, 145, 164));
+}
+
+.admin-portal__login-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--lk-sb-border, rgba(255, 255, 255, 0.12));
+  background: var(--lk-sb-surface-deep, #17212b);
+  color: var(--lk-text-primary, #f5f7fb);
+  font: inherit;
+  font-size: 14px;
+}
+
+[data-theme="light"] .admin-portal__login-input {
+  background: #f4f6f9;
+  color: #17212b;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.admin-portal__login-input:focus-visible {
+  outline: none;
+  border-color: var(--lk-sb-accent, #7177f8);
+}
+
+.admin-portal__login-error {
+  margin: 0;
+  font-size: 13px;
+  color: #ff6b6b;
+}
+
+.admin-portal__login-button {
+  margin-top: 4px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--lk-sb-accent, #7177f8);
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-portal__login-button:hover,
+.admin-portal__login-button:focus-visible {
+  background: var(--lk-sb-accent-strong, #5a62f0);
+  outline: none;
+}
+
+.admin-portal__login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .lk-admin-cabinet {

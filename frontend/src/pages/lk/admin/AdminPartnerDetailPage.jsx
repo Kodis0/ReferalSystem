@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { API_ENDPOINTS } from "../../../config/api";
+import { adminFetch } from "../../../components/adminAuth";
 import { toast } from "../../../components/toast/toastBus";
 import "./admin.css";
 
@@ -63,10 +64,7 @@ export default function AdminPartnerDetailPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const token =
-        typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
-      const res = await fetch(API_ENDPOINTS.adminPartnerDetail(partnerId), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await adminFetch(API_ENDPOINTS.adminPartnerDetail(partnerId), {
         credentials: "include",
         signal: controller.signal,
       });
@@ -119,16 +117,9 @@ export default function AdminPartnerDetailPage() {
       setPendingStatus(nextStatus);
       setActionError("");
       try {
-        const token =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem("access_token")
-            : null;
-        const res = await fetch(API_ENDPOINTS.adminPartnerSetStatus(partner.id), {
+        const res = await adminFetch(API_ENDPOINTS.adminPartnerSetStatus(partner.id), {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({ status: nextStatus }),
         });

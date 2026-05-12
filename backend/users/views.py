@@ -48,6 +48,7 @@ from .models import CustomUser
 from .serializers import (
     AccountAdditionalUserSerializer,
     CurrentUserProfileUpdateSerializer,
+    has_admin_flag_keys,
     CurrentUserSerializer,
     LoginSerializer,
     RegisterSerializer,
@@ -199,6 +200,14 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
 
     def create(self, request, *args, **kwargs):
+        if has_admin_flag_keys(request.data):
+            return Response(
+                {
+                    "detail": "Нельзя создавать или назначать администраторов через ЛК",
+                    "code": "ADMIN_FLAG_NOT_ALLOWED",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # Логируем при 400, чтобы понять, что пришло и почему не прошло валидацию
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
@@ -443,6 +452,14 @@ class CurrentUserView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request):
+        if has_admin_flag_keys(request.data):
+            return Response(
+                {
+                    "detail": "Нельзя создавать или назначать администраторов через ЛК",
+                    "code": "ADMIN_FLAG_NOT_ALLOWED",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = CurrentUserProfileUpdateSerializer(
             request.user,
             data=request.data,
@@ -681,6 +698,50 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        """Обычный LK-login.
+
+        Запрещаем здесь вход для staff/superuser: админский аккаунт должен использоваться
+        только через /admin-console. Проверяем по email до выдачи JWT, чтобы не утечь токены
+        и не плодить «общий» access_token у админа.
+        """
+        email_raw = request.data.get("email") if isinstance(request.data, dict) else None
+        if isinstance(email_raw, str) and email_raw.strip():
+            password_raw = request.data.get("password") if isinstance(request.data, dict) else None
+            try:
+                candidate = CustomUser.objects.get(email=email_raw.strip())
+            except CustomUser.DoesNotExist:
+                candidate = None
+            if (
+                candidate is not None
+                and isinstance(password_raw, str)
+                and password_raw
+                and candidate.check_password(password_raw)
+                and (candidate.is_staff or candidate.is_superuser)
+            ):
+                try:
+                    from .admin_views import _audit, _client_ip, _user_agent
+
+                    _audit(
+                        candidate,
+                        "admin.lk_login.blocked",
+                        target_type="user",
+                        target_id=str(candidate.id),
+                        metadata={"email": candidate.email or ""},
+                        ip=_client_ip(request),
+                        user_agent=_user_agent(request),
+                    )
+                except Exception:  # pragma: no cover - audit best-effort
+                    logger.exception("Failed to write admin.lk_login.blocked audit")
+                return Response(
+                    {
+                        "detail": "Этот аккаунт администратора. Используйте /admin-console для входа.",
+                        "code": "ADMIN_USE_ADMIN_CONSOLE",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        return super().post(request, *args, **kwargs)
 
 
 class GoogleIdTokenLoginView(APIView):

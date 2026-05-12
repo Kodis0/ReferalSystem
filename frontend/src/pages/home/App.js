@@ -7,7 +7,6 @@ import LegalPage from "../legal/LegalPage";
 import SiteConnectPage from "../site-connect/SiteConnectPage";
 import ToolsDiagramsPage from "../tools-diagrams/ToolsDiagramsPage";
 import ProtectedRoute from "../../components/protectedroute";
-import AdminProtectedRoute from "../../components/AdminProtectedRoute";
 import AdminCabinet from "../lk/admin/AdminCabinet";
 import ReferralCaptureOnMount from "../../components/ReferralCaptureOnMount";
 import OAuthVkTgFragmentHandler from "../../components/OAuthVkTgFragmentHandler";
@@ -37,16 +36,7 @@ function App() {
         <Route path="/tools-diagrams" element={<ToolsDiagramsPage />} />
 
         <Route path="/site-connect" element={<ProtectedRoute><SiteConnectPage /></ProtectedRoute>} />
-        <Route
-          path="/admin-console/*"
-          element={
-            <ProtectedRoute>
-              <AdminProtectedRoute>
-                <AdminCabinet />
-              </AdminProtectedRoute>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/admin-console/*" element={<AdminCabinet />} />
         <Route path="/lk/admin/*" element={<LkAdminLegacyRedirect />} />
         <Route path="/lk/*" element={<ProtectedRoute><LK /></ProtectedRoute>} />
       </Routes>

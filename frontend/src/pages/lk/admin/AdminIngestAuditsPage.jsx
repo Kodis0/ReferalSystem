@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
+import { adminFetch } from "../../../components/adminAuth";
 import "./admin.css";
 
 const PAGE_SIZE = 20;
@@ -58,10 +59,7 @@ export default function AdminIngestAuditsPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const token =
-        typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await adminFetch(url, {
         credentials: "include",
         signal: controller.signal,
       });

@@ -43,6 +43,7 @@ from .achievement_views import UserAchievementsListView
 from .admin_views import (
     AdminActionAuditDetailView,
     AdminActionAuditsListView,
+    AdminLoginView,
     AdminSessionDevConfirmView,
     AdminSessionRevokeView,
     AdminSessionView,
@@ -133,6 +134,7 @@ urlpatterns = [
         AdminActionAuditDetailView.as_view(),
         name='admin_action_audit_detail',
     ),
+    path('admin/login/', AdminLoginView.as_view(), name='admin_login'),
     path('admin/session/', AdminSessionView.as_view(), name='admin_session'),
     path('admin/session/dev-confirm/', AdminSessionDevConfirmView.as_view(), name='admin_session_dev_confirm'),
     path('admin/session/revoke/', AdminSessionRevokeView.as_view(), name='admin_session_revoke'),
