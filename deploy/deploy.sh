@@ -145,6 +145,34 @@ playwright_browser_present() {
   find "${PLAYWRIGHT_BROWSERS_PATH}" -type f \( -name chrome -o -name chromium -o -name headless_shell \) -perm -111 2>/dev/null | head -1 | grep -q .
 }
 
+# CRA (`react-scripts build`) is memory-hungry on small VPS instances.
+# Without a heap cap it grows past available RAM and gets killed by the
+# Linux OOM killer ("process exited too early"). Pick a heap cap based on
+# /proc/meminfo so Node fails fast with a clear JS heap error instead of
+# being SIGKILLed, while still leaving headroom for gunicorn/nginx/etc.
+# Override with NODE_BUILD_MEM_MB=<int> to force a specific value.
+compute_node_build_max_mb() {
+  local mem_mb="${NODE_BUILD_MEM_MB:-}"
+  if [[ -n "${mem_mb}" ]]; then
+    printf '%s' "${mem_mb}"
+    return 0
+  fi
+  local avail_mb=0
+  if [[ -r /proc/meminfo ]]; then
+    avail_mb="$(awk '/^MemAvailable:/ {print int($2/1024); exit}' /proc/meminfo 2>/dev/null || echo 0)"
+  fi
+  if [[ "${avail_mb}" -ge 4096 ]]; then
+    mem_mb=3072
+  elif [[ "${avail_mb}" -ge 2048 ]]; then
+    mem_mb=1536
+  elif [[ "${avail_mb}" -ge 1024 ]]; then
+    mem_mb=896
+  else
+    mem_mb=640
+  fi
+  printf '%s' "${mem_mb}"
+}
+
 # Avoid flooding CI logs with thousands of "Permission denied" lines from rm(1).
 SAFE_RM_LOG="${SAFE_RM_LOG:-/tmp/lumoref-rm-node-modules.log}"
 
@@ -697,6 +725,16 @@ if [[ "${RUN_NPM_CI}" == true ]] || [[ "${RUN_BUILD}" == true ]]; then
       if [[ -e "${APP_ROOT}/frontend/build" ]]; then
         safe_remove_dir "${APP_ROOT}/frontend/build"
       fi
+      # Production-build env hygiene: skip sourcemaps + inline runtime chunk
+      # (both are not needed in prod and significantly inflate webpack peak
+      # memory), and cap Node's old-space heap so the OS OOM killer does
+      # not SIGKILL the build silently on small VPS instances.
+      export GENERATE_SOURCEMAP="${GENERATE_SOURCEMAP:-false}"
+      export INLINE_RUNTIME_CHUNK="${INLINE_RUNTIME_CHUNK:-false}"
+      _NODE_BUILD_MEM_MB="$(compute_node_build_max_mb)"
+      _NODE_OPTIONS_BASE="${NODE_OPTIONS:-}"
+      export NODE_OPTIONS="--max-old-space-size=${_NODE_BUILD_MEM_MB}${_NODE_OPTIONS_BASE:+ ${_NODE_OPTIONS_BASE}}"
+      echo "    Build env: NODE_OPTIONS='${NODE_OPTIONS}' GENERATE_SOURCEMAP=${GENERATE_SOURCEMAP} INLINE_RUNTIME_CHUNK=${INLINE_RUNTIME_CHUNK}"
       npm run build
       echo "    Fixing ownership of frontend/build for deploy user + readability"
       safe_chown_deploy_tree "${APP_ROOT}/frontend/build"
